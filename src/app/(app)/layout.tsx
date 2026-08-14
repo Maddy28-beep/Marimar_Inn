@@ -2,13 +2,19 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, type ComponentType } from "react";
+import { useEffect, useState, type ComponentType } from "react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { NotificationBell } from "@/components/notifications/notification-bell";
+import { subscribeToActiveBookings } from "@/lib/bookings";
+import { subscribeToRooms } from "@/lib/rooms";
+import { syncCheckoutReminder } from "@/lib/notifications";
+import { useNowTick } from "@/hooks/use-now-tick";
+import type { Booking, Room } from "@/lib/types";
 import {
   LogOutIcon,
   MenuIcon,
@@ -17,6 +23,26 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+function useCheckoutReminderScanner() {
+  const [bookingsByRoom, setBookingsByRoom] = useState<Map<string, Booking>>(new Map());
+  const [roomsById, setRoomsById] = useState<Map<string, Room>>(new Map());
+  const now = useNowTick(30_000);
+
+  useEffect(() => subscribeToActiveBookings(setBookingsByRoom), []);
+  useEffect(
+    () => subscribeToRooms((rooms) => setRoomsById(new Map(rooms.map((r) => [r.roomId, r])))),
+    []
+  );
+
+  useEffect(() => {
+    bookingsByRoom.forEach((booking) => {
+      const room = roomsById.get(booking.roomId);
+      if (room) syncCheckoutReminder(booking, room, now).catch(() => {});
+    });
+    // Re-scan whenever the active bookings/rooms sets change or the 30s tick fires.
+  }, [bookingsByRoom, roomsById, now]);
+}
 
 interface NavLink {
   href: string;
@@ -37,6 +63,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  useCheckoutReminderScanner();
 
   async function handleSignOut() {
     await signOut();
@@ -77,6 +104,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="hidden items-center gap-3 md:flex">
+          <NotificationBell />
           <span className="text-sm text-muted-foreground">
             {appUser?.displayName ?? appUser?.email}
           </span>
@@ -87,15 +115,13 @@ function AppShell({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="md:hidden"
-          onClick={() => setMenuOpen(true)}
-        >
-          <MenuIcon className="size-5" />
-          <span className="sr-only">Open menu</span>
-        </Button>
+        <div className="flex items-center gap-1 md:hidden">
+          <NotificationBell />
+          <Button variant="ghost" size="icon" onClick={() => setMenuOpen(true)}>
+            <MenuIcon className="size-5" />
+            <span className="sr-only">Open menu</span>
+          </Button>
+        </div>
       </header>
 
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>

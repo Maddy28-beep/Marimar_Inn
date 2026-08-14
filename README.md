@@ -99,11 +99,16 @@ src/
 └── lib/
     ├── firebase.ts               # Firebase client SDK init + secondary app for staff creation
     ├── rooms.ts                  # Room CRUD, status updates, seeding
-    ├── bookings.ts                # Check-in/checkout/void (check-in runs as one Firestore
-    │                               transaction so room + optional F&B items + stock all commit together)
+    ├── bookings.ts                # Check-in/checkout/void/extendStay (check-in runs as one
+    │                               Firestore transaction so room + optional F&B items + stock
+    │                               all commit together)
     ├── inventory.ts               # Item CRUD, restock (Owner-only)
     ├── orders.ts                  # Add/remove an order line — transactional stock ↔ bill sync
+    ├── notifications.ts           # Checkout-reminder / low-stock alerts — idempotent
+    │                               create/resolve keyed by deterministic doc IDs so concurrent
+    │                               staff sessions never produce duplicates
     ├── users.ts                   # Staff account creation (Owner-only)
+    ├── time.ts                    # hoursElapsed() — shared by bookings.ts and notifications.ts
     └── types.ts
 firestore.rules                   # Firestore security rules
 ```
@@ -115,8 +120,8 @@ firestore.rules                   # Firestore security rules
 | **1** | Auth, Owner/Cashier roles | **Done** |
 | **2** | Room dashboard, check-in/checkout core, Owner-only room & staff management | **Done** |
 | **3** | Food & beverage ordering, inventory | **Done** |
-| **4** | Extend-stay, real-time notifications | Next |
-| **5** | Reports & analytics (daily/monthly/inventory, exports) | Planned |
+| **4** | Extend-stay, real-time notifications (checkout reminders, low stock) | **Done** |
+| **5** | Reports & analytics (daily/monthly/inventory, exports) | Next |
 | **6** | UI polish — dark mode, brand styling, keyboard shortcuts | Planned |
 
 ## Deploy on Vercel

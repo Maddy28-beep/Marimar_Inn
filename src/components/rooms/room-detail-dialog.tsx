@@ -17,7 +17,8 @@ import { PAYMENT_METHOD_LABELS, type Booking, type Room } from "@/lib/types";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useAuth } from "@/context/auth-context";
 import { OrderPickerDialog } from "@/components/inventory/order-picker-dialog";
-import { Loader2Icon, ShoppingCartIcon, XIcon } from "lucide-react";
+import { ExtendStayDialog } from "@/components/rooms/extend-stay-dialog";
+import { Loader2Icon, ShoppingCartIcon, TimerIcon, XIcon } from "lucide-react";
 
 interface RoomDetailDialogProps {
   room: Room;
@@ -45,6 +46,7 @@ export function RoomDetailDialog({
   const [voiding, setVoiding] = useState(false);
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
   const [orderPickerOpen, setOrderPickerOpen] = useState(false);
+  const [extendOpen, setExtendOpen] = useState(false);
 
   const elapsed = hoursElapsed(booking.checkInTime, now);
   const remaining = booking.hoursBooked - elapsed;
@@ -208,9 +210,15 @@ export function RoomDetailDialog({
               {voiding && <Loader2Icon className="size-4 animate-spin" />}
               Cancel booking
             </Button>
-            <Button onClick={onRequestCheckout} disabled={voiding}>
-              Check out
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setExtendOpen(true)} disabled={voiding}>
+                <TimerIcon className="size-4" />
+                Extend stay
+              </Button>
+              <Button onClick={onRequestCheckout} disabled={voiding}>
+                Check out
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -220,6 +228,10 @@ export function RoomDetailDialog({
           bookingId={booking.bookingId}
           onClose={() => setOrderPickerOpen(false)}
         />
+      )}
+
+      {extendOpen && (
+        <ExtendStayDialog room={room} booking={booking} onClose={() => setExtendOpen(false)} />
       )}
     </>
   );

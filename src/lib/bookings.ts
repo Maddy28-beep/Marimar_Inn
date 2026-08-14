@@ -7,12 +7,16 @@ import {
   query,
   runTransaction,
   serverTimestamp,
-  Timestamp,
+  updateDoc,
   where,
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Booking, InventoryItem, OrderItem, PaymentMethod, PaymentStatus } from "@/lib/types";
+import type { Booking, InventoryItem, OrderItem, PaymentMethod, PaymentStatus, Room } from "@/lib/types";
+import { hoursElapsed } from "@/lib/time";
+import { resolveCheckoutReminder } from "@/lib/notifications";
+
+export { hoursElapsed };
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -146,6 +150,7 @@ export async function recordCheckout(
     lastUpdated: serverTimestamp(),
   });
   await batch.commit();
+  await resolveCheckoutReminder(booking.bookingId);
 }
 
 export async function voidBooking(booking: Booking) {
@@ -160,6 +165,7 @@ export async function voidBooking(booking: Booking) {
     lastUpdated: serverTimestamp(),
   });
   await batch.commit();
+  await resolveCheckoutReminder(booking.bookingId);
 }
 
 export async function deleteBooking(bookingId: string) {
@@ -167,10 +173,24 @@ export async function deleteBooking(bookingId: string) {
   await deleteDoc(doc(firestore, "bookings", bookingId));
 }
 
-export function hoursElapsed(checkInTime: Timestamp | null, now: Date): number {
-  // checkInTime can be transiently null: a serverTimestamp() write hasn't
-  // round-tripped to the server yet, so the local snapshot has no value for
-  // it even with `serverTimestamps: "estimate"` on the very first tick.
-  if (!checkInTime) return 0;
-  return (now.getTime() - checkInTime.toMillis()) / (1000 * 60 * 60);
+export async function extendStay(
+  booking: Booking,
+  room: Room,
+  additionalHours: number,
+  additionalPayment: number
+) {
+  const firestore = requireDb();
+  const newHoursBooked = booking.hoursBooked + additionalHours;
+  const newTotalRoomCharge = newHoursBooked * room.ratePerHour;
+  const newTotalAmount = newTotalRoomCharge + booking.totalFbCharge;
+  const newAmountPaid = booking.amountPaid + additionalPayment;
+
+  await updateDoc(doc(firestore, "bookings", booking.bookingId), {
+    hoursBooked: newHoursBooked,
+    totalRoomCharge: newTotalRoomCharge,
+    totalAmount: newTotalAmount,
+    amountPaid: newAmountPaid,
+    paymentStatus: paymentStatusFor(newAmountPaid, newTotalAmount),
+    updatedAt: serverTimestamp(),
+  });
 }

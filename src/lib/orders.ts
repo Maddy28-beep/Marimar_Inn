@@ -1,6 +1,7 @@
 import { doc, increment, runTransaction, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Booking, InventoryItem, OrderItem } from "@/lib/types";
+import { syncLowStockNotification } from "@/lib/notifications";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -20,6 +21,7 @@ export async function addOrderItem(
   const firestore = requireDb();
   const bookingRef = doc(firestore, "bookings", bookingId);
   const itemRef = doc(firestore, "inventory", itemId);
+  let resultingItem: InventoryItem | null = null;
 
   await runTransaction(firestore, async (tx) => {
     const [bookingSnap, itemSnap] = await Promise.all([tx.get(bookingRef), tx.get(itemRef)]);
@@ -62,16 +64,21 @@ export async function addOrderItem(
       totalAmount,
       updatedAt: serverTimestamp(),
     });
+
+    resultingItem = { ...item, quantity: item.quantity - quantity };
   });
+
+  if (resultingItem) await syncLowStockNotification(resultingItem);
 }
 
 export async function removeOrderItem(bookingId: string, itemId: string) {
   const firestore = requireDb();
   const bookingRef = doc(firestore, "bookings", bookingId);
   const itemRef = doc(firestore, "inventory", itemId);
+  let resultingItem: InventoryItem | null = null;
 
   await runTransaction(firestore, async (tx) => {
-    const bookingSnap = await tx.get(bookingRef);
+    const [bookingSnap, itemSnap] = await Promise.all([tx.get(bookingRef), tx.get(itemRef)]);
     if (!bookingSnap.exists()) throw new Error("Booking not found.");
 
     const booking = bookingSnap.data() as Booking;
@@ -91,5 +98,12 @@ export async function removeOrderItem(bookingId: string, itemId: string) {
       totalAmount,
       updatedAt: serverTimestamp(),
     });
+
+    if (itemSnap.exists()) {
+      const item = itemSnap.data() as InventoryItem;
+      resultingItem = { ...item, quantity: item.quantity + existing.quantity };
+    }
   });
+
+  if (resultingItem) await syncLowStockNotification(resultingItem);
 }

@@ -2,6 +2,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   increment,
   onSnapshot,
   orderBy,
@@ -12,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { InventoryItem } from "@/lib/types";
+import { syncLowStockNotification } from "@/lib/notifications";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -51,6 +53,7 @@ export async function createItem(input: NewItemInput) {
     lastUpdated: serverTimestamp(),
   };
   await setDoc(ref, item);
+  await syncLowStockNotification(item);
 }
 
 export async function updateItem(itemId: string, input: NewItemInput) {
@@ -63,14 +66,25 @@ export async function updateItem(itemId: string, input: NewItemInput) {
     minStockLevel: input.minStockLevel,
     lastUpdated: serverTimestamp(),
   });
+  await syncLowStockNotification({
+    itemId,
+    name: input.name,
+    quantity: input.quantity,
+    minStockLevel: input.minStockLevel,
+  });
 }
 
 export async function restockItem(itemId: string, addQuantity: number) {
   const firestore = requireDb();
-  await updateDoc(doc(firestore, "inventory", itemId), {
+  const ref = doc(firestore, "inventory", itemId);
+  await updateDoc(ref, {
     quantity: increment(addQuantity),
     lastUpdated: serverTimestamp(),
   });
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    await syncLowStockNotification(snap.data() as InventoryItem);
+  }
 }
 
 export async function deleteItem(itemId: string) {

@@ -152,6 +152,29 @@ service cloud.firestore {
     }
 
     // ============================================
+    // NOTIFICATIONS COLLECTION
+    // ============================================
+    match /notifications/{notificationId} {
+      // All authenticated users can read notifications
+      allow read: if isAuthenticated();
+
+      // Staff can create notifications (system-triggered by app logic, not
+      // manual user input — e.g. low-stock / checkout-reminder detection)
+      allow create: if isStaff() &&
+        request.resource.data.keys().hasAll(
+          ['notificationId', 'type', 'message', 'createdAt', 'resolved', 'readBy']
+        );
+
+      // Staff can mark read / resolve / update the message (e.g. escalating
+      // a 30-min warning to overdue), but can't touch anything else
+      allow update: if isStaff() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'resolved', 'message']);
+
+      // Manual cleanup escape hatch — app logic never deletes, it resolves
+      allow delete: if isOwnerOrAdmin();
+    }
+
+    // ============================================
     // SETTINGS COLLECTION (System Settings)
     // ============================================
     match /settings/{settingId} {

@@ -66,6 +66,21 @@ export interface InventoryItem {
   lastUpdated: Timestamp;
 }
 
+export type NotificationType = "checkout_reminder" | "low_stock";
+
+export interface AppNotification {
+  notificationId: string;
+  type: NotificationType;
+  message: string;
+  roomId?: string;
+  roomNumber?: string;
+  itemId?: string;
+  itemName?: string;
+  createdAt: Timestamp;
+  resolved: boolean;
+  readBy: string[];
+}
+
 export const ROOM_TYPE_LABELS: Record<RoomType, string> = {
   standard: "Standard",
   deluxe: "Deluxe",
