@@ -70,7 +70,8 @@ function ManageRoomsContent() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border">
+      <div className="rounded-xl border">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/50 text-left text-muted-foreground">
             <tr>
@@ -124,6 +125,7 @@ function ManageRoomsContent() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {dialog && (
