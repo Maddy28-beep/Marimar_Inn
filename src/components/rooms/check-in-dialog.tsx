@@ -43,7 +43,7 @@ interface CheckInDialogProps {
 export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) {
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
-  const [guestCount, setGuestCount] = useState("1");
+  const [guestCount, setGuestCount] = useState("2");
   const [packageIndex, setPackageIndex] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [amountPaid, setAmountPaid] = useState("");
@@ -115,6 +115,20 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
           ? error.message
           : "Couldn't check in — please try again."
       );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleMarkCleaning() {
+    if (!room) return;
+    setSubmitting(true);
+    try {
+      await updateRoomStatus(room.roomId, "cleaning");
+      toast.success(`Room ${room.roomNumber} marked for cleaning.`);
+      onClose();
+    } catch {
+      toast.error("Couldn't update the room — please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -194,56 +208,6 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
             </div>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label>Payment method</Label>
-            <Select
-              value={paymentMethod}
-              onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}
-              disabled={submitting}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue>{PAYMENT_METHOD_LABELS[paymentMethod]}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="amountPaid">Amount paid</Label>
-              <Input
-                id="amountPaid"
-                type="number"
-                min={0}
-                value={amountPaid}
-                onChange={(e) => setAmountPaid(e.target.value)}
-                disabled={submitting}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Change</Label>
-              <div className="flex h-8 items-center text-sm font-medium">
-                ₱{change.toFixed(2)}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="specialRequests">Special requests</Label>
-            <Textarea
-              id="specialRequests"
-              value={specialRequests}
-              onChange={(e) => setSpecialRequests(e.target.value)}
-              disabled={submitting}
-            />
-          </div>
-
           {inventory !== null && inventory.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <Label>Store items (optional)</Label>
@@ -307,23 +271,84 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
                 <span>₱{fbTotal.toFixed(2)}</span>
               </div>
             )}
-            <div className="flex items-center justify-between font-medium">
+            <div className="flex items-center justify-between text-base font-bold">
               <span>Total due</span>
               <span>₱{total.toFixed(2)}</span>
             </div>
           </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label>Payment method</Label>
+            <Select
+              value={paymentMethod}
+              onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}
+              disabled={submitting}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue>{PAYMENT_METHOD_LABELS[paymentMethod]}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="amountPaid">Amount paid</Label>
+              <Input
+                id="amountPaid"
+                type="number"
+                min={0}
+                value={amountPaid}
+                onChange={(e) => setAmountPaid(e.target.value)}
+                disabled={submitting}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Change</Label>
+              <div className="flex h-8 items-center text-sm font-medium">
+                ₱{change.toFixed(2)}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="specialRequests">Special requests</Label>
+            <Textarea
+              id="specialRequests"
+              value={specialRequests}
+              onChange={(e) => setSpecialRequests(e.target.value)}
+              disabled={submitting}
+            />
+          </div>
         </div>
 
-        <DialogFooter className="sm:justify-between">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleMarkMaintenance}
-            disabled={submitting}
-            className="text-muted-foreground"
-          >
-            Report issue / mark maintenance
-          </Button>
+        <DialogFooter className="flex-col gap-3 sm:flex-row sm:justify-between">
+          <div className="flex flex-wrap gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleMarkCleaning}
+              disabled={submitting}
+              className="text-muted-foreground"
+            >
+              Mark for cleaning
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleMarkMaintenance}
+              disabled={submitting}
+              className="text-muted-foreground"
+            >
+              Mark maintenance
+            </Button>
+          </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={onClose} disabled={submitting}>
               Cancel

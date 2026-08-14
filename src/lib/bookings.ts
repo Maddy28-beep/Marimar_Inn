@@ -136,6 +136,9 @@ export async function recordCheckout(
 ) {
   const firestore = requireDb();
   const newAmountPaid = booking.amountPaid + additionalPayment;
+  if (Math.round(newAmountPaid * 100) < Math.round(booking.totalAmount * 100)) {
+    throw new Error("Cannot check out until the full amount is paid.");
+  }
 
   const batch = writeBatch(firestore);
   batch.update(doc(firestore, "bookings", booking.bookingId), {

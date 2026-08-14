@@ -23,6 +23,7 @@ import {
   SettingsIcon,
   UsersIcon,
 } from "lucide-react";
+import { BrandLogo } from "@/components/brand-logo";
 import { cn } from "@/lib/utils";
 
 function useCheckoutReminderScanner() {
@@ -80,9 +81,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between gap-2 border-b bg-card px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-center gap-4">
-          <span className="font-heading text-lg font-semibold tracking-tight">
-            Marimar Inn
-          </span>
+          <Link href="/dashboard" className="shrink-0">
+            <BrandLogo className="h-11 w-auto sm:h-12" />
+          </Link>
           {appUser && (
             <Badge variant="secondary" className="capitalize">
               {appUser.role}
@@ -129,7 +130,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <SheetContent side="left" className="flex w-4/5 flex-col p-0">
           <SheetHeader className="border-b">
-            <SheetTitle>Marimar Inn</SheetTitle>
+            <SheetTitle className="flex items-center">
+              <BrandLogo className="h-12 w-auto" />
+              <span className="sr-only">Marimar Inn</span>
+            </SheetTitle>
             {appUser && (
               <div className="flex items-center gap-2 pt-1 text-sm text-muted-foreground">
                 <span className="truncate">{appUser.displayName ?? appUser.email}</span>

@@ -217,7 +217,15 @@ export function RoomDetailDialog({
                 <TimerIcon className="size-4" />
                 Extend stay
               </Button>
-              <Button onClick={onRequestCheckout} disabled={voiding}>
+              <Button
+                onClick={onRequestCheckout}
+                disabled={voiding}
+                title={
+                  balance > 0
+                    ? `Collect ₱${balance.toFixed(2)} at checkout before the room can be released`
+                    : undefined
+                }
+              >
                 Check out
               </Button>
             </div>

@@ -37,8 +37,14 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
   const change = paymentInput > balanceBefore ? paymentInput - balanceBefore : 0;
   const finalAmountPaid = booking.amountPaid + Math.min(paymentInput, balanceBefore);
   const hoursUsed = hoursElapsed(booking.checkInTime, now);
+  const canComplete =
+    Math.round(paymentInput * 100) >= Math.round(balanceBefore * 100);
 
   async function handleConfirm() {
+    if (!canComplete) {
+      toast.error(`Collect ₱${balanceBefore.toFixed(2)} before checking out.`);
+      return;
+    }
     setSubmitting(true);
     try {
       await recordCheckout(booking, Math.min(paymentInput, balanceBefore));
@@ -91,32 +97,40 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="finalPayment">Final payment</Label>
-                  <Input
-                    id="finalPayment"
-                    type="number"
-                    min={0}
-                    value={finalPayment}
-                    onChange={(e) => setFinalPayment(e.target.value)}
-                    disabled={submitting}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>Change</Label>
-                  <div className="flex h-8 items-center text-sm font-medium">
-                    ₱{change.toFixed(2)}
+              {balanceBefore > 0 && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="finalPayment">Final payment</Label>
+                    <Input
+                      id="finalPayment"
+                      type="number"
+                      min={balanceBefore}
+                      step="0.01"
+                      value={finalPayment}
+                      onChange={(e) => setFinalPayment(e.target.value)}
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label>Change</Label>
+                    <div className="flex h-8 items-center text-sm font-medium">
+                      ₱{change.toFixed(2)}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
+              {balanceBefore > 0 && !canComplete && (
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                  Collect ₱{balanceBefore.toFixed(2)} before checking out.
+                </p>
+              )}
             </div>
 
             <DialogFooter>
               <Button variant="outline" onClick={onClose} disabled={submitting}>
                 Cancel
               </Button>
-              <Button onClick={handleConfirm} disabled={submitting}>
+              <Button onClick={handleConfirm} disabled={submitting || !canComplete}>
                 {submitting && <Loader2Icon className="size-4 animate-spin" />}
                 Complete checkout
               </Button>

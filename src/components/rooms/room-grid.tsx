@@ -88,9 +88,9 @@ export function RoomGrid() {
 
   if (rooms === null) {
     return (
-      <div className="grid auto-rows-[8rem] grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+      <div className="grid auto-rows-[9rem] grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
         {Array.from({ length: 10 }).map((_, i) => (
-          <Skeleton key={i} className="h-32 rounded-xl" />
+          <Skeleton key={i} className="h-36 rounded-xl" />
         ))}
       </div>
     );
@@ -147,7 +147,7 @@ export function RoomGrid() {
         </Select>
       </div>
 
-      <div className="grid auto-rows-[8rem] grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+      <div className="grid auto-rows-[9rem] grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
         {filteredRooms.map((room) => (
           <RoomCard
             key={room.roomId}

@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/auth-context";
 import type { UserRole } from "@/lib/types";
+import { BrandLogo } from "@/components/brand-logo";
 import { Loader2Icon } from "lucide-react";
 
 interface ProtectedRouteProps {
@@ -30,7 +31,8 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
 
   if (loading || !user || !appUser) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4">
+        <BrandLogo className="h-20 w-auto" />
         <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
       </div>
     );

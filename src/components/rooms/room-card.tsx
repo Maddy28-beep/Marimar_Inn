@@ -52,14 +52,15 @@ export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
     : null;
   const isRunningLow = remaining !== null && remaining <= 0.5 && remaining > 0;
   const isOverdue = remaining !== null && remaining <= 0;
+  const balance = booking ? Math.max(booking.totalAmount - booking.amountPaid, 0) : 0;
 
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        // Fixed height so occupied cards (guest + countdown) match empty ones.
-        "flex h-32 w-full flex-col gap-1 overflow-hidden rounded-xl border p-3 text-left transition-colors",
+        // Fixed height so occupied cards (guest + countdown + balance) match empty ones.
+        "flex h-36 w-full flex-col gap-0.5 overflow-hidden rounded-xl border p-2.5 text-left transition-colors",
         style.card
       )}
     >
@@ -72,14 +73,14 @@ export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
       </div>
 
       {booking && (
-        <div className="flex min-h-0 flex-col gap-0.5 text-xs">
-          <div className="flex items-center gap-1 truncate font-medium">
-            <UserIcon className="size-3 shrink-0" />
+        <div className="flex min-h-0 flex-1 flex-col gap-0.5">
+          <div className="flex items-center gap-1 truncate text-sm font-medium">
+            <UserIcon className="size-3.5 shrink-0" />
             <span className="truncate">{booking.guestName}</span>
           </div>
           <div
             className={cn(
-              "text-sm font-semibold",
+              "text-xl leading-tight font-bold",
               isOverdue
                 ? "text-rose-600 dark:text-rose-400"
                 : isRunningLow
@@ -89,6 +90,11 @@ export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
           >
             {isOverdue ? "Overdue" : `${formatHours(remaining!)} left`}
           </div>
+          {balance > 0 && (
+            <div className="mt-auto w-fit rounded-md bg-amber-500/25 px-2 py-1 text-sm font-bold text-amber-800 dark:text-amber-300">
+              ₱{balance.toFixed(2)} due
+            </div>
+          )}
         </div>
       )}
     </button>
