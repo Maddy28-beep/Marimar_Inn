@@ -3,7 +3,6 @@ import {
   deleteDoc,
   doc,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -20,11 +19,15 @@ function requireDb() {
 
 export function subscribeToRooms(onChange: (rooms: Room[]) => void) {
   const firestore = requireDb();
-  const q = query(collection(firestore, "rooms"), orderBy("roomNumber"));
+  const q = query(collection(firestore, "rooms"));
   return onSnapshot(q, (snapshot) => {
-    onChange(
-      snapshot.docs.map((d) => d.data({ serverTimestamps: "estimate" }) as Room)
+    const rooms = snapshot.docs.map(
+      (d) => d.data({ serverTimestamps: "estimate" }) as Room
     );
+    // roomNumber is a string ("1".."17"), so a plain string sort would put
+    // "10" before "2" — sort numerically so room order matches guest-facing order.
+    rooms.sort((a, b) => Number(a.roomNumber) - Number(b.roomNumber));
+    onChange(rooms);
   });
 }
 
@@ -81,23 +84,13 @@ interface SeedRoomSpec {
 }
 
 function buildSeedRooms(): SeedRoomSpec[] {
-  // 17 standard rooms — the inn's actual current room count
-  const typeSequence: { type: RoomType; ratePerHour: number }[] = Array(17).fill({
+  // 17 standard rooms — the inn's actual current room count, numbered 1-17
+  return Array.from({ length: 17 }, (_, index) => ({
+    roomNumber: String(index + 1),
+    floor: 1,
     type: "standard" as const,
     ratePerHour: 150,
-  });
-
-  const floors = [
-    { floor: 1, base: 101 },
-    { floor: 2, base: 201 },
-  ];
-
-  return typeSequence.map((spec, index) => {
-    const floorIndex = Math.floor(index / 10);
-    const { floor, base } = floors[floorIndex];
-    const roomNumber = String(base + (index % 10));
-    return { roomNumber, floor, ...spec };
-  });
+  }));
 }
 
 export async function seedInitialRooms() {
