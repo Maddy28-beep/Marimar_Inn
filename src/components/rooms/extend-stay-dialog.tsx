@@ -52,7 +52,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-xl md:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Extend stay — Room {room.roomNumber}</DialogTitle>
           <DialogDescription>

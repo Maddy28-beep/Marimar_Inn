@@ -88,7 +88,7 @@ export function RoomDetailDialog({
   return (
     <>
       <Dialog open onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-xl md:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Room {room.roomNumber} — {booking.guestName}</DialogTitle>
             <DialogDescription>

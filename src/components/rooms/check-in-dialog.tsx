@@ -150,7 +150,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-xl md:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Check in — Room {room.roomNumber}</DialogTitle>
           <DialogDescription>{ROOM_TYPE_LABELS[room.type]}</DialogDescription>

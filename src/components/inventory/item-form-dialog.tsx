@@ -62,7 +62,7 @@ export function ItemFormDialog({ mode, onClose }: ItemFormDialogProps) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-xl md:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{editingItem ? "Edit item" : "Add item"}</DialogTitle>
         </DialogHeader>

@@ -59,7 +59,7 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-xl md:max-w-2xl">
         {phase === "confirm" ? (
           <>
             <DialogHeader>

@@ -16,7 +16,7 @@ import {
   type DailyReport,
   type MonthlyReport,
 } from "@/lib/reports";
-import { exportToExcel } from "@/lib/export";
+import { exportToExcel, formatReportDate, formatReportMonth } from "@/lib/export";
 import { ROOM_TYPE_LABELS, type InventoryItem, type Room } from "@/lib/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -40,6 +40,13 @@ function todayInputValue(): string {
 function thisMonthInputValue(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function peso(amount: number): string {
+  return `₱${amount.toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function StatCard({ label, value }: { label: string; value: string }) {
@@ -88,32 +95,40 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
     if (!report) return;
     await exportToExcel(`marimar-inn-daily-${dateValue}`, [
       {
-        name: "Summary",
-        columns: [
-          { header: "Metric", key: "metric", width: 24 },
-          { header: "Value", key: "value", width: 18 },
+        name: "Daily Report",
+        title: "Daily Report",
+        subtitle: formatReportDate(dateValue),
+        tables: [
+          {
+            heading: "Summary",
+            columns: [
+              { header: "Metric", key: "metric", width: 28 },
+              { header: "Value", key: "value", width: 22, format: "auto" },
+            ],
+            rows: [
+              { metric: "Date", value: formatReportDate(dateValue) },
+              { metric: "Check-ins", value: report.checkIns },
+              { metric: "Check-outs", value: report.checkOuts },
+              { metric: "Room revenue", value: report.roomRevenue },
+              { metric: "Store items revenue", value: report.fbRevenue },
+              { metric: "Total revenue", value: report.totalRevenue },
+            ],
+            emphasizeLastRow: true,
+          },
+          {
+            heading: "Most ordered items",
+            columns: [
+              { header: "Item", key: "name", width: 28 },
+              { header: "Quantity", key: "quantity", width: 14, format: "integer" },
+              { header: "Revenue", key: "revenue", width: 18, format: "currency" },
+            ],
+            rows: report.mostOrderedItems.map((item) => ({
+              name: item.name,
+              quantity: item.quantity,
+              revenue: item.revenue,
+            })),
+          },
         ],
-        rows: [
-          { metric: "Date", value: dateValue },
-          { metric: "Check-ins", value: report.checkIns },
-          { metric: "Check-outs", value: report.checkOuts },
-          { metric: "Room revenue", value: report.roomRevenue },
-          { metric: "Store items revenue", value: report.fbRevenue },
-          { metric: "Total revenue", value: report.totalRevenue },
-        ],
-      },
-      {
-        name: "Most ordered items",
-        columns: [
-          { header: "Item", key: "name", width: 24 },
-          { header: "Quantity", key: "quantity", width: 12 },
-          { header: "Revenue", key: "revenue", width: 14 },
-        ],
-        rows: report.mostOrderedItems.map((i) => ({
-          name: i.name,
-          quantity: i.quantity,
-          revenue: i.revenue,
-        })),
       },
     ]);
   }
@@ -127,28 +142,39 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
           onChange={(e) => setDateValue(e.target.value)}
           className="w-44"
         />
-        <Button variant="outline" size="sm" onClick={handleExport} disabled={!report}>
-          <DownloadIcon className="size-3.5" />
-          Export Excel
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleExport} disabled={!report}>
+            <DownloadIcon className="size-3.5" />
+            Export Excel
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => window.print()} disabled={!report}>
+            <PrinterIcon className="size-3.5" />
+            Print / PDF
+          </Button>
+        </div>
       </div>
 
       {loading || !report ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
-        <>
+        <div className="print-area flex flex-col gap-4">
+          <div className="hidden text-center print:block">
+            <div className="font-heading text-lg font-semibold">Marimar Inn</div>
+            <div className="text-sm text-muted-foreground">Daily Report — {formatReportDate(dateValue)}</div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
             <StatCard label="Check-ins" value={String(report.checkIns)} />
             <StatCard label="Check-outs" value={String(report.checkOuts)} />
-            <StatCard label="Room revenue" value={`₱${report.roomRevenue.toFixed(2)}`} />
-            <StatCard label="Store items" value={`₱${report.fbRevenue.toFixed(2)}`} />
+            <StatCard label="Room revenue" value={peso(report.roomRevenue)} />
+            <StatCard label="Store items" value={peso(report.fbRevenue)} />
             <StatCard label="Current occupancy" value={`${occupied}/${totalRooms}`} />
           </div>
 
           <Card>
             <CardHeader>
               <CardTitle>Total revenue</CardTitle>
-              <CardDescription>₱{report.totalRevenue.toFixed(2)}</CardDescription>
+              <CardDescription>{peso(report.totalRevenue)}</CardDescription>
             </CardHeader>
           </Card>
 
@@ -173,7 +199,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                       <tr key={item.name} className="border-t">
                         <td className="py-1.5">{item.name}</td>
                         <td className="py-1.5">{item.quantity}</td>
-                        <td className="py-1.5">₱{item.revenue.toFixed(2)}</td>
+                        <td className="py-1.5">{peso(item.revenue)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -181,7 +207,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
               )}
             </CardContent>
           </Card>
-        </>
+        </div>
       )}
     </div>
   );
@@ -222,47 +248,98 @@ function MonthlyReportTab({ rooms }: { rooms: Room[] | null }) {
     if (!report) return;
     await exportToExcel(`marimar-inn-monthly-${monthValue}`, [
       {
+        name: "Summary",
+        title: "Monthly Report",
+        subtitle: formatReportMonth(monthValue),
+        tables: [
+          {
+            heading: "Overview",
+            columns: [
+              { header: "Metric", key: "metric", width: 28 },
+              { header: "Value", key: "value", width: 22, format: "auto" },
+            ],
+            rows: [
+              { metric: "Month", value: formatReportMonth(monthValue) },
+              { metric: "Check-ins", value: report.totalCheckIns },
+              { metric: "Occupancy", value: report.occupancyPercent },
+              { metric: "Room revenue", value: report.roomRevenue },
+              { metric: "Store items revenue", value: report.fbRevenue },
+              { metric: "Total revenue", value: report.totalRevenue },
+            ],
+            emphasizeLastRow: true,
+          },
+        ],
+      },
+      {
         name: "Daily revenue",
-        columns: [
-          { header: "Date", key: "date", width: 14 },
-          { header: "Check-ins", key: "checkIns", width: 12 },
-          { header: "Room revenue", key: "roomRevenue", width: 16 },
-          { header: "Store items revenue", key: "fbRevenue", width: 16 },
-          { header: "Total", key: "total", width: 14 },
+        title: "Daily revenue",
+        subtitle: formatReportMonth(monthValue),
+        tables: [
+          {
+            columns: [
+              { header: "Date", key: "date", width: 16 },
+              { header: "Check-ins", key: "checkIns", width: 14, format: "integer" },
+              { header: "Room revenue", key: "roomRevenue", width: 18, format: "currency" },
+              { header: "Store items", key: "fbRevenue", width: 18, format: "currency" },
+              { header: "Total", key: "total", width: 16, format: "currency" },
+            ],
+            rows: [
+              ...report.dailySeries.map((day) => ({
+                date: day.date,
+                checkIns: day.checkIns,
+                roomRevenue: day.roomRevenue,
+                fbRevenue: day.fbRevenue,
+                total: day.total,
+              })),
+              {
+                date: "Month total",
+                checkIns: report.totalCheckIns,
+                roomRevenue: report.roomRevenue,
+                fbRevenue: report.fbRevenue,
+                total: report.totalRevenue,
+              },
+            ],
+            emphasizeLastRow: true,
+          },
         ],
-        rows: report.dailySeries.map((d) => ({
-          date: d.date,
-          checkIns: d.checkIns,
-          roomRevenue: d.roomRevenue,
-          fbRevenue: d.fbRevenue,
-          total: d.total,
-        })),
       },
       {
-        name: "Revenue by room type",
-        columns: [
-          { header: "Room type", key: "type", width: 16 },
-          { header: "Bookings", key: "bookings", width: 12 },
-          { header: "Revenue", key: "revenue", width: 14 },
+        name: "Room types",
+        title: "Revenue by room type",
+        subtitle: formatReportMonth(monthValue),
+        tables: [
+          {
+            columns: [
+              { header: "Room type", key: "type", width: 18 },
+              { header: "Bookings", key: "bookings", width: 14, format: "integer" },
+              { header: "Revenue", key: "revenue", width: 18, format: "currency" },
+            ],
+            rows: report.revenueByRoomType.map((row) => ({
+              type: ROOM_TYPE_LABELS[row.type],
+              bookings: row.bookings,
+              revenue: row.revenue,
+            })),
+          },
         ],
-        rows: report.revenueByRoomType.map((r) => ({
-          type: ROOM_TYPE_LABELS[r.type],
-          bookings: r.bookings,
-          revenue: r.revenue,
-        })),
       },
       {
-        name: "Top store items",
-        columns: [
-          { header: "Item", key: "name", width: 24 },
-          { header: "Quantity", key: "quantity", width: 12 },
-          { header: "Revenue", key: "revenue", width: 14 },
+        name: "Store items",
+        title: "Top store items",
+        subtitle: formatReportMonth(monthValue),
+        tables: [
+          {
+            columns: [
+              { header: "Item", key: "name", width: 28 },
+              { header: "Quantity", key: "quantity", width: 14, format: "integer" },
+              { header: "Revenue", key: "revenue", width: 18, format: "currency" },
+            ],
+            rows: report.topItemsByRevenue.map((item) => ({
+              name: item.name,
+              quantity: item.quantity,
+              revenue: item.revenue,
+            })),
+          },
         ],
-        rows: report.topItemsByRevenue.map((i) => ({
-          name: i.name,
-          quantity: i.quantity,
-          revenue: i.revenue,
-        })),
       },
     ]);
   }
@@ -298,9 +375,9 @@ function MonthlyReportTab({ rooms }: { rooms: Room[] | null }) {
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard label="Total revenue" value={`₱${report.totalRevenue.toFixed(2)}`} />
-            <StatCard label="Room revenue" value={`₱${report.roomRevenue.toFixed(2)}`} />
-            <StatCard label="Store items" value={`₱${report.fbRevenue.toFixed(2)}`} />
+            <StatCard label="Total revenue" value={peso(report.totalRevenue)} />
+            <StatCard label="Room revenue" value={peso(report.roomRevenue)} />
+            <StatCard label="Store items" value={peso(report.fbRevenue)} />
             <StatCard label="Occupancy" value={`${report.occupancyPercent.toFixed(1)}%`} />
           </div>
 
@@ -335,7 +412,7 @@ function MonthlyReportTab({ rooms }: { rooms: Room[] | null }) {
                       <tr key={r.type} className="border-t">
                         <td className="py-1.5">{ROOM_TYPE_LABELS[r.type]}</td>
                         <td className="py-1.5">{r.bookings}</td>
-                        <td className="py-1.5">₱{r.revenue.toFixed(2)}</td>
+                        <td className="py-1.5">{peso(r.revenue)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -365,7 +442,7 @@ function MonthlyReportTab({ rooms }: { rooms: Room[] | null }) {
                       <tr key={item.name} className="border-t">
                         <td className="py-1.5">{item.name}</td>
                         <td className="py-1.5">{item.quantity}</td>
-                        <td className="py-1.5">₱{item.revenue.toFixed(2)}</td>
+                        <td className="py-1.5">{peso(item.revenue)}</td>
                       </tr>
                     ))}
                   </tbody>
