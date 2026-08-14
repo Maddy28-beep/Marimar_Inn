@@ -58,36 +58,33 @@ export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
       type="button"
       onClick={onClick}
       className={cn(
-        // Fixed height (not min-height) so every card is identical regardless
-        // of status — otherwise CSS grid's row-stretch makes an entire row
-        // taller whenever it contains an occupied card (which shows extra
-        // guest name + countdown content), leaving other rows shorter.
-        "flex h-[13rem] flex-col gap-2 rounded-xl border p-3 text-left transition-colors",
+        // Fixed height so occupied cards (guest + countdown) match empty ones.
+        "flex h-32 w-full flex-col gap-1 overflow-hidden rounded-xl border p-3 text-left transition-colors",
         style.card
       )}
     >
-      <div className="flex items-center justify-between">
-        <span className="font-heading text-lg font-semibold">{room.roomNumber}</span>
-        <span className={cn("size-2.5 rounded-full", style.dot)} />
+      <div className="flex items-start justify-between gap-2">
+        <span className="font-heading text-xl leading-none font-semibold">{room.roomNumber}</span>
+        <span className={cn("mt-1 size-2.5 shrink-0 rounded-full", style.dot)} />
       </div>
       <div className="text-xs text-muted-foreground">
         {ROOM_TYPE_LABELS[room.type]} · {style.label}
       </div>
 
       {booking && (
-        <div className="mt-1 flex flex-col gap-1 border-t pt-2 text-xs">
+        <div className="flex min-h-0 flex-col gap-0.5 text-xs">
           <div className="flex items-center gap-1 truncate font-medium">
             <UserIcon className="size-3 shrink-0" />
             <span className="truncate">{booking.guestName}</span>
           </div>
           <div
             className={cn(
-              "font-medium",
+              "text-sm font-semibold",
               isOverdue
                 ? "text-rose-600 dark:text-rose-400"
                 : isRunningLow
                   ? "text-amber-600 dark:text-amber-400"
-                  : "text-muted-foreground"
+                  : "text-foreground"
             )}
           >
             {isOverdue ? "Overdue" : `${formatHours(remaining!)} left`}
