@@ -133,11 +133,11 @@
   body * {
     visibility: hidden;
   }
-  #receipt-content,
-  #receipt-content * {
+  .print-area,
+  .print-area * {
     visibility: visible;
   }
-  #receipt-content {
+  .print-area {
     position: absolute;
     top: 0;
     left: 0;

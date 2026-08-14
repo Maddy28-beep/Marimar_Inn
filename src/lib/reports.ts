@@ -1,0 +1,198 @@
+import { collection, getDocs, query, Timestamp, where } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import type { Booking, Room, RoomType } from "@/lib/types";
+
+function requireDb() {
+  if (!db) throw new Error("Firebase isn't configured.");
+  return db;
+}
+
+export function startOfDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+export function endOfDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+export function startOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
+}
+
+export function endOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+export function daysInMonth(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+}
+
+function dateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * A single range filter on one field never needs a manual composite index —
+ * Firestore auto-indexes every field individually. Deliberately avoiding
+ * combining this with an extra `where`/`orderBy` on a different field, since
+ * that's exactly what forces a console trip to create a composite index.
+ */
+export async function fetchBookingsInRange(
+  field: "checkInTime" | "checkOutTime",
+  start: Date,
+  end: Date
+): Promise<Booking[]> {
+  const firestore = requireDb();
+  const q = query(
+    collection(firestore, "bookings"),
+    where(field, ">=", Timestamp.fromDate(start)),
+    where(field, "<=", Timestamp.fromDate(end))
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data() as Booking);
+}
+
+interface ItemTally {
+  name: string;
+  quantity: number;
+  revenue: number;
+}
+
+function tallyItems(bookings: Booking[]): Map<string, ItemTally> {
+  const map = new Map<string, ItemTally>();
+  for (const booking of bookings) {
+    for (const item of booking.items ?? []) {
+      const existing = map.get(item.itemId);
+      if (existing) {
+        existing.quantity += item.quantity;
+        existing.revenue += item.subtotal;
+      } else {
+        map.set(item.itemId, { name: item.name, quantity: item.quantity, revenue: item.subtotal });
+      }
+    }
+  }
+  return map;
+}
+
+export interface DailyReport {
+  checkIns: number;
+  checkOuts: number;
+  roomRevenue: number;
+  fbRevenue: number;
+  totalRevenue: number;
+  mostOrderedItems: ItemTally[];
+}
+
+export function computeDailyReport(checkedInToday: Booking[], checkOutsToday: number): DailyReport {
+  // Bookings created before Phase 3 predate totalFbCharge/items — treat
+  // missing numeric fields as 0 rather than letting `undefined` poison the
+  // sum into NaN.
+  const roomRevenue = checkedInToday.reduce((sum, b) => sum + (b.totalRoomCharge ?? 0), 0);
+  const fbRevenue = checkedInToday.reduce((sum, b) => sum + (b.totalFbCharge ?? 0), 0);
+  const mostOrderedItems = Array.from(tallyItems(checkedInToday).values())
+    .sort((a, b) => b.quantity - a.quantity)
+    .slice(0, 10);
+
+  return {
+    checkIns: checkedInToday.length,
+    checkOuts: checkOutsToday,
+    roomRevenue,
+    fbRevenue,
+    totalRevenue: roomRevenue + fbRevenue,
+    mostOrderedItems,
+  };
+}
+
+export interface DailyRevenuePoint {
+  date: string;
+  roomRevenue: number;
+  fbRevenue: number;
+  total: number;
+  checkIns: number;
+}
+
+export interface RoomTypeRevenue {
+  type: RoomType;
+  revenue: number;
+  bookings: number;
+}
+
+export interface MonthlyReport {
+  totalRevenue: number;
+  roomRevenue: number;
+  fbRevenue: number;
+  totalCheckIns: number;
+  occupancyPercent: number;
+  dailySeries: DailyRevenuePoint[];
+  revenueByRoomType: RoomTypeRevenue[];
+  topItemsByQuantity: ItemTally[];
+  topItemsByRevenue: ItemTally[];
+}
+
+export function computeMonthlyReport(
+  bookings: Booking[],
+  rooms: Room[],
+  monthDate: Date
+): MonthlyReport {
+  const roomTypeById = new Map(rooms.map((r) => [r.roomId, r.type]));
+  const numDays = daysInMonth(monthDate);
+
+  const dailyMap = new Map<string, DailyRevenuePoint>();
+  for (let day = 1; day <= numDays; day++) {
+    const key = dateKey(new Date(monthDate.getFullYear(), monthDate.getMonth(), day));
+    dailyMap.set(key, { date: key, roomRevenue: 0, fbRevenue: 0, total: 0, checkIns: 0 });
+  }
+
+  let roomRevenue = 0;
+  let fbRevenue = 0;
+  let totalHoursBooked = 0;
+  const roomTypeRevenue = new Map<RoomType, { revenue: number; bookings: number }>();
+
+  for (const booking of bookings) {
+    // Same defensive-default reasoning as computeDailyReport: bookings from
+    // before Phase 3/4 may be missing totalFbCharge, or (rarer) totalAmount.
+    const bookingRoomCharge = booking.totalRoomCharge ?? 0;
+    const bookingFbCharge = booking.totalFbCharge ?? 0;
+    roomRevenue += bookingRoomCharge;
+    fbRevenue += bookingFbCharge;
+    totalHoursBooked += booking.hoursBooked ?? 0;
+
+    const point = dailyMap.get(dateKey(booking.checkInTime.toDate()));
+    if (point) {
+      point.roomRevenue += bookingRoomCharge;
+      point.fbRevenue += bookingFbCharge;
+      point.total += booking.totalAmount ?? bookingRoomCharge + bookingFbCharge;
+      point.checkIns += 1;
+    }
+
+    const type = roomTypeById.get(booking.roomId);
+    if (type) {
+      const existing = roomTypeRevenue.get(type) ?? { revenue: 0, bookings: 0 };
+      existing.revenue += bookingRoomCharge;
+      existing.bookings += 1;
+      roomTypeRevenue.set(type, existing);
+    }
+  }
+
+  const totalRoomHoursAvailable = rooms.length * numDays * 24;
+  const occupancyPercent =
+    totalRoomHoursAvailable > 0 ? (totalHoursBooked / totalRoomHoursAvailable) * 100 : 0;
+
+  const items = Array.from(tallyItems(bookings).values());
+
+  return {
+    totalRevenue: roomRevenue + fbRevenue,
+    roomRevenue,
+    fbRevenue,
+    totalCheckIns: bookings.length,
+    occupancyPercent,
+    dailySeries: Array.from(dailyMap.values()),
+    revenueByRoomType: Array.from(roomTypeRevenue.entries()).map(([type, v]) => ({ type, ...v })),
+    topItemsByQuantity: [...items].sort((a, b) => b.quantity - a.quantity).slice(0, 10),
+    topItemsByRevenue: [...items].sort((a, b) => b.revenue - a.revenue).slice(0, 10),
+  };
+}

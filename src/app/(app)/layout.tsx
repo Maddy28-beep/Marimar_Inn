@@ -16,6 +16,7 @@ import { syncCheckoutReminder } from "@/lib/notifications";
 import { useNowTick } from "@/hooks/use-now-tick";
 import type { Booking, Room } from "@/lib/types";
 import {
+  BarChart3Icon,
   LogOutIcon,
   MenuIcon,
   PackageIcon,
@@ -55,6 +56,7 @@ const NAV_LINKS: NavLink[] = [
   { href: "/dashboard", label: "Rooms" },
   { href: "/rooms/manage", label: "Manage Rooms", icon: SettingsIcon, ownerOnly: true },
   { href: "/inventory", label: "Inventory", icon: PackageIcon, ownerOnly: true },
+  { href: "/reports", label: "Reports", icon: BarChart3Icon, ownerOnly: true },
   { href: "/users", label: "Manage Staff", icon: UsersIcon, ownerOnly: true },
 ];
 

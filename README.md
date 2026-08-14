@@ -82,7 +82,7 @@ src/
 │   ├── (app)/                    # Authenticated shell — layout wraps children in ProtectedRoute
 │   │   ├── layout.tsx            # Header nav, role badge, sign-out — Owner-only links conditionally rendered
 │   │   ├── dashboard/             # Room grid — the daily-ops home screen for both roles
-│   │   ├── rooms/manage/          # Owner-only: room catalog CRUD + seed 30 rooms
+│   │   ├── rooms/manage/          # Owner-only: room catalog CRUD + seed 17 rooms
 │   │   ├── inventory/             # Owner-only: F&B catalog, prices, restock
 │   │   └── users/                 # Owner-only: create/list staff accounts
 │   └── page.tsx                  # Redirects to /login or /dashboard based on auth state
@@ -121,8 +121,8 @@ firestore.rules                   # Firestore security rules
 | **2** | Room dashboard, check-in/checkout core, Owner-only room & staff management | **Done** |
 | **3** | Food & beverage ordering, inventory | **Done** |
 | **4** | Extend-stay, real-time notifications (checkout reminders, low stock) | **Done** |
-| **5** | Reports & analytics (daily/monthly/inventory, exports) | Next |
-| **6** | UI polish — dark mode, brand styling, keyboard shortcuts | Planned |
+| **5** | Reports & analytics (daily/monthly/inventory, exports) | **Done** |
+| **6** | UI polish — dark mode, brand styling, keyboard shortcuts | Next |
 
 ## Deploy on Vercel
 

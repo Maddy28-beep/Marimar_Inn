@@ -100,7 +100,7 @@ export function RoomGrid() {
     return (
       <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
         {appUser?.role === "owner"
-          ? "No rooms yet — head to Manage Rooms to seed the initial 30 rooms."
+          ? "No rooms yet — head to Manage Rooms to seed the initial 17 rooms."
           : "No rooms have been set up yet. Ask the Owner to seed the room list."}
       </div>
     );

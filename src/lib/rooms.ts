@@ -81,17 +81,15 @@ interface SeedRoomSpec {
 }
 
 function buildSeedRooms(): SeedRoomSpec[] {
-  // 18 standard, 8 deluxe, 4 suite = 30 rooms total
-  const typeSequence: { type: RoomType; ratePerHour: number }[] = [
-    ...Array(18).fill({ type: "standard" as const, ratePerHour: 150 }),
-    ...Array(8).fill({ type: "deluxe" as const, ratePerHour: 220 }),
-    ...Array(4).fill({ type: "suite" as const, ratePerHour: 350 }),
-  ];
+  // 17 standard rooms — the inn's actual current room count
+  const typeSequence: { type: RoomType; ratePerHour: number }[] = Array(17).fill({
+    type: "standard" as const,
+    ratePerHour: 150,
+  });
 
   const floors = [
     { floor: 1, base: 101 },
     { floor: 2, base: 201 },
-    { floor: 3, base: 301 },
   ];
 
   return typeSequence.map((spec, index) => {

@@ -131,7 +131,7 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
               </DialogDescription>
             </DialogHeader>
 
-            <div id="receipt-content" className="flex flex-col gap-2 rounded-lg border p-4 text-sm">
+            <div className="print-area flex flex-col gap-2 rounded-lg border p-4 text-sm">
               <div className="text-center">
                 <div className="font-heading text-base font-semibold">Marimar Inn</div>
                 <div className="text-xs text-muted-foreground">Official Receipt</div>

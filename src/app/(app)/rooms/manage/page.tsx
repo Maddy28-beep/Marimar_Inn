@@ -26,7 +26,7 @@ function ManageRoomsContent() {
     setSeeding(true);
     try {
       await seedInitialRooms();
-      toast.success("Seeded 30 rooms.");
+      toast.success("Seeded 17 rooms.");
     } catch {
       toast.error("Couldn't seed rooms — please try again.");
     } finally {
@@ -60,7 +60,7 @@ function ManageRoomsContent() {
           {rooms?.length === 0 && (
             <Button variant="outline" onClick={handleSeed} disabled={seeding}>
               {seeding && <Loader2Icon className="size-4 animate-spin" />}
-              Seed 30 rooms
+              Seed 17 rooms
             </Button>
           )}
           <Button onClick={() => setDialog("create")}>
@@ -119,7 +119,7 @@ function ManageRoomsContent() {
             {rooms?.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                  No rooms yet — seed the initial 30 rooms to get started.
+                  No rooms yet — seed the initial 17 rooms to get started.
                 </td>
               </tr>
             )}
