@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -23,13 +23,15 @@ import {
 } from "@/components/ui/select";
 import { checkIn } from "@/lib/bookings";
 import { updateRoomStatus } from "@/lib/rooms";
+import { subscribeToInventory } from "@/lib/inventory";
 import {
   PAYMENT_METHOD_LABELS,
   ROOM_TYPE_LABELS,
+  type InventoryItem,
   type PaymentMethod,
   type Room,
 } from "@/lib/types";
-import { Loader2Icon } from "lucide-react";
+import { Loader2Icon, MinusIcon, PlusIcon } from "lucide-react";
 
 const DURATION_PRESETS = [2, 3, 4, 6, 8, 12, 24];
 
@@ -49,11 +51,37 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
   const [amountPaid, setAmountPaid] = useState("");
   const [specialRequests, setSpecialRequests] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [inventory, setInventory] = useState<InventoryItem[] | null>(null);
+  const [cart, setCart] = useState<Record<string, number>>({});
+
+  useEffect(() => subscribeToInventory(setInventory), []);
+
+  const cartLines = useMemo(() => {
+    if (!inventory) return [];
+    return Object.entries(cart)
+      .filter(([, qty]) => qty > 0)
+      .map(([itemId, qty]) => {
+        const item = inventory.find((i) => i.itemId === itemId);
+        return item ? { item, qty } : null;
+      })
+      .filter((line): line is { item: InventoryItem; qty: number } => line !== null);
+  }, [cart, inventory]);
+
+  const fbTotal = cartLines.reduce((sum, line) => sum + line.qty * line.item.sellingPrice, 0);
+
+  function adjustCart(item: InventoryItem, delta: number) {
+    setCart((prev) => {
+      const current = prev[item.itemId] ?? 0;
+      const next = Math.max(0, Math.min(item.quantity, current + delta));
+      return { ...prev, [item.itemId]: next };
+    });
+  }
 
   if (!room) return null;
 
   const effectiveHours = customHours ? Number(customHours) || 0 : hours;
-  const total = effectiveHours * room.ratePerHour;
+  const roomTotal = effectiveHours * room.ratePerHour;
+  const total = roomTotal + fbTotal;
   const paid = Number(amountPaid) || 0;
   const change = paid > total ? paid - total : 0;
 
@@ -82,12 +110,17 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
         amountPaid: Math.min(paid, total),
         specialRequests: specialRequests.trim() || undefined,
         cashierId,
+        cartItems: cartLines.map((line) => ({ itemId: line.item.itemId, quantity: line.qty })),
       });
       toast.success(`Room ${room.roomNumber} checked in.`);
       onClose();
     } catch (error) {
       console.error(error);
-      toast.error("Couldn't check in — please try again.");
+      toast.error(
+        error instanceof Error && error.message.includes("left in stock")
+          ? error.message
+          : "Couldn't check in — please try again."
+      );
     } finally {
       setSubmitting(false);
     }
@@ -231,9 +264,73 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
             />
           </div>
 
-          <div className="flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-sm font-medium">
-            <span>Total due</span>
-            <span>₱{total.toFixed(2)}</span>
+          {inventory !== null && inventory.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <Label>Food &amp; drinks (optional)</Label>
+              <div className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-lg border p-1.5">
+                {inventory.map((item) => {
+                  const qty = cart[item.itemId] ?? 0;
+                  const outOfStock = item.quantity <= 0;
+                  return (
+                    <div
+                      key={item.itemId}
+                      className="flex items-center justify-between gap-2 rounded-md px-1.5 py-1 text-sm"
+                    >
+                      <div className="min-w-0 flex-1 truncate">
+                        {item.name}{" "}
+                        <span className="text-xs text-muted-foreground">
+                          ₱{item.sellingPrice.toFixed(2)}
+                        </span>
+                      </div>
+                      {outOfStock ? (
+                        <span className="text-xs text-rose-600 dark:text-rose-400">
+                          Out of stock
+                        </span>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon-xs"
+                            onClick={() => adjustCart(item, -1)}
+                            disabled={qty === 0 || submitting}
+                          >
+                            <MinusIcon className="size-3" />
+                          </Button>
+                          <span className="w-4 text-center tabular-nums">{qty}</span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon-xs"
+                            onClick={() => adjustCart(item, 1)}
+                            disabled={qty >= item.quantity || submitting}
+                          >
+                            <PlusIcon className="size-3" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-1 rounded-lg bg-muted px-3 py-2 text-sm">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span>Room ({effectiveHours}h)</span>
+              <span>₱{roomTotal.toFixed(2)}</span>
+            </div>
+            {fbTotal > 0 && (
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Food &amp; drinks</span>
+                <span>₱{fbTotal.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between font-medium">
+              <span>Total due</span>
+              <span>₱{total.toFixed(2)}</span>
+            </div>
           </div>
         </div>
 

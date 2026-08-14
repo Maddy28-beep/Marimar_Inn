@@ -71,6 +71,12 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
                   <span className="text-muted-foreground">Room charge</span>
                   <span>₱{booking.totalRoomCharge.toFixed(2)}</span>
                 </div>
+                {booking.totalFbCharge > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Food &amp; drinks</span>
+                    <span>₱{booking.totalFbCharge.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between font-medium">
                   <span>Total due</span>
                   <span>₱{booking.totalAmount.toFixed(2)}</span>
@@ -152,6 +158,22 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
                 <span>Room charge ({booking.hoursBooked}h)</span>
                 <span>₱{booking.totalRoomCharge.toFixed(2)}</span>
               </div>
+              {booking.items.length > 0 && (
+                <>
+                  {booking.items.map((line) => (
+                    <div key={line.itemId} className="flex justify-between text-muted-foreground">
+                      <span>
+                        {line.quantity}× {line.name}
+                      </span>
+                      <span>₱{line.subtotal.toFixed(2)}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between">
+                    <span>Food &amp; drinks total</span>
+                    <span>₱{booking.totalFbCharge.toFixed(2)}</span>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between font-medium">
                 <span>Total</span>
                 <span>₱{booking.totalAmount.toFixed(2)}</span>

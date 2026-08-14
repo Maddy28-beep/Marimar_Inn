@@ -14,8 +14,8 @@ This is an independent project from the Davao Stainless POS — separate repo, s
 
 ## Roles
 
-- **Owner** — full access: room catalog (add/edit/delete rooms, rates), staff accounts, everything Cashier can do
-- **Cashier** — front-desk operations: check-in/checkout, room status (available/cleaning/maintenance), can't touch room rates or staff accounts
+- **Owner** — full access: room catalog (add/edit/delete rooms, rates), staff accounts, inventory catalog/prices/restocking, removing an item from an active order, everything Cashier can do
+- **Cashier** — front-desk operations: check-in/checkout, room status (available/cleaning/maintenance), placing F&B orders (deducts stock). Can't touch room rates, inventory prices/restocking, staff accounts, or remove an item once ordered — restocking and un-ordering both count as *increasing* stock, which Firestore rules reserve for Owner/Admin/manager
 
 Roles are stored per-user in Firestore (`users/{uid}.role`) and enforced both in the UI (`ProtectedRoute`, nav links hidden per role) and in Firestore security rules (`firestore.rules`) — the rules are the real boundary, UI hiding is just convenience.
 
@@ -83,6 +83,7 @@ src/
 │   │   ├── layout.tsx            # Header nav, role badge, sign-out — Owner-only links conditionally rendered
 │   │   ├── dashboard/             # Room grid — the daily-ops home screen for both roles
 │   │   ├── rooms/manage/          # Owner-only: room catalog CRUD + seed 30 rooms
+│   │   ├── inventory/             # Owner-only: F&B catalog, prices, restock
 │   │   └── users/                 # Owner-only: create/list staff accounts
 │   └── page.tsx                  # Redirects to /login or /dashboard based on auth state
 ├── context/
@@ -90,6 +91,7 @@ src/
 ├── components/
 │   ├── auth/protected-route.tsx  # Redirect guard, optional allowedRoles
 │   ├── rooms/                    # Room grid/card, check-in/checkout/status dialogs
+│   ├── inventory/                # Order picker (cart), Owner-only item form
 │   ├── users/                    # Staff account creation dialog
 │   └── ui/                       # shadcn/ui components
 ├── hooks/
@@ -97,7 +99,10 @@ src/
 └── lib/
     ├── firebase.ts               # Firebase client SDK init + secondary app for staff creation
     ├── rooms.ts                  # Room CRUD, status updates, seeding
-    ├── bookings.ts                # Check-in/checkout/void
+    ├── bookings.ts                # Check-in/checkout/void (check-in runs as one Firestore
+    │                               transaction so room + optional F&B items + stock all commit together)
+    ├── inventory.ts               # Item CRUD, restock (Owner-only)
+    ├── orders.ts                  # Add/remove an order line — transactional stock ↔ bill sync
     ├── users.ts                   # Staff account creation (Owner-only)
     └── types.ts
 firestore.rules                   # Firestore security rules
@@ -109,8 +114,8 @@ firestore.rules                   # Firestore security rules
 |-------|--------|--------|
 | **1** | Auth, Owner/Cashier roles | **Done** |
 | **2** | Room dashboard, check-in/checkout core, Owner-only room & staff management | **Done** |
-| **3** | Food & beverage ordering, inventory | Next |
-| **4** | Extend-stay, real-time notifications | Planned |
+| **3** | Food & beverage ordering, inventory | **Done** |
+| **4** | Extend-stay, real-time notifications | Next |
 | **5** | Reports & analytics (daily/monthly/inventory, exports) | Planned |
 | **6** | UI polish — dark mode, brand styling, keyboard shortcuts | Planned |
 

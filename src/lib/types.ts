@@ -25,6 +25,14 @@ export interface Room {
   lastUpdated: Timestamp;
 }
 
+export interface OrderItem {
+  itemId: string;
+  name: string;
+  unitPrice: number;
+  quantity: number;
+  subtotal: number;
+}
+
 export interface Booking {
   bookingId: string;
   roomId: string;
@@ -35,15 +43,27 @@ export interface Booking {
   checkInTime: Timestamp;
   hoursBooked: number;
   totalRoomCharge: number;
+  totalFbCharge: number;
   totalAmount: number;
   amountPaid: number;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
   status: BookingStatus;
+  items: OrderItem[];
   checkOutTime?: Timestamp;
   specialRequests?: string;
   cashierId: string;
   updatedAt: Timestamp;
+}
+
+export interface InventoryItem {
+  itemId: string;
+  name: string;
+  category: string;
+  sellingPrice: number;
+  quantity: number;
+  minStockLevel: number;
+  lastUpdated: Timestamp;
 }
 
 export const ROOM_TYPE_LABELS: Record<RoomType, string> = {

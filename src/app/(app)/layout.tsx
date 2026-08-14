@@ -7,7 +7,7 @@ import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { LogOutIcon, SettingsIcon, UsersIcon } from "lucide-react";
+import { LogOutIcon, PackageIcon, SettingsIcon, UsersIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function AppShell({ children }: { children: React.ReactNode }) {
@@ -52,6 +52,18 @@ function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <SettingsIcon className="size-3.5" />
                 Manage Rooms
+              </Link>
+            )}
+            {appUser?.role === "owner" && (
+              <Link
+                href="/inventory"
+                className={cn(
+                  "flex items-center gap-1 rounded-md px-2.5 py-1 text-sm font-medium text-muted-foreground hover:text-foreground",
+                  pathname === "/inventory" && "bg-muted text-foreground"
+                )}
+              >
+                <PackageIcon className="size-3.5" />
+                Inventory
               </Link>
             )}
             {appUser?.role === "owner" && (

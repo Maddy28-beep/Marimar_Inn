@@ -110,9 +110,18 @@ service cloud.firestore {
       // All authenticated users can read inventory
       allow read: if isAuthenticated();
 
-      // Only owner, admin, manager can create/update/delete inventory
-      allow create, update: if isOwnerOrAdmin() || hasRole('manager');
-      allow delete: if isOwnerOrAdmin();
+      // Owner/admin/manager: full inventory management (name, category,
+      // price, min stock, deletes)
+      allow create, delete: if isOwnerOrAdmin() || hasRole('manager');
+
+      // Any staff (cashier included) can *decrease* stock quantity as part
+      // of placing an order. Increasing quantity — restocking, or reversing
+      // an order — is owner/admin/manager only; staff can't undo an order
+      // once it's rung up, only request the Owner do it.
+      allow update: if (isOwnerOrAdmin() || hasRole('manager')) ||
+        (isStaff() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantity', 'lastUpdated']) &&
+          request.resource.data.quantity < resource.data.quantity);
 
       // Validate inventory data
       allow create: if request.resource.data.keys().hasAll([
@@ -122,9 +131,6 @@ service cloud.firestore {
       request.resource.data.category is string &&
       request.resource.data.sellingPrice is number &&
       request.resource.data.quantity is number;
-
-      // Validate updates - can't change itemId
-      allow update: if !(request.resource.data.diff(resource.data).affectedKeys().has(['itemId']));
     }
 
     // ============================================

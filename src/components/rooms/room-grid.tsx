@@ -35,7 +35,10 @@ const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
 };
 type DialogState =
   | { kind: "check-in"; room: Room }
-  | { kind: "detail"; room: Room; booking: Booking }
+  // "detail" intentionally holds no booking snapshot — it's looked up live
+  // from bookingsByRoom on every render so adding/removing order items while
+  // the dialog is open reflects immediately instead of a frozen click-time copy.
+  | { kind: "detail"; room: Room }
   | { kind: "checkout"; room: Room; booking: Booking }
   | { kind: "status"; room: Room }
   | null;
@@ -76,9 +79,8 @@ export function RoomGrid() {
       return;
     }
     if (room.status === "occupied") {
-      const booking = bookingsByRoom.get(room.roomId);
-      if (!booking) return;
-      setDialog({ kind: "detail", room, booking });
+      if (!bookingsByRoom.get(room.roomId)) return;
+      setDialog({ kind: "detail", room });
       return;
     }
     setDialog({ kind: "status", room });
@@ -166,16 +168,21 @@ export function RoomGrid() {
         />
       )}
 
-      {dialog?.kind === "detail" && (
-        <RoomDetailDialog
-          room={dialog.room}
-          booking={dialog.booking}
-          onClose={() => setDialog(null)}
-          onRequestCheckout={() =>
-            setDialog({ kind: "checkout", room: dialog.room, booking: dialog.booking })
-          }
-        />
-      )}
+      {dialog?.kind === "detail" &&
+        (() => {
+          const liveBooking = bookingsByRoom.get(dialog.room.roomId);
+          if (!liveBooking) return null;
+          return (
+            <RoomDetailDialog
+              room={dialog.room}
+              booking={liveBooking}
+              onClose={() => setDialog(null)}
+              onRequestCheckout={() =>
+                setDialog({ kind: "checkout", room: dialog.room, booking: liveBooking })
+              }
+            />
+          );
+        })()}
 
       {dialog?.kind === "checkout" && appUser && (
         <CheckoutDialog
