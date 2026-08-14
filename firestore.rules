@@ -62,14 +62,14 @@ service cloud.firestore {
 
       // Any staff (cashier included) can flip a room's status as part of
       // normal check-in/checkout/maintenance flows, but only owner/admin/
-      // manager can touch identity fields like roomNumber or ratePerHour.
+      // manager can touch identity fields like roomNumber or floor.
       allow update: if (isOwnerOrAdmin() || hasRole('manager')) ||
         (isStaff() &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastUpdated']));
 
       // Validate room data
       allow create: if request.resource.data.keys().hasAll([
-        'roomId', 'roomNumber', 'floor', 'type', 'ratePerHour', 'status', 'lastUpdated'
+        'roomId', 'roomNumber', 'floor', 'type', 'status', 'lastUpdated'
       ]) &&
       request.resource.data.roomId is string &&
       request.resource.data.roomNumber is string &&

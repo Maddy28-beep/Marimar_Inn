@@ -35,7 +35,6 @@ export interface NewRoomInput {
   roomNumber: string;
   floor: number;
   type: RoomType;
-  ratePerHour: number;
 }
 
 export async function createRoom(input: NewRoomInput) {
@@ -46,7 +45,6 @@ export async function createRoom(input: NewRoomInput) {
     roomNumber: input.roomNumber,
     floor: input.floor,
     type: input.type,
-    ratePerHour: input.ratePerHour,
     status: "available",
     lastUpdated: serverTimestamp(),
   };
@@ -59,7 +57,6 @@ export async function updateRoom(roomId: string, input: NewRoomInput) {
     roomNumber: input.roomNumber,
     floor: input.floor,
     type: input.type,
-    ratePerHour: input.ratePerHour,
   });
 }
 
@@ -80,7 +77,6 @@ interface SeedRoomSpec {
   roomNumber: string;
   floor: number;
   type: RoomType;
-  ratePerHour: number;
 }
 
 function buildSeedRooms(): SeedRoomSpec[] {
@@ -89,7 +85,6 @@ function buildSeedRooms(): SeedRoomSpec[] {
     roomNumber: String(index + 1),
     floor: 1,
     type: "standard" as const,
-    ratePerHour: 150,
   }));
 }
 
@@ -105,7 +100,6 @@ export async function seedInitialRooms() {
       roomNumber: spec.roomNumber,
       floor: spec.floor,
       type: spec.type,
-      ratePerHour: spec.ratePerHour,
       status: "available",
       lastUpdated: serverTimestamp(),
     };

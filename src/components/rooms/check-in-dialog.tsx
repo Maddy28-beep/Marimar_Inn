@@ -26,14 +26,13 @@ import { updateRoomStatus } from "@/lib/rooms";
 import { subscribeToInventory } from "@/lib/inventory";
 import {
   PAYMENT_METHOD_LABELS,
+  ROOM_RATE_PACKAGES,
   ROOM_TYPE_LABELS,
   type InventoryItem,
   type PaymentMethod,
   type Room,
 } from "@/lib/types";
 import { Loader2Icon, MinusIcon, PlusIcon } from "lucide-react";
-
-const DURATION_PRESETS = [2, 3, 4, 6, 8, 12, 24];
 
 interface CheckInDialogProps {
   room: Room | null;
@@ -45,8 +44,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [guestCount, setGuestCount] = useState("1");
-  const [hours, setHours] = useState(3);
-  const [customHours, setCustomHours] = useState("");
+  const [packageIndex, setPackageIndex] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [amountPaid, setAmountPaid] = useState("");
   const [specialRequests, setSpecialRequests] = useState("");
@@ -79,8 +77,8 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
 
   if (!room) return null;
 
-  const effectiveHours = customHours ? Number(customHours) || 0 : hours;
-  const roomTotal = effectiveHours * room.ratePerHour;
+  const selectedPackage = ROOM_RATE_PACKAGES[packageIndex];
+  const roomTotal = selectedPackage.price;
   const total = roomTotal + fbTotal;
   const paid = Number(amountPaid) || 0;
   const change = paid > total ? paid - total : 0;
@@ -89,10 +87,6 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
     if (!room) return;
     if (!guestName.trim()) {
       toast.error("Guest name is required.");
-      return;
-    }
-    if (effectiveHours <= 0) {
-      toast.error("Duration must be greater than zero.");
       return;
     }
 
@@ -104,8 +98,8 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
         guestName: guestName.trim(),
         guestPhone: guestPhone.trim() || undefined,
         guestCount: guestCount ? Number(guestCount) : undefined,
-        hoursBooked: effectiveHours,
-        ratePerHour: room.ratePerHour,
+        packageHours: selectedPackage.hours,
+        packagePrice: selectedPackage.price,
         paymentMethod,
         amountPaid: Math.min(paid, total),
         specialRequests: specialRequests.trim() || undefined,
@@ -145,9 +139,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Check in — Room {room.roomNumber}</DialogTitle>
-          <DialogDescription>
-            {ROOM_TYPE_LABELS[room.type]} · ₱{room.ratePerHour}/hr
-          </DialogDescription>
+          <DialogDescription>{ROOM_TYPE_LABELS[room.type]}</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
@@ -185,32 +177,20 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label>Duration</Label>
+            <Label>Rate package</Label>
             <div className="flex flex-wrap gap-1.5">
-              {DURATION_PRESETS.map((h) => (
+              {ROOM_RATE_PACKAGES.map((pkg, index) => (
                 <Button
-                  key={h}
+                  key={pkg.hours}
                   type="button"
                   size="sm"
-                  variant={!customHours && hours === h ? "default" : "outline"}
-                  onClick={() => {
-                    setHours(h);
-                    setCustomHours("");
-                  }}
+                  variant={packageIndex === index ? "default" : "outline"}
+                  onClick={() => setPackageIndex(index)}
                   disabled={submitting}
                 >
-                  {h}h
+                  {pkg.hours}h · ₱{pkg.price}
                 </Button>
               ))}
-              <Input
-                placeholder="Custom"
-                type="number"
-                min={0}
-                value={customHours}
-                onChange={(e) => setCustomHours(e.target.value)}
-                disabled={submitting}
-                className="w-20"
-              />
             </div>
           </div>
 
@@ -318,7 +298,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
 
           <div className="flex flex-col gap-1 rounded-lg bg-muted px-3 py-2 text-sm">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span>Room ({effectiveHours}h)</span>
+              <span>Room ({selectedPackage.hours}h)</span>
               <span>₱{roomTotal.toFixed(2)}</span>
             </div>
             {fbTotal > 0 && (

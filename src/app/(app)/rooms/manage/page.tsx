@@ -78,7 +78,6 @@ function ManageRoomsContent() {
               <th className="px-4 py-2 font-medium">Room</th>
               <th className="px-4 py-2 font-medium">Floor</th>
               <th className="px-4 py-2 font-medium">Type</th>
-              <th className="px-4 py-2 font-medium">Rate/hr</th>
               <th className="px-4 py-2 font-medium">Status</th>
               <th className="px-4 py-2" />
             </tr>
@@ -89,7 +88,6 @@ function ManageRoomsContent() {
                 <td className="px-4 py-2 font-medium">{room.roomNumber}</td>
                 <td className="px-4 py-2">{room.floor}</td>
                 <td className="px-4 py-2">{ROOM_TYPE_LABELS[room.type]}</td>
-                <td className="px-4 py-2">₱{room.ratePerHour.toFixed(2)}</td>
                 <td className="px-4 py-2">
                   <Badge variant="secondary" className="capitalize">
                     {room.status}
@@ -118,7 +116,7 @@ function ManageRoomsContent() {
             ))}
             {rooms?.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                   No rooms yet — seed the initial 17 rooms to get started.
                 </td>
               </tr>

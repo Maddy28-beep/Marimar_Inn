@@ -14,11 +14,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { extendStay, hoursElapsed } from "@/lib/bookings";
-import type { Booking, Room } from "@/lib/types";
+import { ROOM_RATE_PACKAGES, type Booking, type Room } from "@/lib/types";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { Loader2Icon } from "lucide-react";
-
-const DURATION_PRESETS = [1, 2, 3, 6, 12, 24];
 
 interface ExtendStayDialogProps {
   room: Room;
@@ -28,26 +26,21 @@ interface ExtendStayDialogProps {
 
 export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogProps) {
   const now = useNowTick(1000);
-  const [hours, setHours] = useState(1);
-  const [customHours, setCustomHours] = useState("");
+  const [packageIndex, setPackageIndex] = useState(0);
   const [amountPaid, setAmountPaid] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, now);
-  const effectiveHours = customHours ? Number(customHours) || 0 : hours;
-  const additionalCost = effectiveHours * room.ratePerHour;
+  const selectedPackage = ROOM_RATE_PACKAGES[packageIndex];
+  const additionalCost = selectedPackage.price;
   const paid = Number(amountPaid) || 0;
   const change = paid > additionalCost ? paid - additionalCost : 0;
 
   async function handleSubmit() {
-    if (effectiveHours <= 0) {
-      toast.error("Additional hours must be greater than zero.");
-      return;
-    }
     setSubmitting(true);
     try {
-      await extendStay(booking, room, effectiveHours, Math.min(paid, additionalCost));
-      toast.success(`Room ${room.roomNumber} extended by ${effectiveHours}h.`);
+      await extendStay(booking, selectedPackage.hours, selectedPackage.price, Math.min(paid, additionalCost));
+      toast.success(`Room ${room.roomNumber} extended by ${selectedPackage.hours}h.`);
       onClose();
     } catch (error) {
       console.error(error);
@@ -70,32 +63,20 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
 
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label>Additional hours</Label>
+            <Label>Additional package</Label>
             <div className="flex flex-wrap gap-1.5">
-              {DURATION_PRESETS.map((h) => (
+              {ROOM_RATE_PACKAGES.map((pkg, index) => (
                 <Button
-                  key={h}
+                  key={pkg.hours}
                   type="button"
                   size="sm"
-                  variant={!customHours && hours === h ? "default" : "outline"}
-                  onClick={() => {
-                    setHours(h);
-                    setCustomHours("");
-                  }}
+                  variant={packageIndex === index ? "default" : "outline"}
+                  onClick={() => setPackageIndex(index)}
                   disabled={submitting}
                 >
-                  {h}h
+                  {pkg.hours}h · ₱{pkg.price}
                 </Button>
               ))}
-              <Input
-                placeholder="Custom"
-                type="number"
-                min={0}
-                value={customHours}
-                onChange={(e) => setCustomHours(e.target.value)}
-                disabled={submitting}
-                className="w-20"
-              />
             </div>
           </div>
 

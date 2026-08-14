@@ -20,10 +20,24 @@ export interface Room {
   roomNumber: string;
   floor: number;
   type: RoomType;
-  ratePerHour: number;
   status: RoomStatus;
   lastUpdated: Timestamp;
 }
+
+export interface RatePackage {
+  hours: number;
+  price: number;
+}
+
+// Fixed rate card posted at the front desk — not a per-hour rate, so these
+// are looked up by package rather than computed from a formula.
+export const ROOM_RATE_PACKAGES: RatePackage[] = [
+  { hours: 3, price: 200 },
+  { hours: 4, price: 250 },
+  { hours: 5, price: 300 },
+  { hours: 6, price: 400 },
+  { hours: 12, price: 800 },
+];
 
 export interface OrderItem {
   itemId: string;

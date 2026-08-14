@@ -14,7 +14,7 @@ This is an independent project from the Davao Stainless POS — separate repo, s
 
 ## Roles
 
-- **Owner** — full access: room catalog (add/edit/delete rooms, rates), staff accounts, inventory catalog/prices/restocking, removing an item from an active order, everything Cashier can do
+- **Owner** — full access: room catalog (add/edit/delete rooms), staff accounts, inventory catalog/prices/restocking, removing an item from an active order, everything Cashier can do
 - **Cashier** — front-desk operations: check-in/checkout, room status (available/cleaning/maintenance), placing F&B orders (deducts stock). Can't touch room rates, inventory prices/restocking, staff accounts, or remove an item once ordered — restocking and un-ordering both count as *increasing* stock, which Firestore rules reserve for Owner/Admin/manager
 
 Roles are stored per-user in Firestore (`users/{uid}.role`) and enforced both in the UI (`ProtectedRoute`, nav links hidden per role) and in Firestore security rules (`firestore.rules`) — the rules are the real boundary, UI hiding is just convenience.

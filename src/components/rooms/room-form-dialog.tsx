@@ -33,7 +33,6 @@ export function RoomFormDialog({ mode, onClose }: RoomFormDialogProps) {
   const [roomNumber, setRoomNumber] = useState(editingRoom?.roomNumber ?? "");
   const [floor, setFloor] = useState(String(editingRoom?.floor ?? 1));
   const [type, setType] = useState<RoomType>(editingRoom?.type ?? "standard");
-  const [ratePerHour, setRatePerHour] = useState(String(editingRoom?.ratePerHour ?? 150));
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit() {
@@ -45,7 +44,6 @@ export function RoomFormDialog({ mode, onClose }: RoomFormDialogProps) {
       roomNumber: roomNumber.trim(),
       floor: Number(floor) || 1,
       type,
-      ratePerHour: Number(ratePerHour) || 0,
     };
 
     setSubmitting(true);
@@ -110,18 +108,6 @@ export function RoomFormDialog({ mode, onClose }: RoomFormDialogProps) {
                 ))}
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="ratePerHour">Rate per hour (₱)</Label>
-            <Input
-              id="ratePerHour"
-              type="number"
-              min={0}
-              value={ratePerHour}
-              onChange={(e) => setRatePerHour(e.target.value)}
-              disabled={submitting}
-            />
           </div>
         </div>
 

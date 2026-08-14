@@ -12,7 +12,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Booking, InventoryItem, OrderItem, PaymentMethod, PaymentStatus, Room } from "@/lib/types";
+import type { Booking, InventoryItem, OrderItem, PaymentMethod, PaymentStatus } from "@/lib/types";
 import { hoursElapsed } from "@/lib/time";
 import { resolveCheckoutReminder } from "@/lib/notifications";
 
@@ -47,8 +47,8 @@ export interface CheckInInput {
   guestName: string;
   guestPhone?: string;
   guestCount?: number;
-  hoursBooked: number;
-  ratePerHour: number;
+  packageHours: number;
+  packagePrice: number;
   paymentMethod: PaymentMethod;
   amountPaid: number;
   specialRequests?: string;
@@ -63,7 +63,7 @@ function paymentStatusFor(amountPaid: number, totalAmount: number): PaymentStatu
 
 export async function checkIn(input: CheckInInput) {
   const firestore = requireDb();
-  const totalRoomCharge = input.hoursBooked * input.ratePerHour;
+  const totalRoomCharge = input.packagePrice;
   const cartItems = input.cartItems ?? [];
 
   const bookingRef = doc(collection(firestore, "bookings"));
@@ -102,7 +102,7 @@ export async function checkIn(input: CheckInInput) {
       roomNumber: input.roomNumber,
       guestName: input.guestName,
       checkInTime: serverTimestamp(),
-      hoursBooked: input.hoursBooked,
+      hoursBooked: input.packageHours,
       totalRoomCharge,
       totalFbCharge,
       totalAmount,
@@ -175,13 +175,13 @@ export async function deleteBooking(bookingId: string) {
 
 export async function extendStay(
   booking: Booking,
-  room: Room,
-  additionalHours: number,
+  packageHours: number,
+  packagePrice: number,
   additionalPayment: number
 ) {
   const firestore = requireDb();
-  const newHoursBooked = booking.hoursBooked + additionalHours;
-  const newTotalRoomCharge = newHoursBooked * room.ratePerHour;
+  const newHoursBooked = booking.hoursBooked + packageHours;
+  const newTotalRoomCharge = booking.totalRoomCharge + packagePrice;
   const newTotalAmount = newTotalRoomCharge + booking.totalFbCharge;
   const newAmountPaid = booking.amountPaid + additionalPayment;
 
