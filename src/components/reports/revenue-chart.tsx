@@ -20,7 +20,7 @@ export function RevenueChart({ data }: RevenueChartProps) {
   const chartData = data.map((point) => ({
     day: point.date.slice(-2),
     "Room": point.roomRevenue,
-    "Food & drinks": point.fbRevenue,
+    "Store items": point.fbRevenue,
   }));
 
   return (
@@ -41,7 +41,7 @@ export function RevenueChart({ data }: RevenueChartProps) {
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
           <Bar dataKey="Room" stackId="revenue" fill="var(--chart-1)" radius={[0, 0, 0, 0]} />
-          <Bar dataKey="Food & drinks" stackId="revenue" fill="var(--chart-2)" radius={[2, 2, 0, 0]} />
+          <Bar dataKey="Store items" stackId="revenue" fill="var(--chart-2)" radius={[2, 2, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

@@ -73,7 +73,7 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
                 </div>
                 {booking.totalFbCharge > 0 && (
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Food &amp; drinks</span>
+                    <span className="text-muted-foreground">Store items</span>
                     <span>₱{booking.totalFbCharge.toFixed(2)}</span>
                   </div>
                 )}
@@ -169,7 +169,7 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
                     </div>
                   ))}
                   <div className="flex justify-between">
-                    <span>Food &amp; drinks total</span>
+                    <span>Store items total</span>
                     <span>₱{booking.totalFbCharge.toFixed(2)}</span>
                   </div>
                 </>

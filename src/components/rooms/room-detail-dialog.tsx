@@ -29,9 +29,11 @@ interface RoomDetailDialogProps {
 
 function formatHours(hours: number): string {
   const sign = hours < 0 ? "-" : "";
-  const abs = Math.abs(hours);
-  const h = Math.floor(abs);
-  const m = Math.round((abs - h) * 60);
+  // Round to whole minutes first, then split — rounding h and m separately
+  // can independently round m up to 60 (e.g. 2.999h -> "2h 60m").
+  const totalMinutes = Math.round(Math.abs(hours) * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
   return `${sign}${h}h ${m}m`;
 }
 
@@ -178,7 +180,7 @@ export function RoomDetailDialog({
               </div>
               {booking.totalFbCharge > 0 && (
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Food &amp; drinks</span>
+                  <span className="text-muted-foreground">Store items</span>
                   <span>₱{booking.totalFbCharge.toFixed(2)}</span>
                 </div>
               )}

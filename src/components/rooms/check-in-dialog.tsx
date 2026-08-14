@@ -246,7 +246,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
 
           {inventory !== null && inventory.length > 0 && (
             <div className="flex flex-col gap-1.5">
-              <Label>Food &amp; drinks (optional)</Label>
+              <Label>Store items (optional)</Label>
               <div className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-lg border p-1.5">
                 {inventory.map((item) => {
                   const qty = cart[item.itemId] ?? 0;
@@ -303,7 +303,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
             </div>
             {fbTotal > 0 && (
               <div className="flex items-center justify-between text-muted-foreground">
-                <span>Food &amp; drinks</span>
+                <span>Store items</span>
                 <span>₱{fbTotal.toFixed(2)}</span>
               </div>
             )}

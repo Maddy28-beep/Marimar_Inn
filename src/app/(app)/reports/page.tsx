@@ -98,7 +98,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
           { metric: "Check-ins", value: report.checkIns },
           { metric: "Check-outs", value: report.checkOuts },
           { metric: "Room revenue", value: report.roomRevenue },
-          { metric: "F&B revenue", value: report.fbRevenue },
+          { metric: "Store items revenue", value: report.fbRevenue },
           { metric: "Total revenue", value: report.totalRevenue },
         ],
       },
@@ -141,7 +141,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             <StatCard label="Check-ins" value={String(report.checkIns)} />
             <StatCard label="Check-outs" value={String(report.checkOuts)} />
             <StatCard label="Room revenue" value={`₱${report.roomRevenue.toFixed(2)}`} />
-            <StatCard label="Food & drinks" value={`₱${report.fbRevenue.toFixed(2)}`} />
+            <StatCard label="Store items" value={`₱${report.fbRevenue.toFixed(2)}`} />
             <StatCard label="Current occupancy" value={`${occupied}/${totalRooms}`} />
           </div>
 
@@ -227,7 +227,7 @@ function MonthlyReportTab({ rooms }: { rooms: Room[] | null }) {
           { header: "Date", key: "date", width: 14 },
           { header: "Check-ins", key: "checkIns", width: 12 },
           { header: "Room revenue", key: "roomRevenue", width: 16 },
-          { header: "F&B revenue", key: "fbRevenue", width: 16 },
+          { header: "Store items revenue", key: "fbRevenue", width: 16 },
           { header: "Total", key: "total", width: 14 },
         ],
         rows: report.dailySeries.map((d) => ({
@@ -252,7 +252,7 @@ function MonthlyReportTab({ rooms }: { rooms: Room[] | null }) {
         })),
       },
       {
-        name: "Top F&B items",
+        name: "Top store items",
         columns: [
           { header: "Item", key: "name", width: 24 },
           { header: "Quantity", key: "quantity", width: 12 },
@@ -300,7 +300,7 @@ function MonthlyReportTab({ rooms }: { rooms: Room[] | null }) {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatCard label="Total revenue" value={`₱${report.totalRevenue.toFixed(2)}`} />
             <StatCard label="Room revenue" value={`₱${report.roomRevenue.toFixed(2)}`} />
-            <StatCard label="Food & drinks" value={`₱${report.fbRevenue.toFixed(2)}`} />
+            <StatCard label="Store items" value={`₱${report.fbRevenue.toFixed(2)}`} />
             <StatCard label="Occupancy" value={`${report.occupancyPercent.toFixed(1)}%`} />
           </div>
 
@@ -346,7 +346,7 @@ function MonthlyReportTab({ rooms }: { rooms: Room[] | null }) {
 
           <Card>
             <CardHeader>
-              <CardTitle>Top F&amp;B items</CardTitle>
+              <CardTitle>Top store items</CardTitle>
             </CardHeader>
             <CardContent>
               {report.topItemsByRevenue.length === 0 ? (

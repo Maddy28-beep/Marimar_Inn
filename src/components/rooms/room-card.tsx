@@ -30,9 +30,11 @@ const STATUS_STYLES: Record<RoomStatus, { label: string; card: string; dot: stri
 
 function formatHours(hours: number): string {
   const sign = hours < 0 ? "-" : "";
-  const abs = Math.abs(hours);
-  const h = Math.floor(abs);
-  const m = Math.round((abs - h) * 60);
+  // Round to whole minutes first, then split — rounding h and m separately
+  // can independently round m up to 60 (e.g. 2.999h -> "2h 60m").
+  const totalMinutes = Math.round(Math.abs(hours) * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
   return `${sign}${h}h ${m}m`;
 }
 
@@ -56,7 +58,11 @@ export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
       type="button"
       onClick={onClick}
       className={cn(
-        "flex flex-col gap-2 rounded-xl border p-3 text-left transition-colors",
+        // Fixed height (not min-height) so every card is identical regardless
+        // of status — otherwise CSS grid's row-stretch makes an entire row
+        // taller whenever it contains an occupied card (which shows extra
+        // guest name + countdown content), leaving other rows shorter.
+        "flex h-[13rem] flex-col gap-2 rounded-xl border p-3 text-left transition-colors",
         style.card
       )}
     >

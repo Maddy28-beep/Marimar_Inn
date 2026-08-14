@@ -79,7 +79,7 @@ function ManageInventoryContent() {
         <div>
           <h1 className="font-heading text-2xl font-semibold tracking-tight">Inventory</h1>
           <p className="text-sm text-muted-foreground">
-            Manage the food &amp; beverage catalog, prices, and stock levels.
+            Manage the store item catalog, prices, and stock levels.
           </p>
         </div>
         <Button onClick={() => setDialog("create")}>
