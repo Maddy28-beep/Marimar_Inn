@@ -1,36 +1,119 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Marimar Inn
 
-## Getting Started
+Real-time property management system for Marimar Inn — hourly-rate room booking, front-desk check-in/checkout, food & beverage ordering, and reporting.
 
-First, run the development server:
+## Stack
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | Next.js (App Router), React, Tailwind CSS, shadcn/ui |
+| Backend | Firebase (Firestore + Firebase Auth) — no separate API server |
+| Deployment | Vercel |
+
+This is an independent project from the Davao Stainless POS — separate repo, separate Firebase project, no shared infrastructure.
+
+## Roles
+
+- **Owner** — full access: room catalog (add/edit/delete rooms, rates), staff accounts, everything Cashier can do
+- **Cashier** — front-desk operations: check-in/checkout, room status (available/cleaning/maintenance), can't touch room rates or staff accounts
+
+Roles are stored per-user in Firestore (`users/{uid}.role`) and enforced both in the UI (`ProtectedRoute`, nav links hidden per role) and in Firestore security rules (`firestore.rules`) — the rules are the real boundary, UI hiding is just convenience.
+
+## Local setup
+
+### Prerequisites
+
+- Node.js 20+
+- A Firebase project (see below)
+
+### 1. Create the Firebase project
+
+1. Go to the [Firebase console](https://console.firebase.google.com), create a new project named e.g. "Marimar Inn".
+2. **Authentication** → Sign-in method → enable **Email/Password**.
+3. **Firestore Database** → create a database (production mode is fine — `firestore.rules` in this repo defines access).
+4. Deploy `firestore.rules` from this repo to your project (via the Firebase console's Rules editor, or the Firebase CLI: `firebase deploy --only firestore:rules`). When pasting into the console, select-all and replace the whole editor content, then confirm the last few lines match before publishing — partial pastes fail silently into a stale ruleset otherwise.
+5. **Project settings** → General → "Your apps" → add a **Web app** → copy the config values.
+
+### 2. Configure environment variables
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.local.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Paste the values from step 1.5 into `.env.local`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+NEXT_PUBLIC_FIREBASE_APP_ID=
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 3. Create the first Owner account
 
-## Learn More
+The app has no public sign-up — accounts are provisioned manually so only staff you create can sign in:
 
-To learn more about Next.js, take a look at the following resources:
+1. Firebase console → **Authentication** → Users → **Add user** → enter an email and password.
+2. Copy the generated **User UID**.
+3. Firebase console → **Firestore Database** → start a collection named `users` → document ID = the UID you copied → add fields:
+   - `role` (string) = `owner`
+   - `displayName` (string) = e.g. `Owner`
+   - `email` (string) = the same email used in step 1
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+This first Owner is the only account that needs manual console setup — once signed in, use **Manage Staff** in the app to create every other account (Owner or Cashier), no console required.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 4. Install and run
+
+```bash
+npm install
+npm run dev
+```
+
+App: http://localhost:3000 — redirects to `/login` when signed out, `/dashboard` once signed in.
+
+## Project structure
+
+```
+src/
+├── app/
+│   ├── login/                   # Public login page
+│   ├── (app)/                    # Authenticated shell — layout wraps children in ProtectedRoute
+│   │   ├── layout.tsx            # Header nav, role badge, sign-out — Owner-only links conditionally rendered
+│   │   ├── dashboard/             # Room grid — the daily-ops home screen for both roles
+│   │   ├── rooms/manage/          # Owner-only: room catalog CRUD + seed 30 rooms
+│   │   └── users/                 # Owner-only: create/list staff accounts
+│   └── page.tsx                  # Redirects to /login or /dashboard based on auth state
+├── context/
+│   └── auth-context.tsx          # AuthProvider / useAuth() — Firebase Auth + Firestore role lookup
+├── components/
+│   ├── auth/protected-route.tsx  # Redirect guard, optional allowedRoles
+│   ├── rooms/                    # Room grid/card, check-in/checkout/status dialogs
+│   ├── users/                    # Staff account creation dialog
+│   └── ui/                       # shadcn/ui components
+├── hooks/
+│   └── use-now-tick.ts           # Interval-based clock for live countdowns
+└── lib/
+    ├── firebase.ts               # Firebase client SDK init + secondary app for staff creation
+    ├── rooms.ts                  # Room CRUD, status updates, seeding
+    ├── bookings.ts                # Check-in/checkout/void
+    ├── users.ts                   # Staff account creation (Owner-only)
+    └── types.ts
+firestore.rules                   # Firestore security rules
+```
+
+## Roadmap
+
+| Phase | Scope | Status |
+|-------|--------|--------|
+| **1** | Auth, Owner/Cashier roles | **Done** |
+| **2** | Room dashboard, check-in/checkout core, Owner-only room & staff management | **Done** |
+| **3** | Food & beverage ordering, inventory | Next |
+| **4** | Extend-stay, real-time notifications | Planned |
+| **5** | Reports & analytics (daily/monthly/inventory, exports) | Planned |
+| **6** | UI polish — dark mode, brand styling, keyboard shortcuts | Planned |
 
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Import the repo in [Vercel](https://vercel.com/new), add the same `NEXT_PUBLIC_FIREBASE_*` environment variables in the project settings, and deploy.

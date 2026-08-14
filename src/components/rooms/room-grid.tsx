@@ -1,0 +1,194 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/context/auth-context";
+import { subscribeToRooms } from "@/lib/rooms";
+import { subscribeToActiveBookings } from "@/lib/bookings";
+import type { Booking, Room, RoomStatus, RoomType } from "@/lib/types";
+import { ROOM_TYPE_LABELS } from "@/lib/types";
+import { useNowTick } from "@/hooks/use-now-tick";
+import { RoomCard } from "@/components/rooms/room-card";
+import { CheckInDialog } from "@/components/rooms/check-in-dialog";
+import { RoomDetailDialog } from "@/components/rooms/room-detail-dialog";
+import { CheckoutDialog } from "@/components/rooms/checkout-dialog";
+import { RoomStatusDialog } from "@/components/rooms/room-status-dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SearchIcon } from "lucide-react";
+
+type StatusFilter = "all" | RoomStatus;
+type TypeFilter = "all" | RoomType;
+
+const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
+  all: "All statuses",
+  available: "Available",
+  occupied: "Occupied",
+  cleaning: "Cleaning",
+  maintenance: "Maintenance",
+};
+type DialogState =
+  | { kind: "check-in"; room: Room }
+  | { kind: "detail"; room: Room; booking: Booking }
+  | { kind: "checkout"; room: Room; booking: Booking }
+  | { kind: "status"; room: Room }
+  | null;
+
+export function RoomGrid() {
+  const { appUser } = useAuth();
+  const [rooms, setRooms] = useState<Room[] | null>(null);
+  const [bookingsByRoom, setBookingsByRoom] = useState<Map<string, Booking>>(new Map());
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [dialog, setDialog] = useState<DialogState>(null);
+  const now = useNowTick(30_000);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToRooms(setRooms);
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToActiveBookings(setBookingsByRoom);
+    return unsubscribe;
+  }, []);
+
+  const filteredRooms = useMemo(() => {
+    if (!rooms) return [];
+    return rooms.filter((room) => {
+      if (statusFilter !== "all" && room.status !== statusFilter) return false;
+      if (typeFilter !== "all" && room.type !== typeFilter) return false;
+      if (search && !room.roomNumber.includes(search.trim())) return false;
+      return true;
+    });
+  }, [rooms, statusFilter, typeFilter, search]);
+
+  function handleRoomClick(room: Room) {
+    if (room.status === "available") {
+      setDialog({ kind: "check-in", room });
+      return;
+    }
+    if (room.status === "occupied") {
+      const booking = bookingsByRoom.get(room.roomId);
+      if (!booking) return;
+      setDialog({ kind: "detail", room, booking });
+      return;
+    }
+    setDialog({ kind: "status", room });
+  }
+
+  if (rooms === null) {
+    return (
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+        {Array.from({ length: 10 }).map((_, i) => (
+          <Skeleton key={i} className="h-24 rounded-xl" />
+        ))}
+      </div>
+    );
+  }
+
+  if (rooms.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+        {appUser?.role === "owner"
+          ? "No rooms yet — head to Manage Rooms to seed the initial 30 rooms."
+          : "No rooms have been set up yet. Ask the Owner to seed the room list."}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-40">
+          <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Room #"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
+          <SelectTrigger className="w-40">
+            <SelectValue>{STATUS_FILTER_LABELS[statusFilter]}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="available">Available</SelectItem>
+            <SelectItem value="occupied">Occupied</SelectItem>
+            <SelectItem value="cleaning">Cleaning</SelectItem>
+            <SelectItem value="maintenance">Maintenance</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as TypeFilter)}>
+          <SelectTrigger className="w-40">
+            <SelectValue>
+              {typeFilter === "all" ? "All types" : ROOM_TYPE_LABELS[typeFilter]}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All types</SelectItem>
+            {Object.entries(ROOM_TYPE_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+        {filteredRooms.map((room) => (
+          <RoomCard
+            key={room.roomId}
+            room={room}
+            booking={bookingsByRoom.get(room.roomId)}
+            now={now}
+            onClick={() => handleRoomClick(room)}
+          />
+        ))}
+      </div>
+
+      {dialog?.kind === "check-in" && appUser && (
+        <CheckInDialog
+          key={dialog.room.roomId}
+          room={dialog.room}
+          cashierId={appUser.uid}
+          onClose={() => setDialog(null)}
+        />
+      )}
+
+      {dialog?.kind === "detail" && (
+        <RoomDetailDialog
+          room={dialog.room}
+          booking={dialog.booking}
+          onClose={() => setDialog(null)}
+          onRequestCheckout={() =>
+            setDialog({ kind: "checkout", room: dialog.room, booking: dialog.booking })
+          }
+        />
+      )}
+
+      {dialog?.kind === "checkout" && appUser && (
+        <CheckoutDialog
+          room={dialog.room}
+          booking={dialog.booking}
+          staffName={appUser.displayName ?? appUser.email ?? "Staff"}
+          onClose={() => setDialog(null)}
+        />
+      )}
+
+      {dialog?.kind === "status" && (
+        <RoomStatusDialog room={dialog.room} onClose={() => setDialog(null)} />
+      )}
+    </div>
+  );
+}

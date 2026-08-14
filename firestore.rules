@@ -1,0 +1,166 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function: Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function: Get user role
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    // Helper function: Check if user has role
+    function hasRole(role) {
+      return isAuthenticated() && getUserRole() == role;
+    }
+
+    // Helper function: Check if user is owner or admin
+    function isOwnerOrAdmin() {
+      return isAuthenticated() && (getUserRole() == 'owner' || getUserRole() == 'admin');
+    }
+
+    // Helper function: Check if user is staff (cashier/supervisor/manager)
+    function isStaff() {
+      return isAuthenticated() &&
+        (getUserRole() in ['owner', 'admin', 'manager', 'supervisor', 'cashier']);
+    }
+
+    // ============================================
+    // USERS COLLECTION
+    // ============================================
+    match /users/{userId} {
+      // Any signed-in user can read user docs (for role checks / staff directory)
+      allow read: if isAuthenticated();
+
+      // Only an EXISTING owner/admin can provision or edit a user's doc.
+      // Self-uid is intentionally NOT enough here: the public Firebase web
+      // config means anyone can self-register via the Auth SDK directly, and
+      // if self-uid alone granted write access they could set their own
+      // role to "owner". The very first Owner is created via the Firebase
+      // console instead, which bypasses these rules.
+      allow create, update: if isOwnerOrAdmin() &&
+        request.resource.data.keys().hasOnly(['role', 'displayName', 'email', 'createdAt']) &&
+        request.resource.data.role is string &&
+        request.resource.data.displayName is string &&
+        request.resource.data.email is string;
+
+      allow delete: if isOwnerOrAdmin();
+    }
+
+    // ============================================
+    // ROOMS COLLECTION
+    // ============================================
+    match /rooms/{roomId} {
+      // All authenticated users can read rooms
+      allow read: if isAuthenticated();
+
+      // Owner/admin/manager: full room management (rate, type, room number, floor)
+      allow create, delete: if isOwnerOrAdmin() || hasRole('manager');
+
+      // Any staff (cashier included) can flip a room's status as part of
+      // normal check-in/checkout/maintenance flows, but only owner/admin/
+      // manager can touch identity fields like roomNumber or ratePerHour.
+      allow update: if (isOwnerOrAdmin() || hasRole('manager')) ||
+        (isStaff() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastUpdated']));
+
+      // Validate room data
+      allow create: if request.resource.data.keys().hasAll([
+        'roomId', 'roomNumber', 'floor', 'type', 'ratePerHour', 'status', 'lastUpdated'
+      ]) &&
+      request.resource.data.roomId is string &&
+      request.resource.data.roomNumber is string &&
+      request.resource.data.status in ['available', 'occupied', 'cleaning', 'maintenance', 'reserved'];
+    }
+
+    // ============================================
+    // BOOKINGS COLLECTION
+    // ============================================
+    match /bookings/{bookingId} {
+      // All authenticated users can read bookings
+      allow read: if isAuthenticated();
+
+      // Staff can create bookings
+      allow create: if isStaff() &&
+        request.resource.data.keys().hasAll([
+          'bookingId', 'roomId', 'roomNumber', 'guestName', 'checkInTime',
+          'hoursBooked', 'totalAmount', 'paymentStatus', 'status', 'cashierId'
+        ]);
+
+      // Staff can update bookings
+      allow update: if isStaff() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'guestPhone', 'guestCount', 'hoursBooked', 'hoursUsed', 'hoursRemaining',
+          'totalRoomCharge', 'totalFbCharge', 'totalAmount', 'amountPaid',
+          'paymentStatus', 'status', 'checkOutTime', 'items', 'transactions',
+          'specialRequests', 'updatedAt'
+        ]);
+
+      // Only owner, admin can delete bookings
+      allow delete: if isOwnerOrAdmin();
+    }
+
+    // ============================================
+    // INVENTORY COLLECTION
+    // ============================================
+    match /inventory/{itemId} {
+      // All authenticated users can read inventory
+      allow read: if isAuthenticated();
+
+      // Only owner, admin, manager can create/update/delete inventory
+      allow create, update: if isOwnerOrAdmin() || hasRole('manager');
+      allow delete: if isOwnerOrAdmin();
+
+      // Validate inventory data
+      allow create: if request.resource.data.keys().hasAll([
+        'itemId', 'name', 'category', 'sellingPrice', 'quantity', 'minStockLevel'
+      ]) &&
+      request.resource.data.name is string &&
+      request.resource.data.category is string &&
+      request.resource.data.sellingPrice is number &&
+      request.resource.data.quantity is number;
+
+      // Validate updates - can't change itemId
+      allow update: if !(request.resource.data.diff(resource.data).affectedKeys().has(['itemId']));
+    }
+
+    // ============================================
+    // TRANSACTIONS COLLECTION (Audit Log)
+    // ============================================
+    match /transactions/{transactionId} {
+      // All authenticated users can read transactions
+      allow read: if isAuthenticated();
+
+      // Staff can create transactions
+      allow create: if isStaff() &&
+        request.resource.data.keys().hasAll([
+          'transactionId', 'type', 'bookingId', 'roomNumber', 'amount', 'cashierId', 'timestamp'
+        ]);
+
+      // Only owner and admin can update/delete transactions
+      allow update: if isOwnerOrAdmin();
+      allow delete: if isOwnerOrAdmin();
+    }
+
+    // ============================================
+    // SETTINGS COLLECTION (System Settings)
+    // ============================================
+    match /settings/{settingId} {
+      // All authenticated users can read settings
+      allow read: if isAuthenticated();
+
+      // Only owner, admin can modify settings
+      allow write: if isOwnerOrAdmin();
+    }
+
+    // ============================================
+    // DEFAULT: Deny all other access
+    // ============================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
