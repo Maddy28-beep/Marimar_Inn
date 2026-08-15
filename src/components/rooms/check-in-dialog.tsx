@@ -105,9 +105,12 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
   const total = roomTotal + fbTotal;
   const paid = Number(amountPaid) || 0;
   const change = paid > total ? paid - total : 0;
+  // Guests aren't allowed into the room without paying in full at the desk
+  // — check-in itself is the payment moment, so it's blocked until covered.
+  const canCheckIn = Math.round(paid * 100) >= Math.round(total * 100);
 
   async function handleSubmit() {
-    if (!room || !selectedPackage) return;
+    if (!room || !selectedPackage || !canCheckIn) return;
 
     const finalGuestName = guestName.trim() || "Guest";
     const amountCollected = Math.min(paid, total);
@@ -512,6 +515,12 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
               </div>
             </div>
           </div>
+          {!canCheckIn && (
+            <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+              Collect ₱{(total - paid).toFixed(2)} before checking in — guests aren&apos;t let
+              into the room until payment is settled.
+            </p>
+          )}
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="specialRequests">Special requests</Label>
@@ -549,7 +558,11 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
             <Button variant="outline" onClick={onClose} disabled={submitting}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit} disabled={submitting || !selectedPackage}>
+            <Button
+              onClick={handleSubmit}
+              disabled={submitting || !selectedPackage || !canCheckIn}
+              title={!canCheckIn ? `Collect ₱${(total - paid).toFixed(2)} before checking in` : undefined}
+            >
               {submitting && <Loader2Icon className="size-4 animate-spin" />}
               Check in
             </Button>

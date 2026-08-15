@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { ROOM_TYPE_LABELS, type Booking, type Room, type RoomStatus } from "@/lib/types";
 import { hoursElapsed } from "@/lib/bookings";
+import { formatHours } from "@/lib/time";
 import {
   BedDoubleIcon,
   DoorClosedIcon,
@@ -46,15 +47,6 @@ const STATUS_STYLES: Record<
   },
 };
 
-function formatHours(hours: number): string {
-  const sign = hours < 0 ? "-" : "";
-  // Round to whole minutes first, then split — rounding h and m separately
-  // can independently round m up to 60 (e.g. 2.999h -> "2h 60m").
-  const totalMinutes = Math.round(Math.abs(hours) * 60);
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  return `${sign}${h}h ${m}m`;
-}
 
 interface RoomCardProps {
   room: Room;
@@ -121,7 +113,11 @@ export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
             {booking.openEnded
               ? `Open · ${formatHours(elapsed)}`
               : isOverdue
-                ? "Overdue"
+                ? // Deliberately just "Overdue" here, no duration — the exact
+                  // overdue time is Owner-only (see RoomGrid's alert panel and
+                  // RoomDetailDialog), so cashiers can't game how late they
+                  // report a checkout.
+                  "Overdue"
                 : `${formatHours(remaining!)} left`}
           </div>
           {balance > 0 && (

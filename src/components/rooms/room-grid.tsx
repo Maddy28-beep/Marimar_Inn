@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/auth-context";
 import { subscribeToRooms } from "@/lib/rooms";
-import { subscribeToActiveBookings } from "@/lib/bookings";
+import { subscribeToActiveBookings, hoursElapsed } from "@/lib/bookings";
+import { formatHours } from "@/lib/time";
 import type { Booking, Room, RoomStatus, RoomType } from "@/lib/types";
 import { ROOM_TYPE_LABELS } from "@/lib/types";
 import { useNowTick } from "@/hooks/use-now-tick";
@@ -21,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SearchIcon } from "lucide-react";
+import { AlertTriangleIcon, SearchIcon } from "lucide-react";
 
 type StatusFilter = "all" | RoomStatus;
 type TypeFilter = "all" | RoomType;
@@ -62,6 +63,26 @@ export function RoomGrid() {
     const unsubscribe = subscribeToActiveBookings(setBookingsByRoom);
     return unsubscribe;
   }, []);
+
+  // Owner-facing oversight: cashiers sometimes let a guest stay past their
+  // booked time (or extend informally) without logging it in the system, so
+  // a room card alone is easy to miss. This surfaces every currently
+  // overdue room in one place, worst-first, so the Owner can call the
+  // cashier or check CCTV instead of relying on staff to flag it themselves.
+  const overdueRooms = useMemo(() => {
+    if (!rooms) return [];
+    const list: { room: Room; booking: Booking; overdueBy: number }[] = [];
+    for (const room of rooms) {
+      const booking = bookingsByRoom.get(room.roomId);
+      if (!booking || booking.openEnded) continue;
+      const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, now);
+      if (remaining <= 0) {
+        list.push({ room, booking, overdueBy: -remaining });
+      }
+    }
+    list.sort((a, b) => b.overdueBy - a.overdueBy);
+    return list;
+  }, [rooms, bookingsByRoom, now]);
 
   const filteredRooms = useMemo(() => {
     if (!rooms) return [];
@@ -108,6 +129,34 @@ export function RoomGrid() {
 
   return (
     <div className="flex flex-col gap-4">
+      {appUser?.role === "owner" && overdueRooms.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-rose-700 dark:text-rose-400">
+            <AlertTriangleIcon className="size-4" />
+            {overdueRooms.length} room{overdueRooms.length > 1 ? "s" : ""} overdue — not yet
+            checked out
+          </div>
+          <div className="flex flex-col gap-1">
+            {overdueRooms.map(({ room, booking, overdueBy }) => (
+              <button
+                key={room.roomId}
+                type="button"
+                onClick={() => handleRoomClick(room)}
+                className="flex items-center justify-between rounded-lg bg-background/70 px-3 py-2 text-left text-sm hover:bg-background"
+              >
+                <span>
+                  <span className="font-medium">Room {room.roomNumber}</span>
+                  <span className="text-muted-foreground"> — {booking.guestName}</span>
+                </span>
+                <span className="font-semibold text-rose-700 dark:text-rose-400">
+                  Overdue {formatHours(overdueBy)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-40">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />

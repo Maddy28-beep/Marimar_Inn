@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { voidBooking, hoursElapsed } from "@/lib/bookings";
 import { removeOrderItem } from "@/lib/orders";
 import { PAYMENT_METHOD_LABELS, type Booking, type Room } from "@/lib/types";
+import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useAuth } from "@/context/auth-context";
 import { OrderPickerDialog } from "@/components/inventory/order-picker-dialog";
@@ -25,16 +26,6 @@ interface RoomDetailDialogProps {
   booking: Booking;
   onClose: () => void;
   onRequestCheckout: () => void;
-}
-
-function formatHours(hours: number): string {
-  const sign = hours < 0 ? "-" : "";
-  // Round to whole minutes first, then split — rounding h and m separately
-  // can independently round m up to 60 (e.g. 2.999h -> "2h 60m").
-  const totalMinutes = Math.round(Math.abs(hours) * 60);
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  return `${sign}${h}h ${m}m`;
 }
 
 export function RoomDetailDialog({
@@ -55,7 +46,8 @@ export function RoomDetailDialog({
   const isOverdue = !booking.openEnded && remaining <= 0;
   const isRunningLow = !booking.openEnded && !isOverdue && remaining <= 0.5;
   const balance = Math.max(booking.totalAmount - booking.amountPaid, 0);
-  const canRemoveOrderItems = appUser?.role === "owner";
+  const isOwner = appUser?.role === "owner";
+  const canRemoveOrderItems = isOwner;
 
   async function handleVoid() {
     if (!window.confirm(`Cancel this booking for Room ${room.roomNumber}? This frees up the room without checking out.`)) {
@@ -111,7 +103,11 @@ export function RoomDetailDialog({
               {booking.openEnded
                 ? `Open time — ${formatHours(elapsed)} so far`
                 : isOverdue
-                  ? `Overdue by ${formatHours(-remaining)}`
+                  ? // Owner-only duration, same reasoning as RoomCard — a
+                    // cashier just sees "Overdue," not how overdue.
+                    isOwner
+                    ? `Overdue by ${formatHours(-remaining)}`
+                    : "Overdue"
                   : `${formatHours(remaining)} remaining`}
               {isRunningLow && !isOverdue && " — less than 30 minutes left"}
             </div>
