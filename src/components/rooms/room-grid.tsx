@@ -27,6 +27,10 @@ import { AlertTriangleIcon, SearchIcon } from "lucide-react";
 type StatusFilter = "all" | RoomStatus;
 type TypeFilter = "all" | RoomType;
 
+// Grace period before the Owner's overdue panel flags a room — a guest
+// wrapping up just past their time isn't worth surfacing yet.
+const OVERDUE_ALERT_GRACE_HOURS = 10 / 60;
+
 const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
   all: "All statuses",
   available: "Available",
@@ -69,6 +73,8 @@ export function RoomGrid() {
   // a room card alone is easy to miss. This surfaces every currently
   // overdue room in one place, worst-first, so the Owner can call the
   // cashier or check CCTV instead of relying on staff to flag it themselves.
+  // A short grace period keeps this from firing the instant time is up —
+  // the guest may just be packing up.
   const overdueRooms = useMemo(() => {
     if (!rooms) return [];
     const list: { room: Room; booking: Booking; overdueBy: number }[] = [];
@@ -76,7 +82,7 @@ export function RoomGrid() {
       const booking = bookingsByRoom.get(room.roomId);
       if (!booking || booking.openEnded) continue;
       const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, now);
-      if (remaining <= 0) {
+      if (remaining <= -OVERDUE_ALERT_GRACE_HOURS) {
         list.push({ room, booking, overdueBy: -remaining });
       }
     }
