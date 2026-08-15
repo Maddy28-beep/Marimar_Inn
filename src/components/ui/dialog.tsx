@@ -7,8 +7,21 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+function Dialog({
+  disablePointerDismissal = true,
+  ...props
+}: DialogPrimitive.Root.Props) {
+  // Front-desk tablets get bumped/tapped around the popup a lot — an
+  // accidental backdrop tap shouldn't discard whatever the cashier was
+  // mid-way through entering. Only the explicit close button (or Escape)
+  // dismisses the dialog now.
+  return (
+    <DialogPrimitive.Root
+      data-slot="dialog"
+      disablePointerDismissal={disablePointerDismissal}
+      {...props}
+    />
+  )
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {

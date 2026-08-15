@@ -19,11 +19,17 @@ import {
   hoursElapsed,
   OPEN_TIME_RATE_PER_HOUR,
 } from "@/lib/bookings";
-import type { Booking, Room } from "@/lib/types";
+import { PAYMENT_METHOD_LABELS, type Booking, type Room } from "@/lib/types";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
-import { openCashDrawer, shouldOpenDrawer } from "@/lib/receipt-printer";
-import { Loader2Icon } from "lucide-react";
+import { useAuth } from "@/context/auth-context";
+import {
+  openCashDrawer,
+  printExtensionReceipt,
+  referenceNumberFor,
+  shouldOpenDrawer,
+} from "@/lib/receipt-printer";
+import { Loader2Icon, PrinterIcon } from "lucide-react";
 
 interface ExtendStayDialogProps {
   room: Room;
@@ -36,12 +42,22 @@ type ExtendMode = "hour" | "open";
 export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogProps) {
   const now = useNowTick(1000);
   const printer = useReceiptPrinter();
+  const { appUser } = useAuth();
+  const staffName = appUser?.displayName ?? appUser?.email ?? "Staff";
   const [mode, setMode] = useState<ExtendMode>("hour");
   const [hourPrice, setHourPrice] = useState(String(OPEN_TIME_RATE_PER_HOUR));
   const [amountPaid, setAmountPaid] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [phase, setPhase] = useState<"form" | "receipt">("form");
+  const [receipt, setReceipt] = useState<{
+    amountCharged: number;
+    amountPaid: number;
+    change: number;
+  } | null>(null);
 
   const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, now);
+  const packageHours = booking.originalPackageHours ?? booking.hoursBooked;
+  const packagePrice = booking.originalPackagePrice ?? booking.totalRoomCharge;
   const additionalCost = Number(hourPrice) || 0;
   const paid = Number(amountPaid) || 0;
   const change = paid > additionalCost ? paid - additionalCost : 0;
@@ -56,19 +72,48 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
     try {
       await extendStay(booking, 1, additionalCost, amountCollected);
       toast.success(`Room ${room.roomNumber} extended by 1h.`);
-      if (printer.connected && shouldOpenDrawer(booking.paymentMethod, amountCollected)) {
+      if (printer.connected) {
+        if (shouldOpenDrawer(booking.paymentMethod, amountCollected)) {
+          try {
+            openCashDrawer();
+          } catch {
+            toast.error("Extended, but couldn't open the cash drawer.");
+          }
+        }
         try {
-          openCashDrawer();
+          printExtensionReceipt(booking, room, {
+            staffName,
+            hours: 1,
+            amountCharged: additionalCost,
+            amountPaid: amountCollected,
+            change,
+          });
         } catch {
-          toast.error("Extended, but couldn't open the cash drawer.");
+          toast.error("Extended, but the thermal printer didn't respond.");
         }
       }
-      onClose();
+      setReceipt({ amountCharged: additionalCost, amountPaid: amountCollected, change });
+      setPhase("receipt");
     } catch (error) {
       console.error(error);
       toast.error("Couldn't extend the stay — please try again.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function printThermalCopy() {
+    if (!printer.connected || !receipt) return;
+    try {
+      printExtensionReceipt(booking, room, {
+        staffName,
+        hours: 1,
+        amountCharged: receipt.amountCharged,
+        amountPaid: receipt.amountPaid,
+        change: receipt.change,
+      });
+    } catch {
+      toast.error("Couldn't print to the thermal printer.");
     }
   }
 
@@ -101,6 +146,76 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
           <DialogFooter>
             <Button variant="outline" onClick={onClose}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  if (phase === "receipt" && receipt) {
+    return (
+      <Dialog open onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Extended</DialogTitle>
+            <DialogDescription>
+              Room {room.roomNumber} — hand this receipt to the guest.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="print-area flex flex-col gap-2 rounded-lg border p-4 text-sm">
+            <div className="text-center">
+              <div className="font-heading text-base font-semibold">Marimar Inn</div>
+              <div className="text-xs text-muted-foreground">Extension Receipt</div>
+              <div className="text-xs text-muted-foreground">
+                Ref: {referenceNumberFor(booking.bookingId)}
+              </div>
+            </div>
+            <div className="my-1 border-t" />
+            <div className="flex justify-between">
+              <span>Room</span>
+              <span>{room.roomNumber}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Guest</span>
+              <span>{booking.guestName}</span>
+            </div>
+            <div className="my-1 border-t" />
+            <div className="flex justify-between font-medium">
+              <span>+1h extension</span>
+              <span>₱{receipt.amountCharged.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-muted-foreground">
+              <span>Paid via {PAYMENT_METHOD_LABELS[booking.paymentMethod]}</span>
+              <span>₱{receipt.amountPaid.toFixed(2)}</span>
+            </div>
+            {receipt.change > 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <span>Change</span>
+                <span>₱{receipt.change.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="my-1 border-t" />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Staff</span>
+              <span>{staffName}</span>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              Done
+            </Button>
+            {printer.connected && (
+              <Button variant="outline" onClick={printThermalCopy}>
+                <PrinterIcon className="size-4" />
+                Reprint (thermal)
+              </Button>
+            )}
+            <Button onClick={() => window.print()}>
+              <PrinterIcon className="size-4" />
+              Print receipt
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -178,9 +293,10 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
             </>
           ) : (
             <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
-              This removes the fixed end time — no charge is collected now.
-              You&apos;ll enter the final room charge when this guest checks
-              out.
+              The {packageHours}h package (₱{packagePrice.toFixed(2)}) still applies in full —
+              this only removes the fixed end time so the stay can keep going past it. No
+              charge is collected now; at checkout, any time beyond the {packageHours}h bills
+              on top at ₱{OPEN_TIME_RATE_PER_HOUR}/hr in 30-min blocks.
             </p>
           )}
         </div>

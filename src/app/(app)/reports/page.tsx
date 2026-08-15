@@ -7,6 +7,7 @@ import { subscribeToRooms } from "@/lib/rooms";
 import { subscribeToInventory } from "@/lib/inventory";
 import {
   computeDailyReport,
+  computeDailySalesReport,
   computeMonthlyReport,
   endOfDay,
   endOfMonth,
@@ -14,10 +15,12 @@ import {
   startOfDay,
   startOfMonth,
   type DailyReport,
+  type DailySalesReport,
   type MonthlyReport,
 } from "@/lib/reports";
+import { DailySalesTable } from "@/components/reports/daily-sales-table";
 import { exportToExcel, formatReportDate, formatReportMonth } from "@/lib/export";
-import { ROOM_TYPE_LABELS, type InventoryItem, type Room } from "@/lib/types";
+import { PAYMENT_METHOD_LABELS, ROOM_TYPE_LABELS, type InventoryItem, type Room } from "@/lib/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card,
@@ -63,6 +66,9 @@ function StatCard({ label, value }: { label: string; value: string }) {
 function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   const [dateValue, setDateValue] = useState(todayInputValue());
   const [report, setReport] = useState<DailyReport | null>(null);
+  const [salesReport, setSalesReport] = useState<DailySalesReport | null>(null);
+  const [frontDesk, setFrontDesk] = useState("");
+  const [housekeeping, setHousekeeping] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -75,7 +81,10 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
           fetchBookingsInRange("checkInTime", startOfDay(date), endOfDay(date)),
           fetchBookingsInRange("checkOutTime", startOfDay(date), endOfDay(date)),
         ]);
-        if (!cancelled) setReport(computeDailyReport(checkedIn, checkedOut.length));
+        if (!cancelled) {
+          setReport(computeDailyReport(checkedIn, checkedOut.length));
+          setSalesReport(computeDailySalesReport(checkedIn));
+        }
       } catch {
         if (!cancelled) toast.error("Couldn't load the daily report.");
       } finally {
@@ -95,7 +104,70 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
     if (!report) return;
     await exportToExcel(`marimar-inn-daily-${dateValue}`, [
       {
-        name: "Daily Report",
+        name: "Daily Sales Report",
+        title: "Daily Sales Report",
+        subtitle: formatReportDate(dateValue),
+        tables: [
+          {
+            columns: [
+              { header: "Room", key: "room", width: 8 },
+              { header: "Ref #", key: "ref", width: 12 },
+              { header: "Hrs", key: "hrs", width: 6, format: "integer" },
+              { header: "Check-in", key: "checkIn", width: 14 },
+              { header: "Sched. out", key: "schedOut", width: 14 },
+              { header: "Amount", key: "amount", width: 12, format: "currency" },
+              { header: "Ext hrs", key: "extHrs", width: 9, format: "integer" },
+              { header: "Ext amt", key: "extAmt", width: 12, format: "currency" },
+              { header: "Actual out", key: "actualOut", width: 14 },
+              { header: "Room total", key: "roomTotal", width: 14, format: "currency" },
+              { header: "Store total", key: "storeTotal", width: 14, format: "currency" },
+              { header: "Paid", key: "paid", width: 12, format: "currency" },
+              { header: "Payment", key: "payment", width: 22 },
+            ],
+            rows: [
+              ...(salesReport?.rows ?? []).map((row) => ({
+                room: row.roomNumber,
+                ref: row.refNumber,
+                hrs: row.packageHours,
+                checkIn: row.checkInTime.toLocaleString("en-PH"),
+                schedOut: row.scheduledCheckOutTime.toLocaleString("en-PH"),
+                amount: row.packageAmount,
+                extHrs: row.extensionHours || "",
+                extAmt: row.extensionAmount || "",
+                actualOut: row.actualCheckOutTime ? row.actualCheckOutTime.toLocaleString("en-PH") : "",
+                roomTotal: row.totalRoomAmount,
+                storeTotal: row.totalStoreAmount,
+                paid: row.totalPaid,
+                payment: row.gcashReference
+                  ? `${PAYMENT_METHOD_LABELS[row.paymentMethod]} (${row.gcashReference})`
+                  : PAYMENT_METHOD_LABELS[row.paymentMethod],
+              })),
+              ...(salesReport && salesReport.rows.length > 0
+                ? [
+                    {
+                      room: "Totals",
+                      ref: "",
+                      hrs: "",
+                      checkIn: "",
+                      schedOut: "",
+                      amount: salesReport.totals.packageAmount,
+                      extHrs: "",
+                      extAmt: salesReport.totals.extensionAmount,
+                      actualOut: "",
+                      roomTotal: salesReport.totals.totalRoomAmount,
+                      storeTotal: salesReport.totals.totalStoreAmount,
+                      paid: salesReport.totals.totalPaid,
+                      payment: "",
+                    },
+                  ]
+                : []),
+            ],
+            emphasizeLastRow: (salesReport?.rows.length ?? 0) > 0,
+          },
+        ],
+      },
+      {
+        name: "Summary",
         title: "Daily Report",
         subtitle: formatReportDate(dateValue),
         tables: [
@@ -135,19 +207,39 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <Input
-          type="date"
-          value={dateValue}
-          onChange={(e) => setDateValue(e.target.value)}
-          className="w-44"
-        />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            type="date"
+            value={dateValue}
+            onChange={(e) => setDateValue(e.target.value)}
+            className="w-44"
+          />
+          <Input
+            placeholder="Front desk"
+            value={frontDesk}
+            onChange={(e) => setFrontDesk(e.target.value)}
+            className="w-36"
+          />
+          <Input
+            placeholder="Housekeeping"
+            value={housekeeping}
+            onChange={(e) => setHousekeeping(e.target.value)}
+            className="w-36"
+          />
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleExport} disabled={!report}>
             <DownloadIcon className="size-3.5" />
             Export Excel
           </Button>
-          <Button variant="outline" size="sm" onClick={() => window.print()} disabled={!report}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.print()}
+            disabled={!report}
+            title="Choose Landscape in the print dialog for the best fit"
+          >
             <PrinterIcon className="size-3.5" />
             Print / PDF
           </Button>
@@ -159,9 +251,16 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
       ) : (
         <div className="print-area flex flex-col gap-4">
           <div className="hidden text-center print:block">
-            <div className="font-heading text-lg font-semibold">Marimar Inn</div>
-            <div className="text-sm text-muted-foreground">Daily Report — {formatReportDate(dateValue)}</div>
+            <div className="font-heading text-lg font-semibold">Marimar Inn - Davao</div>
+            <div className="text-sm">Daily Sales Report</div>
+            <div className="mt-1 flex justify-center gap-6 text-xs text-muted-foreground">
+              <span>Date: {formatReportDate(dateValue)}</span>
+              {frontDesk && <span>Front desk: {frontDesk}</span>}
+              {housekeeping && <span>Housekeeping: {housekeeping}</span>}
+            </div>
           </div>
+
+          {salesReport && <DailySalesTable report={salesReport} />}
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
             <StatCard label="Check-ins" value={String(report.checkIns)} />

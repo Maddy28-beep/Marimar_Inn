@@ -134,6 +134,18 @@ service cloud.firestore {
     }
 
     // ============================================
+    // INVENTORY CATEGORIES COLLECTION
+    // ============================================
+    match /inventoryCategories/{categoryId} {
+      // All authenticated users can read the category list (needed to
+      // populate the category picker when adding/editing an item)
+      allow read: if isAuthenticated();
+
+      // Owner/admin/manager: create and delete categories
+      allow create, delete: if isOwnerOrAdmin() || hasRole('manager');
+    }
+
+    // ============================================
     // TRANSACTIONS COLLECTION (Audit Log)
     // ============================================
     match /transactions/{transactionId} {

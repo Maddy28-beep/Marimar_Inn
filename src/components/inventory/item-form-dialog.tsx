@@ -12,23 +12,55 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createItem, updateItem, type NewItemInput } from "@/lib/inventory";
-import type { InventoryItem } from "@/lib/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { createCategory, createItem, updateItem, type NewItemInput } from "@/lib/inventory";
+import type { InventoryCategory, InventoryItem } from "@/lib/types";
 import { Loader2Icon } from "lucide-react";
+
+const NEW_CATEGORY_VALUE = "__new__";
 
 interface ItemFormDialogProps {
   mode: "create" | { item: InventoryItem };
+  categories: InventoryCategory[];
   onClose: () => void;
 }
 
-export function ItemFormDialog({ mode, onClose }: ItemFormDialogProps) {
+export function ItemFormDialog({ mode, categories, onClose }: ItemFormDialogProps) {
   const editingItem = mode === "create" ? null : mode.item;
   const [name, setName] = useState(editingItem?.name ?? "");
   const [category, setCategory] = useState(editingItem?.category ?? "");
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
   const [sellingPrice, setSellingPrice] = useState(String(editingItem?.sellingPrice ?? ""));
   const [quantity, setQuantity] = useState(String(editingItem?.quantity ?? "0"));
   const [minStockLevel, setMinStockLevel] = useState(String(editingItem?.minStockLevel ?? "5"));
   const [submitting, setSubmitting] = useState(false);
+
+  // The item being edited might carry a category that predates the
+  // category list (typed free-hand before this picker existed) — keep it
+  // selectable even if it's not a registered category.
+  const categoryNames = Array.from(
+    new Set([...categories.map((c) => c.name), ...(editingItem?.category ? [editingItem.category] : [])])
+  ).sort();
+
+  async function handleAddCategory() {
+    const trimmed = newCategoryName.trim();
+    if (!trimmed) return;
+    try {
+      const created = await createCategory(trimmed);
+      setCategory(created);
+      setAddingCategory(false);
+      setNewCategoryName("");
+    } catch {
+      toast.error("Couldn't add that category — please try again.");
+    }
+  }
 
   async function handleSubmit() {
     if (!name.trim() || !category.trim()) {
@@ -74,13 +106,56 @@ export function ItemFormDialog({ mode, onClose }: ItemFormDialogProps) {
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="category">Category</Label>
-            <Input
-              id="category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              disabled={submitting}
-              placeholder="e.g. Drinks, Snacks, Meals"
-            />
+            {addingCategory ? (
+              <div className="flex gap-2">
+                <Input
+                  id="category"
+                  autoFocus
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="New category name"
+                  disabled={submitting}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddCategory();
+                    }
+                  }}
+                />
+                <Button type="button" variant="outline" onClick={handleAddCategory} disabled={submitting}>
+                  Add
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setAddingCategory(false);
+                    setNewCategoryName("");
+                  }}
+                  disabled={submitting}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Select
+                value={category}
+                onValueChange={(v) => (v === NEW_CATEGORY_VALUE ? setAddingCategory(true) : setCategory(v ?? ""))}
+                disabled={submitting}
+              >
+                <SelectTrigger id="category" className="w-full">
+                  <SelectValue placeholder="Select a category">{category || undefined}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {categoryNames.map((name) => (
+                    <SelectItem key={name} value={name}>
+                      {name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={NEW_CATEGORY_VALUE}>+ Add new category…</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">

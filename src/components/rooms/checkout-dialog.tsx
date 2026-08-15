@@ -37,18 +37,26 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
   const printer = useReceiptPrinter();
   const [phase, setPhase] = useState<"confirm" | "receipt">("confirm");
   const [finalPayment, setFinalPayment] = useState("");
-  // Auto-calculated once at open time from the ₱100/hr, 30-min-block rate —
-  // the cashier can still override it for edge cases.
-  const [openTimeCharge, setOpenTimeCharge] = useState(() =>
-    booking.openEnded
-      ? String(computeOpenTimeCharge(hoursElapsed(booking.checkInTime, now)))
-      : String(booking.totalRoomCharge)
-  );
+  // The original package (e.g. 3h/₱200) is a floor, not something open time
+  // replaces — converting to open time only changes what happens *after*
+  // that package's hours run out. Checking out before then still owes the
+  // full package price; only the overage bills at ₱100/hr in 30-min blocks.
+  // Auto-calculated once at open time — the cashier can still override it
+  // for edge cases.
+  const [openTimeCharge, setOpenTimeCharge] = useState(() => {
+    if (!booking.openEnded) return String(booking.totalRoomCharge);
+    const packageHours = booking.originalPackageHours ?? booking.hoursBooked;
+    const packagePrice = booking.originalPackagePrice ?? booking.totalRoomCharge;
+    const extraHours = Math.max(0, hoursElapsed(booking.checkInTime, now) - packageHours);
+    return String(packagePrice + computeOpenTimeCharge(extraHours));
+  });
   const [submitting, setSubmitting] = useState(false);
   const [checkOutTime, setCheckOutTime] = useState<Date | null>(null);
   const [settledBooking, setSettledBooking] = useState<Booking | null>(null);
 
   const hoursUsed = hoursElapsed(booking.checkInTime, now);
+  const packageHours = booking.originalPackageHours ?? booking.hoursBooked;
+  const packagePrice = booking.originalPackagePrice ?? booking.totalRoomCharge;
 
   // For an open-time stay, the room charge is whatever the cashier types in
   // here (no fixed rate yet) — everything downstream uses this effective
@@ -134,8 +142,9 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
               {booking.openEnded && (
                 <div className="flex flex-col gap-1.5 rounded-lg bg-sky-500/10 p-3">
                   <Label htmlFor="openTimeCharge" className="text-sky-700 dark:text-sky-400">
-                    Open time — {hoursUsed.toFixed(1)}h stayed. Final room charge
-                    (₱100/hr, 30-min blocks):
+                    Open time — {hoursUsed.toFixed(1)}h stayed. {packageHours}h package (₱
+                    {packagePrice.toFixed(2)}) still applies; extra time bills at ₱100/hr in
+                    30-min blocks. Final room charge:
                   </Label>
                   <Input
                     id="openTimeCharge"

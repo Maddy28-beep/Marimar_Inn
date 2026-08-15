@@ -27,7 +27,12 @@ import { updateRoomStatus } from "@/lib/rooms";
 import { subscribeToInventory } from "@/lib/inventory";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { useAuth } from "@/context/auth-context";
-import { openCashDrawer, printThermalReceipt, shouldOpenDrawer } from "@/lib/receipt-printer";
+import {
+  openCashDrawer,
+  printThermalReceipt,
+  referenceNumberFor,
+  shouldOpenDrawer,
+} from "@/lib/receipt-printer";
 import {
   PAYMENT_METHOD_LABELS,
   ROOM_RATE_PACKAGES,
@@ -37,7 +42,7 @@ import {
   type PaymentMethod,
   type Room,
 } from "@/lib/types";
-import { Loader2Icon, MinusIcon, PlusIcon } from "lucide-react";
+import { Loader2Icon, MinusIcon, PlusIcon, PrinterIcon } from "lucide-react";
 
 interface CheckInDialogProps {
   room: Room | null;
@@ -60,6 +65,12 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
   const [submitting, setSubmitting] = useState(false);
   const [inventory, setInventory] = useState<InventoryItem[] | null>(null);
   const [cart, setCart] = useState<Record<string, number>>({});
+  const [phase, setPhase] = useState<"form" | "receipt">("form");
+  const [receipt, setReceipt] = useState<{
+    booking: Booking;
+    finalAmountPaid: number;
+    change: number;
+  } | null>(null);
 
   useEffect(() => subscribeToInventory(setInventory), []);
 
@@ -117,6 +128,34 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
       });
       toast.success(`Room ${room.roomNumber} checked in.`);
 
+      const receiptBooking: Booking = {
+        bookingId: newBookingId,
+        roomId: room.roomId,
+        roomNumber: room.roomNumber,
+        guestName: finalGuestName,
+        checkInTime: Timestamp.now(),
+        hoursBooked: selectedPackage.hours,
+        originalPackageHours: selectedPackage.hours,
+        originalPackagePrice: selectedPackage.price,
+        totalRoomCharge: roomTotal,
+        totalFbCharge: fbTotal,
+        totalAmount: total,
+        amountPaid: amountCollected,
+        paymentMethod,
+        gcashReference: paymentMethod === "gcash" ? gcashReference.trim() || undefined : undefined,
+        paymentStatus: amountCollected >= total ? "paid" : amountCollected > 0 ? "partial" : "unpaid",
+        status: "active",
+        items: cartLines.map((line) => ({
+          itemId: line.item.itemId,
+          name: line.item.name,
+          unitPrice: line.item.sellingPrice,
+          quantity: line.qty,
+          subtotal: line.qty * line.item.sellingPrice,
+        })),
+        cashierId,
+        updatedAt: Timestamp.now(),
+      };
+
       if (printer.connected) {
         if (shouldOpenDrawer(paymentMethod, amountCollected)) {
           try {
@@ -126,32 +165,6 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
           }
         }
         try {
-          const receiptBooking: Booking = {
-            bookingId: newBookingId,
-            roomId: room.roomId,
-            roomNumber: room.roomNumber,
-            guestName: finalGuestName,
-            checkInTime: Timestamp.now(),
-            hoursBooked: selectedPackage.hours,
-            totalRoomCharge: roomTotal,
-            totalFbCharge: fbTotal,
-            totalAmount: total,
-            amountPaid: amountCollected,
-            paymentMethod,
-            gcashReference:
-              paymentMethod === "gcash" ? gcashReference.trim() || undefined : undefined,
-            paymentStatus: amountCollected >= total ? "paid" : amountCollected > 0 ? "partial" : "unpaid",
-            status: "active",
-            items: cartLines.map((line) => ({
-              itemId: line.item.itemId,
-              name: line.item.name,
-              unitPrice: line.item.sellingPrice,
-              quantity: line.qty,
-              subtotal: line.qty * line.item.sellingPrice,
-            })),
-            cashierId,
-            updatedAt: Timestamp.now(),
-          };
           printThermalReceipt(receiptBooking, room, {
             staffName,
             finalAmountPaid: amountCollected,
@@ -162,7 +175,8 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
         }
       }
 
-      onClose();
+      setReceipt({ booking: receiptBooking, finalAmountPaid: amountCollected, change });
+      setPhase("receipt");
     } catch (error) {
       console.error(error);
       toast.error(
@@ -172,6 +186,19 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
       );
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function printThermalCopy() {
+    if (!printer.connected || !receipt || !room) return;
+    try {
+      printThermalReceipt(receipt.booking, room, {
+        staffName,
+        finalAmountPaid: receipt.finalAmountPaid,
+        change: receipt.change,
+      });
+    } catch {
+      toast.error("Couldn't print to the thermal printer.");
     }
   }
 
@@ -206,6 +233,98 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-xl md:max-w-2xl">
+        {phase === "receipt" && receipt ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Checked in</DialogTitle>
+              <DialogDescription>
+                Room {room.roomNumber} is ready — hand this receipt to the guest.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="print-area flex flex-col gap-2 rounded-lg border p-4 text-sm">
+              <div className="text-center">
+                <div className="font-heading text-base font-semibold">Marimar Inn</div>
+                <div className="text-xs text-muted-foreground">Official Receipt</div>
+                <div className="text-xs text-muted-foreground">
+                  Ref: {referenceNumberFor(receipt.booking.bookingId)}
+                </div>
+              </div>
+              <div className="my-1 border-t" />
+              <div className="flex justify-between">
+                <span>Room</span>
+                <span>{room.roomNumber}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Guest</span>
+                <span>{receipt.booking.guestName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Check-in</span>
+                <span>{receipt.booking.checkInTime.toDate().toLocaleString()}</span>
+              </div>
+              <div className="my-1 border-t" />
+              <div className="flex justify-between">
+                <span>Room ({receipt.booking.hoursBooked}h)</span>
+                <span>₱{receipt.booking.totalRoomCharge.toFixed(2)}</span>
+              </div>
+              {receipt.booking.items.length > 0 && (
+                <>
+                  {receipt.booking.items.map((line) => (
+                    <div key={line.itemId} className="flex justify-between text-muted-foreground">
+                      <span>
+                        {line.quantity}× {line.name}
+                      </span>
+                      <span>₱{line.subtotal.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </>
+              )}
+              <div className="flex justify-between font-medium">
+                <span>Total</span>
+                <span>₱{receipt.booking.totalAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Paid via {PAYMENT_METHOD_LABELS[receipt.booking.paymentMethod]}</span>
+                <span>₱{receipt.finalAmountPaid.toFixed(2)}</span>
+              </div>
+              {receipt.booking.paymentMethod === "gcash" && receipt.booking.gcashReference && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>GCash Ref</span>
+                  <span>{receipt.booking.gcashReference}</span>
+                </div>
+              )}
+              {receipt.change > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Change</span>
+                  <span>₱{receipt.change.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="my-1 border-t" />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Staff</span>
+                <span>{staffName}</span>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={onClose}>
+                Done
+              </Button>
+              {printer.connected && (
+                <Button variant="outline" onClick={printThermalCopy}>
+                  <PrinterIcon className="size-4" />
+                  Reprint (thermal)
+                </Button>
+              )}
+              <Button onClick={() => window.print()}>
+                <PrinterIcon className="size-4" />
+                Print receipt
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <>
         <DialogHeader>
           <DialogTitle>Check in — Room {room.roomNumber}</DialogTitle>
           <DialogDescription>{ROOM_TYPE_LABELS[room.type]}</DialogDescription>
@@ -427,6 +546,8 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
             </Button>
           </div>
         </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

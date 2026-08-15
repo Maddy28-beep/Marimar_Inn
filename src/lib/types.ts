@@ -56,6 +56,14 @@ export interface Booking {
   guestCount?: number;
   checkInTime: Timestamp;
   hoursBooked: number;
+  // Snapshot of the rate package chosen at check-in, kept immutable even
+  // after extendStay()/settleOpenTimeCharge() change hoursBooked and
+  // totalRoomCharge — lets the Daily Sales Report show "package" vs
+  // "extension" the way the front desk's paper log does. Bookings from
+  // before this field existed fall back to treating the current totals as
+  // the package amount (no extension shown).
+  originalPackageHours?: number;
+  originalPackagePrice?: number;
   // True once a stay has been converted to "open time" — no fixed end time,
   // billed as a final lump sum at checkout since there's no per-hour rate
   // set yet. The countdown/overdue UI and reminder alarm skip these rooms.
@@ -75,6 +83,12 @@ export interface Booking {
   specialRequests?: string;
   cashierId: string;
   updatedAt: Timestamp;
+}
+
+export interface InventoryCategory {
+  categoryId: string;
+  name: string;
+  createdAt: Timestamp;
 }
 
 export interface InventoryItem {

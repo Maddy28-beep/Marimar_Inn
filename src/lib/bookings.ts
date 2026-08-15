@@ -116,6 +116,8 @@ export async function checkIn(input: CheckInInput) {
       guestName: input.guestName,
       checkInTime: serverTimestamp(),
       hoursBooked: input.packageHours,
+      originalPackageHours: input.packageHours,
+      originalPackagePrice: input.packagePrice,
       totalRoomCharge,
       totalFbCharge,
       totalAmount,
@@ -210,6 +212,11 @@ export async function extendStay(
     paymentStatus: paymentStatusFor(newAmountPaid, newTotalAmount),
     updatedAt: serverTimestamp(),
   });
+  // Extending pushes the checkout deadline back out — clear any 30-min-
+  // warning/overdue reminder (and its repeating alarm) raised before the
+  // extension, otherwise it keeps ringing for a room that now has plenty
+  // of time left.
+  await resolveCheckoutReminder(booking.bookingId);
 }
 
 /**
@@ -223,6 +230,9 @@ export async function convertToOpenTime(bookingId: string) {
     openEnded: true,
     updatedAt: serverTimestamp(),
   });
+  // Open-ended bookings have no fixed end time — clear any reminder raised
+  // before the conversion, same reasoning as extendStay().
+  await resolveCheckoutReminder(bookingId);
 }
 
 /**

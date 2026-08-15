@@ -1,6 +1,7 @@
 import { collection, getDocs, query, Timestamp, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Booking, Room, RoomType } from "@/lib/types";
+import { referenceNumberFor } from "@/lib/receipt-printer";
+import type { Booking, PaymentMethod, Room, RoomType } from "@/lib/types";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -105,6 +106,99 @@ export function computeDailyReport(checkedInToday: Booking[], checkOutsToday: nu
     totalRevenue: roomRevenue + fbRevenue,
     mostOrderedItems,
   };
+}
+
+export interface DailySalesRow {
+  bookingId: string;
+  roomNumber: string;
+  refNumber: string;
+  guestName: string;
+  packageHours: number;
+  checkInTime: Date;
+  scheduledCheckOutTime: Date;
+  packageAmount: number;
+  extensionHours: number;
+  extensionAmount: number;
+  actualCheckOutTime: Date | null;
+  totalRoomAmount: number;
+  totalStoreAmount: number;
+  totalPaid: number;
+  paymentMethod: PaymentMethod;
+  gcashReference?: string;
+}
+
+export interface DailySalesTotals {
+  packageAmount: number;
+  extensionAmount: number;
+  totalRoomAmount: number;
+  totalStoreAmount: number;
+  totalPaid: number;
+  cashCollected: number;
+  gcashCollected: number;
+}
+
+export interface DailySalesReport {
+  rows: DailySalesRow[];
+  totals: DailySalesTotals;
+}
+
+/**
+ * Mirrors the front desk's paper "Daily Sales Report" — one row per booking
+ * checked in that day, split into package vs. extension amounts using the
+ * originalPackageHours/Price snapshot taken at check-in.
+ */
+export function computeDailySalesReport(bookings: Booking[]): DailySalesReport {
+  const rows: DailySalesRow[] = bookings
+    .slice()
+    .sort((a, b) => a.checkInTime.toMillis() - b.checkInTime.toMillis())
+    .map((booking) => {
+      const packageHours = booking.originalPackageHours ?? booking.hoursBooked;
+      const packageAmount = booking.originalPackagePrice ?? booking.totalRoomCharge ?? 0;
+      const totalRoomAmount = booking.totalRoomCharge ?? 0;
+      const checkInDate = booking.checkInTime.toDate();
+      return {
+        bookingId: booking.bookingId,
+        roomNumber: booking.roomNumber,
+        refNumber: referenceNumberFor(booking.bookingId),
+        guestName: booking.guestName,
+        packageHours,
+        checkInTime: checkInDate,
+        scheduledCheckOutTime: new Date(checkInDate.getTime() + packageHours * 60 * 60 * 1000),
+        packageAmount,
+        extensionHours: Math.max(0, (booking.hoursBooked ?? packageHours) - packageHours),
+        extensionAmount: Math.max(0, totalRoomAmount - packageAmount),
+        actualCheckOutTime: booking.checkOutTime ? booking.checkOutTime.toDate() : null,
+        totalRoomAmount,
+        totalStoreAmount: booking.totalFbCharge ?? 0,
+        totalPaid: booking.amountPaid ?? 0,
+        paymentMethod: booking.paymentMethod,
+        gcashReference: booking.gcashReference,
+      };
+    });
+
+  const totals = rows.reduce<DailySalesTotals>(
+    (acc, row) => {
+      acc.packageAmount += row.packageAmount;
+      acc.extensionAmount += row.extensionAmount;
+      acc.totalRoomAmount += row.totalRoomAmount;
+      acc.totalStoreAmount += row.totalStoreAmount;
+      acc.totalPaid += row.totalPaid;
+      if (row.paymentMethod === "cash") acc.cashCollected += row.totalPaid;
+      else acc.gcashCollected += row.totalPaid;
+      return acc;
+    },
+    {
+      packageAmount: 0,
+      extensionAmount: 0,
+      totalRoomAmount: 0,
+      totalStoreAmount: 0,
+      totalPaid: 0,
+      cashCollected: 0,
+      gcashCollected: 0,
+    }
+  );
+
+  return { rows, totals };
 }
 
 export interface DailyRevenuePoint {

@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ProtectedRoute } from "@/components/auth/protected-route";
-import { subscribeToInventory, deleteItem, restockItem } from "@/lib/inventory";
-import type { InventoryItem } from "@/lib/types";
+import { subscribeToInventory, subscribeToCategories, deleteItem, restockItem } from "@/lib/inventory";
+import type { InventoryCategory, InventoryItem } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ItemFormDialog } from "@/components/inventory/item-form-dialog";
-import { Loader2Icon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { CategoryManagerDialog } from "@/components/inventory/category-manager-dialog";
+import { Loader2Icon, PencilIcon, PlusIcon, TagIcon, Trash2Icon } from "lucide-react";
 
 type DialogState = "create" | { item: InventoryItem } | null;
 
@@ -55,10 +56,13 @@ function RestockControl({ item }: { item: InventoryItem }) {
 
 function ManageInventoryContent() {
   const [items, setItems] = useState<InventoryItem[] | null>(null);
+  const [categories, setCategories] = useState<InventoryCategory[]>([]);
   const [dialog, setDialog] = useState<DialogState>(null);
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => subscribeToInventory(setItems), []);
+  useEffect(() => subscribeToCategories(setCategories), []);
 
   async function handleDelete(item: InventoryItem) {
     if (!window.confirm(`Delete ${item.name}? This can't be undone.`)) return;
@@ -82,10 +86,16 @@ function ManageInventoryContent() {
             Manage the store item catalog, prices, and stock levels.
           </p>
         </div>
-        <Button onClick={() => setDialog("create")}>
-          <PlusIcon className="size-4" />
-          Add item
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setCategoryManagerOpen(true)}>
+            <TagIcon className="size-4" />
+            Manage categories
+          </Button>
+          <Button onClick={() => setDialog("create")}>
+            <PlusIcon className="size-4" />
+            Add item
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-xl border">
@@ -156,7 +166,15 @@ function ManageInventoryContent() {
         <ItemFormDialog
           key={dialog === "create" ? "create" : dialog.item.itemId}
           mode={dialog}
+          categories={categories}
           onClose={() => setDialog(null)}
+        />
+      )}
+
+      {categoryManagerOpen && (
+        <CategoryManagerDialog
+          categories={categories}
+          onClose={() => setCategoryManagerOpen(false)}
         />
       )}
     </div>

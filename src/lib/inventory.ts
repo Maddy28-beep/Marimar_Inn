@@ -12,7 +12,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { InventoryItem } from "@/lib/types";
+import type { InventoryCategory, InventoryItem } from "@/lib/types";
 import { syncLowStockNotification } from "@/lib/notifications";
 
 function requireDb() {
@@ -90,4 +90,33 @@ export async function restockItem(itemId: string, addQuantity: number) {
 export async function deleteItem(itemId: string) {
   const firestore = requireDb();
   await deleteDoc(doc(firestore, "inventory", itemId));
+}
+
+export function subscribeToCategories(onChange: (categories: InventoryCategory[]) => void) {
+  const firestore = requireDb();
+  const q = query(collection(firestore, "inventoryCategories"), orderBy("name"));
+  return onSnapshot(q, (snapshot) => {
+    onChange(
+      snapshot.docs.map((d) => d.data({ serverTimestamps: "estimate" }) as InventoryCategory)
+    );
+  });
+}
+
+/**
+ * The trimmed category name doubles as the document ID — creating the same
+ * name twice just overwrites the same doc, so categories can't accidentally
+ * end up duplicated ("Drinks" vs "Drinks " vs a second identical entry).
+ */
+export async function createCategory(name: string) {
+  const firestore = requireDb();
+  const trimmed = name.trim().replace(/\//g, "-");
+  if (!trimmed) throw new Error("Category name is required.");
+  const ref = doc(firestore, "inventoryCategories", trimmed);
+  await setDoc(ref, { categoryId: trimmed, name: trimmed, createdAt: serverTimestamp() });
+  return trimmed;
+}
+
+export async function deleteCategory(categoryId: string) {
+  const firestore = requireDb();
+  await deleteDoc(doc(firestore, "inventoryCategories", categoryId));
 }

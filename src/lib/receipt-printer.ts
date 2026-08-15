@@ -269,6 +269,75 @@ export function printThermalReceipt(booking: Booking, room: Room, extras: Receip
   send(buildReceiptBytes(booking, room, extras));
 }
 
+export interface ExtensionReceiptExtras {
+  staffName: string;
+  hours: number;
+  amountCharged: number;
+  amountPaid: number;
+  change: number;
+}
+
+/**
+ * A short, standalone receipt for a single "+1 hour" extension payment —
+ * distinct from buildReceiptBytes(), which reprints the booking's whole
+ * running total. Re-printing the full total here would look like the guest
+ * is being charged for the original package again on top of the extension.
+ */
+export function buildExtensionReceiptBytes(
+  booking: Booking,
+  room: Room,
+  extras: ExtensionReceiptExtras
+): Uint8Array {
+  const width = state.paperWidth;
+  const encoder = new ReceiptPrinterEncoder({
+    language: printerLanguage,
+    codepageMapping: printerCodepageMapping,
+    width,
+  });
+
+  encoder
+    .initialize()
+    .align("center")
+    .bold(true)
+    .line("Marimar Inn")
+    .bold(false)
+    .line("Extension Receipt")
+    .line(`Ref: ${referenceNumberFor(booking.bookingId)}`)
+    .newline()
+    .align("left")
+    .line(twoColumn("Room", room.roomNumber, width))
+    .line(twoColumn("Guest", booking.guestName, width))
+    .line(`Time: ${new Date().toLocaleString()}`)
+    .newline()
+    .line(twoColumn(`+${extras.hours}h extension`, money(extras.amountCharged), width))
+    .newline()
+    .bold(true)
+    .line(twoColumn("Total", money(extras.amountCharged), width))
+    .bold(false)
+    .line(
+      twoColumn(`Paid (${PAYMENT_METHOD_LABELS[booking.paymentMethod]})`, money(extras.amountPaid), width)
+    );
+
+  if (extras.change > 0) {
+    encoder.line(twoColumn("Change", money(extras.change), width));
+  }
+
+  encoder
+    .newline()
+    .align("center")
+    .line(`Staff: ${extras.staffName}`)
+    .newline()
+    .newline()
+    .newline()
+    .cut();
+
+  return encoder.encode();
+}
+
+export function printExtensionReceipt(booking: Booking, room: Room, extras: ExtensionReceiptExtras) {
+  send(buildExtensionReceiptBytes(booking, room, extras));
+}
+
 /** Sends the drawer-kick pulse — the drawer must be cabled into the printer's RJ11 port. */
 export function openCashDrawer() {
   const encoder = new ReceiptPrinterEncoder({
