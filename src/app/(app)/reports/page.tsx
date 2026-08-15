@@ -164,6 +164,36 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             ],
             emphasizeLastRow: (salesReport?.rows.length ?? 0) > 0,
           },
+          ...(salesReport
+            ? [
+                {
+                  heading: "Payment breakdown",
+                  columns: [
+                    { header: "Metric", key: "metric", width: 24 },
+                    { header: "Value", key: "value", width: 22, format: "currency" as const },
+                  ],
+                  rows: [
+                    { metric: "Cash collected", value: salesReport.totals.cashCollected },
+                    { metric: "GCash collected", value: salesReport.totals.gcashCollected },
+                    { metric: "Total collected", value: salesReport.totals.totalPaid },
+                    {
+                      metric: "Overall Sale",
+                      value: salesReport.totals.totalRoomAmount + salesReport.totals.totalStoreAmount,
+                    },
+                  ],
+                  emphasizeLastRow: true,
+                },
+                {
+                  heading: "Signatures",
+                  columns: [
+                    { header: "Prepared by", key: "prepared", width: 24 },
+                    { header: "Checked by", key: "checked", width: 24 },
+                    { header: "Noted by", key: "noted", width: 24 },
+                  ],
+                  rows: [{ prepared: "", checked: "", noted: "" }],
+                },
+              ]
+            : []),
         ],
       },
       {
