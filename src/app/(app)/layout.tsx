@@ -60,7 +60,7 @@ const NAV_LINKS: NavLink[] = [
   { href: "/dashboard", label: "Rooms" },
   { href: "/rooms/manage", label: "Manage Rooms", icon: SettingsIcon, ownerOnly: true },
   { href: "/inventory", label: "Inventory", icon: PackageIcon, ownerOnly: true },
-  { href: "/reports", label: "Reports", icon: BarChart3Icon, ownerOnly: true },
+  { href: "/reports", label: "Reports", icon: BarChart3Icon },
   { href: "/users", label: "Manage Staff", icon: UsersIcon, ownerOnly: true },
 ];
 

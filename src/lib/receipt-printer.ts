@@ -180,10 +180,29 @@ function money(amount: number): string {
   return `P${amount.toFixed(2)}`;
 }
 
-/** Right-pads a label and right-aligns a value so both fit the paper's character width. */
+/**
+ * Right-pads a label and right-aligns a value so both fit the paper's
+ * character width. The encoder doesn't word-wrap — a line longer than the
+ * printer's configured width is just handed to the printer's own firmware,
+ * which may wrap it oddly or, on some cheap ESC/POS clones, drop the
+ * overflow entirely. Clipping the label (never the value — that's always a
+ * peso amount, and truncating money is far worse than truncating a label)
+ * guarantees the line itself never exceeds width.
+ */
 function twoColumn(label: string, value: string, width: number): string {
-  const space = Math.max(1, width - label.length - value.length);
-  return `${label}${" ".repeat(space)}${value}`;
+  const maxLabelLength = Math.max(1, width - value.length - 1);
+  const clippedLabel =
+    label.length > maxLabelLength ? label.slice(0, Math.max(0, maxLabelLength - 3)) + "..." : label;
+  const space = Math.max(1, width - clippedLabel.length - value.length);
+  return `${clippedLabel}${" ".repeat(space)}${value}`;
+}
+
+/** Clips a standalone (non-two-column) line so it never exceeds the printer's width. */
+function clampLine(text: string, width: number): string {
+  // ASCII "..." rather than the "…" glyph — same reasoning as money()
+  // using "P" instead of "₱": most thermal printers' built-in codepages
+  // don't include non-ASCII characters.
+  return text.length > width ? text.slice(0, Math.max(0, width - 3)) + "..." : text;
 }
 
 export interface ReceiptExtras {
@@ -336,6 +355,123 @@ export function buildExtensionReceiptBytes(
 
 export function printExtensionReceipt(booking: Booking, room: Room, extras: ExtensionReceiptExtras) {
   send(buildExtensionReceiptBytes(booking, room, extras));
+}
+
+export interface DailySalesReceiptRow {
+  roomNumber: string;
+  refNumber: string;
+  packageHours: number;
+  extensionHours: number;
+  extensionAmount: number;
+  totalRoomAmount: number;
+  totalStoreAmount: number;
+  totalPaid: number;
+  paymentMethodLabel: string;
+  gcashReference?: string;
+}
+
+export interface DailySalesReceiptTotals {
+  totalRoomAmount: number;
+  totalStoreAmount: number;
+  totalPaid: number;
+  cashCollected: number;
+  gcashCollected: number;
+}
+
+export interface DailySalesReceiptData {
+  dateLabel: string;
+  frontDesk?: string;
+  housekeeping?: string;
+  rows: DailySalesReceiptRow[];
+  totals: DailySalesReceiptTotals;
+}
+
+/**
+ * The on-screen/Excel Daily Sales Report has 15 columns — meant for a full
+ * sheet of paper. A thermal printer is only 32-48 characters wide, so this
+ * is a genuinely different, compact layout (one short block per booking)
+ * rather than the same table shrunk down.
+ */
+export function buildDailySalesReceiptBytes(data: DailySalesReceiptData): Uint8Array {
+  const width = state.paperWidth;
+  const rule = "-".repeat(width);
+  const encoder = new ReceiptPrinterEncoder({
+    language: printerLanguage,
+    codepageMapping: printerCodepageMapping,
+    width,
+  });
+
+  encoder
+    .initialize()
+    .align("center")
+    .bold(true)
+    .line("Marimar Inn")
+    .bold(false)
+    .line("Daily Sales Report")
+    .line(clampLine(data.dateLabel, width));
+
+  if (data.frontDesk) encoder.line(clampLine(`Front desk: ${data.frontDesk}`, width));
+  if (data.housekeeping) encoder.line(clampLine(`Housekeeping: ${data.housekeeping}`, width));
+
+  encoder.align("left").newline().line(rule);
+
+  if (data.rows.length === 0) {
+    encoder.align("center").line("No check-ins that day.").align("left");
+  } else {
+    for (const row of data.rows) {
+      // Room/ref/hours line is bounded by construction: ref numbers are a
+      // fixed 9 chars and room numbers/hours are always 1-3 digits, so this
+      // never risks overflowing even 32-char paper.
+      encoder.line(`Rm ${row.roomNumber}  ${row.refNumber}  ${row.packageHours}h`);
+      if (row.extensionAmount > 0) {
+        encoder.line(twoColumn(`  +${row.extensionHours}h ext`, money(row.extensionAmount), width));
+      }
+      if (row.totalStoreAmount > 0) {
+        encoder.line(twoColumn("  Store items", money(row.totalStoreAmount), width));
+      }
+      encoder.line(twoColumn(`Paid (${row.paymentMethodLabel})`, money(row.totalPaid), width));
+      // GCash reference numbers get their own line rather than being
+      // appended to the Paid line — appended, a 13-digit reference pushes
+      // the line past 32-char (58mm) paper's width; unlike a label, a
+      // reference number can't be safely clipped, since a shortened one is
+      // useless for the Owner to verify against GCash later.
+      if (row.gcashReference) {
+        encoder.line(clampLine(`  Ref: ${row.gcashReference}`, width));
+      }
+      encoder.line(rule);
+    }
+  }
+
+  encoder
+    .bold(true)
+    .line(twoColumn("Room total", money(data.totals.totalRoomAmount), width))
+    .line(twoColumn("Store total", money(data.totals.totalStoreAmount), width))
+    .bold(false)
+    .newline()
+    .line(twoColumn("Cash collected", money(data.totals.cashCollected), width))
+    .line(twoColumn("GCash collected", money(data.totals.gcashCollected), width))
+    .line(twoColumn("Total collected", money(data.totals.totalPaid), width))
+    .newline()
+    .bold(true)
+    .line(twoColumn("OVERALL SALE", money(data.totals.totalRoomAmount + data.totals.totalStoreAmount), width))
+    .bold(false)
+    .newline()
+    .newline()
+    .line("Prepared by: __________")
+    .newline()
+    .line("Checked by:  __________")
+    .newline()
+    .line("Noted by:    __________")
+    .newline()
+    .newline()
+    .newline()
+    .cut();
+
+  return encoder.encode();
+}
+
+export function printDailySalesReceipt(data: DailySalesReceiptData) {
+  send(buildDailySalesReceiptBytes(data));
 }
 
 /** Sends the drawer-kick pulse — the drawer must be cabled into the printer's RJ11 port. */

@@ -20,7 +20,7 @@ const HEADERS = [
   "Ref #",
   "Hrs",
   "Check-in",
-  "Sched. out",
+  "Checkout",
   "Amount",
   "Ext hrs",
   "Ext amt",
@@ -135,10 +135,14 @@ export function DailySalesTable({ report }: { report: DailySalesReport }) {
         </span>
       </div>
 
-      <div className="mt-6 grid grid-cols-3 gap-8 pt-10 text-xs">
-        <div className="border-t pt-1 text-center">Prepared by</div>
-        <div className="border-t pt-1 text-center">Checked by</div>
-        <div className="border-t pt-1 text-center">Noted by</div>
+      <div className="mt-6 grid grid-cols-3 gap-8 text-xs">
+        {["Prepared by", "Checked by", "Noted by"].map((label) => (
+          <div key={label} className="flex flex-col items-center">
+            <div className="h-14 w-full" />
+            <div className="w-full border-t pt-1 text-center">&nbsp;</div>
+            <div className="pt-1 text-center text-muted-foreground">{label}</div>
+          </div>
+        ))}
       </div>
     </div>
   );

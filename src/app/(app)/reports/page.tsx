@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ProtectedRoute } from "@/components/auth/protected-route";
+import { useAuth } from "@/context/auth-context";
 import { subscribeToRooms } from "@/lib/rooms";
 import { subscribeToInventory } from "@/lib/inventory";
 import {
@@ -21,6 +22,8 @@ import {
 import { DailySalesTable } from "@/components/reports/daily-sales-table";
 import { exportToExcel, formatReportDate, formatReportMonth } from "@/lib/export";
 import { PAYMENT_METHOD_LABELS, ROOM_TYPE_LABELS, type InventoryItem, type Room } from "@/lib/types";
+import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
+import { printDailySalesReceipt } from "@/lib/receipt-printer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card,
@@ -64,6 +67,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
 }
 
 function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
+  const printer = useReceiptPrinter();
   const [dateValue, setDateValue] = useState(todayInputValue());
   const [report, setReport] = useState<DailyReport | null>(null);
   const [salesReport, setSalesReport] = useState<DailySalesReport | null>(null);
@@ -114,7 +118,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
               { header: "Ref #", key: "ref", width: 12 },
               { header: "Hrs", key: "hrs", width: 6, format: "integer" },
               { header: "Check-in", key: "checkIn", width: 14 },
-              { header: "Sched. out", key: "schedOut", width: 14 },
+              { header: "Checkout", key: "schedOut", width: 14 },
               { header: "Amount", key: "amount", width: 12, format: "currency" },
               { header: "Ext hrs", key: "extHrs", width: 9, format: "integer" },
               { header: "Ext amt", key: "extAmt", width: 12, format: "currency" },
@@ -186,11 +190,15 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                 {
                   heading: "Signatures",
                   columns: [
+                    { header: "", key: "label", width: 14 },
                     { header: "Prepared by", key: "prepared", width: 24 },
                     { header: "Checked by", key: "checked", width: 24 },
                     { header: "Noted by", key: "noted", width: 24 },
                   ],
-                  rows: [{ prepared: "", checked: "", noted: "" }],
+                  rows: [
+                    { label: "Signature", prepared: "", checked: "", noted: "" },
+                    { label: "Printed name", prepared: "", checked: "", noted: "" },
+                  ],
                 },
               ]
             : []),
@@ -235,6 +243,39 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
     ]);
   }
 
+  function handlePrintThermal() {
+    if (!salesReport || !printer.connected) return;
+    try {
+      printDailySalesReceipt({
+        // A short format ("Aug 16, 2026") on purpose — the full weekday
+        // format used elsewhere can run to 30 characters, right at the edge
+        // of 58mm (32-char) paper.
+        dateLabel: new Date(`${dateValue}T00:00:00`).toLocaleDateString("en-PH", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        }),
+        frontDesk: frontDesk.trim() || undefined,
+        housekeeping: housekeeping.trim() || undefined,
+        rows: salesReport.rows.map((row) => ({
+          roomNumber: row.roomNumber,
+          refNumber: row.refNumber,
+          packageHours: row.packageHours,
+          extensionHours: row.extensionHours,
+          extensionAmount: row.extensionAmount,
+          totalRoomAmount: row.totalRoomAmount,
+          totalStoreAmount: row.totalStoreAmount,
+          totalPaid: row.totalPaid,
+          paymentMethodLabel: PAYMENT_METHOD_LABELS[row.paymentMethod],
+          gcashReference: row.gcashReference,
+        })),
+        totals: salesReport.totals,
+      });
+    } catch {
+      toast.error("Couldn't print to the thermal printer.");
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -263,6 +304,12 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             <DownloadIcon className="size-3.5" />
             Export Excel
           </Button>
+          {printer.connected && (
+            <Button variant="outline" size="sm" onClick={handlePrintThermal} disabled={!salesReport}>
+              <PrinterIcon className="size-3.5" />
+              Print (thermal)
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -704,7 +751,9 @@ function InventoryReportTab() {
 }
 
 function ReportsContent() {
+  const { appUser } = useAuth();
   const [rooms, setRooms] = useState<Room[] | null>(null);
+  const isOwner = appUser?.role === "owner";
 
   useEffect(() => subscribeToRooms(setRooms), []);
 
@@ -713,33 +762,41 @@ function ReportsContent() {
       <div>
         <h1 className="font-heading text-2xl font-semibold tracking-tight">Reports</h1>
         <p className="text-sm text-muted-foreground">
-          Revenue, occupancy, and sales — daily, monthly, and inventory views.
+          {isOwner
+            ? "Revenue, occupancy, and sales — daily, monthly, and inventory views."
+            : "Today's sales — print or export to hand off at end of shift."}
         </p>
       </div>
 
-      <Tabs defaultValue="daily">
-        <TabsList>
-          <TabsTrigger value="daily">Daily</TabsTrigger>
-          <TabsTrigger value="monthly">Monthly</TabsTrigger>
-          <TabsTrigger value="inventory">Inventory</TabsTrigger>
-        </TabsList>
-        <TabsContent value="daily">
-          <DailyReportTab rooms={rooms} />
-        </TabsContent>
-        <TabsContent value="monthly">
-          <MonthlyReportTab rooms={rooms} />
-        </TabsContent>
-        <TabsContent value="inventory">
-          <InventoryReportTab />
-        </TabsContent>
-      </Tabs>
+      {isOwner ? (
+        <Tabs defaultValue="daily">
+          <TabsList>
+            <TabsTrigger value="daily">Daily</TabsTrigger>
+            <TabsTrigger value="monthly">Monthly</TabsTrigger>
+            <TabsTrigger value="inventory">Inventory</TabsTrigger>
+          </TabsList>
+          <TabsContent value="daily">
+            <DailyReportTab rooms={rooms} />
+          </TabsContent>
+          <TabsContent value="monthly">
+            <MonthlyReportTab rooms={rooms} />
+          </TabsContent>
+          <TabsContent value="inventory">
+            <InventoryReportTab />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        // Cashiers only get the Daily Sales Report — Monthly trends and
+        // inventory consumption analytics stay Owner-only.
+        <DailyReportTab rooms={rooms} />
+      )}
     </div>
   );
 }
 
 export default function ReportsPage() {
   return (
-    <ProtectedRoute allowedRoles={["owner"]}>
+    <ProtectedRoute allowedRoles={["owner", "cashier"]}>
       <ReportsContent />
     </ProtectedRoute>
   );
