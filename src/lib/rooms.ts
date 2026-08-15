@@ -10,7 +10,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Room, RoomStatus, RoomType } from "@/lib/types";
+import { DEFAULT_RATE_PACKAGES, type RatePackage, type Room, type RoomStatus, type RoomType } from "@/lib/types";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -106,5 +106,53 @@ export async function seedInitialRooms() {
     batch.set(ref, room);
   }
 
+  await batch.commit();
+}
+
+export function subscribeToRatePackages(onChange: (packages: RatePackage[]) => void) {
+  const firestore = requireDb();
+  const q = query(collection(firestore, "ratePackages"));
+  return onSnapshot(q, (snapshot) => {
+    const packages = snapshot.docs.map(
+      (d) => d.data({ serverTimestamps: "estimate" }) as RatePackage
+    );
+    packages.sort((a, b) => a.hours - b.hours);
+    onChange(packages);
+  });
+}
+
+export interface RatePackageInput {
+  hours: number;
+  price: number;
+}
+
+export async function createRatePackage(input: RatePackageInput) {
+  const firestore = requireDb();
+  const ref = doc(collection(firestore, "ratePackages"));
+  const pkg: RatePackage = { packageId: ref.id, hours: input.hours, price: input.price };
+  await setDoc(ref, pkg);
+}
+
+export async function updateRatePackage(packageId: string, input: RatePackageInput) {
+  const firestore = requireDb();
+  await updateDoc(doc(firestore, "ratePackages", packageId), {
+    hours: input.hours,
+    price: input.price,
+  });
+}
+
+export async function deleteRatePackage(packageId: string) {
+  const firestore = requireDb();
+  await deleteDoc(doc(firestore, "ratePackages", packageId));
+}
+
+export async function seedDefaultRatePackages() {
+  const firestore = requireDb();
+  const batch = writeBatch(firestore);
+  for (const spec of DEFAULT_RATE_PACKAGES) {
+    const ref = doc(collection(firestore, "ratePackages"));
+    const pkg: RatePackage = { packageId: ref.id, hours: spec.hours, price: spec.price };
+    batch.set(ref, pkg);
+  }
   await batch.commit();
 }

@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { checkIn } from "@/lib/bookings";
-import { updateRoomStatus } from "@/lib/rooms";
+import { subscribeToRatePackages, updateRoomStatus } from "@/lib/rooms";
 import { subscribeToInventory } from "@/lib/inventory";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { useAuth } from "@/context/auth-context";
@@ -35,11 +35,11 @@ import {
 } from "@/lib/receipt-printer";
 import {
   PAYMENT_METHOD_LABELS,
-  ROOM_RATE_PACKAGES,
   ROOM_TYPE_LABELS,
   type Booking,
   type InventoryItem,
   type PaymentMethod,
+  type RatePackage,
   type Room,
 } from "@/lib/types";
 import { Loader2Icon, MinusIcon, PlusIcon, PrinterIcon } from "lucide-react";
@@ -57,7 +57,8 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [guestCount, setGuestCount] = useState("2");
-  const [packageIndex, setPackageIndex] = useState(0);
+  const [ratePackages, setRatePackages] = useState<RatePackage[] | null>(null);
+  const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [gcashReference, setGcashReference] = useState("");
   const [amountPaid, setAmountPaid] = useState("");
@@ -73,6 +74,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
   } | null>(null);
 
   useEffect(() => subscribeToInventory(setInventory), []);
+  useEffect(() => subscribeToRatePackages(setRatePackages), []);
 
   const cartLines = useMemo(() => {
     if (!inventory) return [];
@@ -97,14 +99,15 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
 
   if (!room) return null;
 
-  const selectedPackage = ROOM_RATE_PACKAGES[packageIndex];
-  const roomTotal = selectedPackage.price;
+  const selectedPackage =
+    ratePackages?.find((p) => p.packageId === selectedPackageId) ?? ratePackages?.[0] ?? null;
+  const roomTotal = selectedPackage?.price ?? 0;
   const total = roomTotal + fbTotal;
   const paid = Number(amountPaid) || 0;
   const change = paid > total ? paid - total : 0;
 
   async function handleSubmit() {
-    if (!room) return;
+    if (!room || !selectedPackage) return;
 
     const finalGuestName = guestName.trim() || "Guest";
     const amountCollected = Math.min(paid, total);
@@ -366,20 +369,26 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
 
           <div className="flex flex-col gap-1.5">
             <Label>Rate package</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {ROOM_RATE_PACKAGES.map((pkg, index) => (
-                <Button
-                  key={pkg.hours}
-                  type="button"
-                  size="sm"
-                  variant={packageIndex === index ? "default" : "outline"}
-                  onClick={() => setPackageIndex(index)}
-                  disabled={submitting}
-                >
-                  {pkg.hours}h · ₱{pkg.price}
-                </Button>
-              ))}
-            </div>
+            {ratePackages?.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No rate packages set up yet — add some under Manage Rooms.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {ratePackages?.map((pkg) => (
+                  <Button
+                    key={pkg.packageId}
+                    type="button"
+                    size="sm"
+                    variant={selectedPackage?.packageId === pkg.packageId ? "default" : "outline"}
+                    onClick={() => setSelectedPackageId(pkg.packageId)}
+                    disabled={submitting}
+                  >
+                    {pkg.hours}h · ₱{pkg.price}
+                  </Button>
+                ))}
+              </div>
+            )}
           </div>
 
           {inventory !== null && inventory.length > 0 && (
@@ -436,7 +445,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
 
           <div className="flex flex-col gap-1 rounded-lg bg-muted px-3 py-2 text-sm">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span>Room ({selectedPackage.hours}h)</span>
+              <span>Room ({selectedPackage?.hours ?? "—"}h)</span>
               <span>₱{roomTotal.toFixed(2)}</span>
             </div>
             {fbTotal > 0 && (
@@ -540,7 +549,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
             <Button variant="outline" onClick={onClose} disabled={submitting}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit} disabled={submitting}>
+            <Button onClick={handleSubmit} disabled={submitting || !selectedPackage}>
               {submitting && <Loader2Icon className="size-4 animate-spin" />}
               Check in
             </Button>

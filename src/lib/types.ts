@@ -24,19 +24,23 @@ export interface Room {
   lastUpdated: Timestamp;
 }
 
+// Fixed rate card posted at the front desk — not a per-hour rate, so these
+// are looked up by package rather than computed from a formula. Owner-
+// editable via Manage Rooms; DEFAULT_RATE_PACKAGES below only seeds the
+// initial list.
 export interface RatePackage {
+  packageId: string;
   hours: number;
   price: number;
 }
 
-// Fixed rate card posted at the front desk — not a per-hour rate, so these
-// are looked up by package rather than computed from a formula.
-export const ROOM_RATE_PACKAGES: RatePackage[] = [
+export const DEFAULT_RATE_PACKAGES: Omit<RatePackage, "packageId">[] = [
   { hours: 3, price: 200 },
   { hours: 4, price: 250 },
   { hours: 5, price: 300 },
   { hours: 6, price: 400 },
   { hours: 12, price: 800 },
+  { hours: 24, price: 1600 },
 ];
 
 export interface OrderItem {

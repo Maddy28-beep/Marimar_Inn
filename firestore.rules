@@ -134,6 +134,17 @@ service cloud.firestore {
     }
 
     // ============================================
+    // RATE PACKAGES COLLECTION
+    // ============================================
+    match /ratePackages/{packageId} {
+      // All authenticated users can read rate packages (needed by check-in)
+      allow read: if isAuthenticated();
+
+      // Owner/admin/manager: create, update, and delete rate packages
+      allow create, update, delete: if isOwnerOrAdmin() || hasRole('manager');
+    }
+
+    // ============================================
     // INVENTORY CATEGORIES COLLECTION
     // ============================================
     match /inventoryCategories/{categoryId} {
