@@ -94,7 +94,7 @@ service cloud.firestore {
       allow update: if isStaff() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'guestPhone', 'guestCount', 'hoursBooked', 'hoursUsed', 'hoursRemaining',
-          'totalRoomCharge', 'totalFbCharge', 'totalAmount', 'amountPaid',
+          'openEnded', 'totalRoomCharge', 'totalFbCharge', 'totalAmount', 'amountPaid',
           'paymentStatus', 'status', 'checkOutTime', 'items', 'transactions',
           'specialRequests', 'updatedAt'
         ]);

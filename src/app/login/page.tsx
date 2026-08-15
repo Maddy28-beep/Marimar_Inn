@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BrandLogo } from "@/components/brand-logo";
 import { BrandMark } from "@/components/brand-mark";
+import { primeAlarmAudio } from "@/lib/alarm";
 import { Loader2Icon, TriangleAlertIcon } from "lucide-react";
 
 function firebaseAuthErrorMessage(error: unknown): string {
@@ -41,6 +42,10 @@ export default function LoginPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Unlocks the checkout-alarm's AudioContext as early as the sign-in tap
+    // — the app shell's own unlock listener may not fire before an alarm is
+    // needed if nobody touches the screen after landing on the dashboard.
+    primeAlarmAudio();
     setSubmitting(true);
 
     try {

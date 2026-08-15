@@ -65,9 +65,8 @@ interface RoomCardProps {
 
 export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
   const style = STATUS_STYLES[room.status];
-  const remaining = booking
-    ? booking.hoursBooked - hoursElapsed(booking.checkInTime, now)
-    : null;
+  const elapsed = booking ? hoursElapsed(booking.checkInTime, now) : 0;
+  const remaining = booking && !booking.openEnded ? booking.hoursBooked - elapsed : null;
   const isRunningLow = remaining !== null && remaining <= 0.5 && remaining > 0;
   const isOverdue = remaining !== null && remaining <= 0;
   const balance = booking ? Math.max(booking.totalAmount - booking.amountPaid, 0) : 0;
@@ -110,14 +109,20 @@ export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
           <div
             className={cn(
               "text-xl leading-tight font-bold",
-              isOverdue
-                ? "text-rose-600 dark:text-rose-400"
-                : isRunningLow
-                  ? "text-amber-600 dark:text-amber-400"
-                  : "text-foreground"
+              booking.openEnded
+                ? "text-sky-600 dark:text-sky-400"
+                : isOverdue
+                  ? "text-rose-600 dark:text-rose-400"
+                  : isRunningLow
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-foreground"
             )}
           >
-            {isOverdue ? "Overdue" : `${formatHours(remaining!)} left`}
+            {booking.openEnded
+              ? `Open · ${formatHours(elapsed)}`
+              : isOverdue
+                ? "Overdue"
+                : `${formatHours(remaining!)} left`}
           </div>
           {balance > 0 && (
             <div className="mt-auto w-fit rounded-md bg-amber-500/25 px-2 py-1 text-sm font-bold text-amber-800 dark:text-amber-300">

@@ -145,7 +145,10 @@ export function OrderPickerDialog({ bookingId, onClose }: OrderPickerDialogProps
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium">{item.name}</div>
                     <div className="text-xs text-muted-foreground">
-                      ₱{item.sellingPrice.toFixed(2)} ·{" "}
+                      <span className="font-medium text-foreground">
+                        ₱{item.sellingPrice.toFixed(2)}
+                      </span>{" "}
+                      ·{" "}
                       {outOfStock ? (
                         <span className="text-rose-600 dark:text-rose-400">Out of stock</span>
                       ) : lowStock ? (

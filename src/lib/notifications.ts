@@ -93,6 +93,9 @@ export async function syncLowStockNotification(
  * syncLowStockNotification.
  */
 export async function syncCheckoutReminder(booking: Booking, room: Room, now: Date) {
+  // Open-time bookings have no fixed end time by definition — nothing to remind about.
+  if (booking.openEnded) return;
+
   const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, now);
   if (remaining > 0.5) return;
 

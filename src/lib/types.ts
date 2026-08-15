@@ -11,7 +11,7 @@ export interface AppUser {
 
 export type RoomStatus = "available" | "occupied" | "cleaning" | "maintenance";
 export type RoomType = "standard" | "deluxe" | "suite";
-export type PaymentMethod = "cash" | "gcash" | "credit_card" | "bank_transfer";
+export type PaymentMethod = "cash" | "gcash";
 export type PaymentStatus = "unpaid" | "partial" | "paid";
 export type BookingStatus = "active" | "checked_out" | "voided";
 
@@ -56,11 +56,18 @@ export interface Booking {
   guestCount?: number;
   checkInTime: Timestamp;
   hoursBooked: number;
+  // True once a stay has been converted to "open time" — no fixed end time,
+  // billed as a final lump sum at checkout since there's no per-hour rate
+  // set yet. The countdown/overdue UI and reminder alarm skip these rooms.
+  openEnded?: boolean;
   totalRoomCharge: number;
   totalFbCharge: number;
   totalAmount: number;
   amountPaid: number;
   paymentMethod: PaymentMethod;
+  // GCash transaction reference number, so the Owner can cross-check the
+  // payment later. Only collected when paymentMethod is "gcash".
+  gcashReference?: string;
   paymentStatus: PaymentStatus;
   status: BookingStatus;
   items: OrderItem[];
@@ -104,6 +111,4 @@ export const ROOM_TYPE_LABELS: Record<RoomType, string> = {
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   cash: "Cash",
   gcash: "GCash",
-  credit_card: "Credit Card",
-  bank_transfer: "Bank Transfer",
 };

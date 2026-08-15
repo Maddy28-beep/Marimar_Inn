@@ -51,6 +51,7 @@ export interface CheckInInput {
   packagePrice: number;
   paymentMethod: PaymentMethod;
   amountPaid: number;
+  gcashReference?: string;
   specialRequests?: string;
   cashierId: string;
   cartItems?: CheckInCartLine[];
@@ -59,6 +60,18 @@ export interface CheckInInput {
 function paymentStatusFor(amountPaid: number, totalAmount: number): PaymentStatus {
   if (amountPaid <= 0) return "unpaid";
   return amountPaid >= totalAmount ? "paid" : "partial";
+}
+
+/** Open-time rate: ₱100/hour, billed in 30-minute blocks rounded up. */
+export const OPEN_TIME_RATE_PER_HOUR = 100;
+
+/**
+ * e.g. 1h01m and 1h20m both round up to the 1.5h block (₱150); 1h31m rounds
+ * up to the 2h block (₱200).
+ */
+export function computeOpenTimeCharge(hoursStayed: number): number {
+  const blocks = Math.max(0, Math.ceil((hoursStayed * 60) / 30 - 1e-9));
+  return blocks * (OPEN_TIME_RATE_PER_HOUR / 2);
 }
 
 export async function checkIn(input: CheckInInput) {
@@ -118,6 +131,7 @@ export async function checkIn(input: CheckInInput) {
       ...(input.guestPhone ? { guestPhone: input.guestPhone } : {}),
       ...(input.guestCount !== undefined ? { guestCount: input.guestCount } : {}),
       ...(input.specialRequests ? { specialRequests: input.specialRequests } : {}),
+      ...(input.gcashReference ? { gcashReference: input.gcashReference } : {}),
     };
 
     tx.set(bookingRef, booking);
@@ -194,6 +208,41 @@ export async function extendStay(
     totalAmount: newTotalAmount,
     amountPaid: newAmountPaid,
     paymentStatus: paymentStatusFor(newAmountPaid, newTotalAmount),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Switches a booking to open time — no fixed end time. No charge is
+ * collected here since there's no per-hour rate set yet; the final room
+ * charge gets typed in by the cashier at checkout (settleOpenTimeCharge).
+ */
+export async function convertToOpenTime(bookingId: string) {
+  const firestore = requireDb();
+  await updateDoc(doc(firestore, "bookings", bookingId), {
+    openEnded: true,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Records the cashier's final room-charge judgment call for an open-time
+ * stay, and locks in the actual hours stayed for reporting. Called right
+ * before recordCheckout() once the cashier has settled on a number.
+ */
+export async function settleOpenTimeCharge(
+  booking: Booking,
+  finalRoomCharge: number,
+  actualHoursStayed: number
+) {
+  const firestore = requireDb();
+  const newTotalAmount = finalRoomCharge + booking.totalFbCharge;
+
+  await updateDoc(doc(firestore, "bookings", booking.bookingId), {
+    hoursBooked: actualHoursStayed,
+    totalRoomCharge: finalRoomCharge,
+    totalAmount: newTotalAmount,
+    paymentStatus: paymentStatusFor(booking.amountPaid, newTotalAmount),
     updatedAt: serverTimestamp(),
   });
 }

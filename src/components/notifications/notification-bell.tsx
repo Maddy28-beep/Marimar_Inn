@@ -10,8 +10,9 @@ import {
 } from "@/components/ui/popover";
 import { useAuth } from "@/context/auth-context";
 import { subscribeToNotifications, markAsRead, markAllAsRead } from "@/lib/notifications";
+import { playOverdueAlarm } from "@/lib/alarm";
 import type { AppNotification } from "@/lib/types";
-import { BellIcon, CheckIcon } from "lucide-react";
+import { BellIcon, CheckIcon, Volume2Icon } from "lucide-react";
 
 function timeAgo(date: Date, now: Date): string {
   const minutes = Math.max(0, Math.round((now.getTime() - date.getTime()) / 60000));
@@ -112,6 +113,17 @@ export function NotificationBell() {
               </div>
             );
           })}
+        </div>
+        <div className="border-t p-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-muted-foreground"
+            onClick={() => playOverdueAlarm()}
+          >
+            <Volume2Icon className="size-3.5" />
+            Test alarm sound
+          </Button>
         </div>
       </PopoverContent>
     </Popover>

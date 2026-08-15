@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Timestamp } from "firebase/firestore";
 import {
   Dialog,
   DialogContent,
@@ -24,10 +25,14 @@ import {
 import { checkIn } from "@/lib/bookings";
 import { updateRoomStatus } from "@/lib/rooms";
 import { subscribeToInventory } from "@/lib/inventory";
+import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
+import { useAuth } from "@/context/auth-context";
+import { openCashDrawer, printThermalReceipt, shouldOpenDrawer } from "@/lib/receipt-printer";
 import {
   PAYMENT_METHOD_LABELS,
   ROOM_RATE_PACKAGES,
   ROOM_TYPE_LABELS,
+  type Booking,
   type InventoryItem,
   type PaymentMethod,
   type Room,
@@ -41,11 +46,15 @@ interface CheckInDialogProps {
 }
 
 export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) {
+  const printer = useReceiptPrinter();
+  const { appUser } = useAuth();
+  const staffName = appUser?.displayName ?? appUser?.email ?? "Staff";
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [guestCount, setGuestCount] = useState("2");
   const [packageIndex, setPackageIndex] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [gcashReference, setGcashReference] = useState("");
   const [amountPaid, setAmountPaid] = useState("");
   const [specialRequests, setSpecialRequests] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -85,28 +94,74 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
 
   async function handleSubmit() {
     if (!room) return;
-    if (!guestName.trim()) {
-      toast.error("Guest name is required.");
-      return;
-    }
+
+    const finalGuestName = guestName.trim() || "Guest";
+    const amountCollected = Math.min(paid, total);
 
     setSubmitting(true);
     try {
-      await checkIn({
+      const newBookingId = await checkIn({
         roomId: room.roomId,
         roomNumber: room.roomNumber,
-        guestName: guestName.trim(),
+        guestName: finalGuestName,
         guestPhone: guestPhone.trim() || undefined,
         guestCount: guestCount ? Number(guestCount) : undefined,
         packageHours: selectedPackage.hours,
         packagePrice: selectedPackage.price,
         paymentMethod,
-        amountPaid: Math.min(paid, total),
+        amountPaid: amountCollected,
+        gcashReference: paymentMethod === "gcash" ? gcashReference.trim() || undefined : undefined,
         specialRequests: specialRequests.trim() || undefined,
         cashierId,
         cartItems: cartLines.map((line) => ({ itemId: line.item.itemId, quantity: line.qty })),
       });
       toast.success(`Room ${room.roomNumber} checked in.`);
+
+      if (printer.connected) {
+        if (shouldOpenDrawer(paymentMethod, amountCollected)) {
+          try {
+            openCashDrawer();
+          } catch {
+            toast.error("Checked in, but couldn't open the cash drawer.");
+          }
+        }
+        try {
+          const receiptBooking: Booking = {
+            bookingId: newBookingId,
+            roomId: room.roomId,
+            roomNumber: room.roomNumber,
+            guestName: finalGuestName,
+            checkInTime: Timestamp.now(),
+            hoursBooked: selectedPackage.hours,
+            totalRoomCharge: roomTotal,
+            totalFbCharge: fbTotal,
+            totalAmount: total,
+            amountPaid: amountCollected,
+            paymentMethod,
+            gcashReference:
+              paymentMethod === "gcash" ? gcashReference.trim() || undefined : undefined,
+            paymentStatus: amountCollected >= total ? "paid" : amountCollected > 0 ? "partial" : "unpaid",
+            status: "active",
+            items: cartLines.map((line) => ({
+              itemId: line.item.itemId,
+              name: line.item.name,
+              unitPrice: line.item.sellingPrice,
+              quantity: line.qty,
+              subtotal: line.qty * line.item.sellingPrice,
+            })),
+            cashierId,
+            updatedAt: Timestamp.now(),
+          };
+          printThermalReceipt(receiptBooking, room, {
+            staffName,
+            finalAmountPaid: amountCollected,
+            change,
+          });
+        } catch {
+          toast.error("Checked in, but the thermal printer didn't respond.");
+        }
+      }
+
       onClose();
     } catch (error) {
       console.error(error);
@@ -158,7 +213,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
 
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="guestName">Guest name</Label>
+            <Label htmlFor="guestName">Guest name (optional)</Label>
             <Input
               id="guestName"
               value={guestName}
@@ -222,7 +277,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
                     >
                       <div className="min-w-0 flex-1 truncate">
                         {item.name}{" "}
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs font-medium text-foreground">
                           ₱{item.sellingPrice.toFixed(2)}
                         </span>
                       </div>
@@ -296,6 +351,19 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
               </SelectContent>
             </Select>
           </div>
+
+          {paymentMethod === "gcash" && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="gcashReference">GCash reference number</Label>
+              <Input
+                id="gcashReference"
+                value={gcashReference}
+                onChange={(e) => setGcashReference(e.target.value)}
+                placeholder="e.g. 1234 567 890123"
+                disabled={submitting}
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">

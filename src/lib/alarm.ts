@@ -18,8 +18,27 @@ function getAudioContext(): AudioContext | null {
  * Browsers block audio until the page has seen at least one user gesture.
  * Call this from a click/keydown handler as early as possible so the
  * AudioContext is already unlocked by the time a real alarm needs to fire.
+ *
+ * On WebKit (Safari, and Chrome/any browser on iOS — Apple requires all iOS
+ * browsers to use WebKit under the hood) just resuming the context isn't
+ * always enough to unlock it for sounds triggered later, asynchronously
+ * (e.g. from a Firestore listener) — the audio session only fully unlocks
+ * once a real sound node has actually started playing inside the gesture.
+ * So this schedules one, at a gain low enough to be inaudible.
  */
 export function primeAlarmAudio() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  beep(ctx, 440, ctx.currentTime, 0.05, 0.0001);
+}
+
+/**
+ * Re-attempts resuming a previously-unlocked context after the tab/screen
+ * comes back from being backgrounded — iOS suspends the AudioContext when
+ * the screen locks or the browser goes to the background, and won't resume
+ * it on its own even once the app is visible again.
+ */
+export function resumeAlarmAudio() {
   getAudioContext();
 }
 

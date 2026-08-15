@@ -52,8 +52,8 @@ export function RoomDetailDialog({
 
   const elapsed = hoursElapsed(booking.checkInTime, now);
   const remaining = booking.hoursBooked - elapsed;
-  const isOverdue = remaining <= 0;
-  const isRunningLow = !isOverdue && remaining <= 0.5;
+  const isOverdue = !booking.openEnded && remaining <= 0;
+  const isRunningLow = !booking.openEnded && !isOverdue && remaining <= 0.5;
   const balance = Math.max(booking.totalAmount - booking.amountPaid, 0);
   const canRemoveOrderItems = appUser?.role === "owner";
 
@@ -99,16 +99,20 @@ export function RoomDetailDialog({
           <div className="flex flex-col gap-4">
             <div
               className={
-                isOverdue
-                  ? "rounded-lg bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-600 dark:text-rose-400"
-                  : isRunningLow
-                    ? "rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-600 dark:text-amber-400"
-                    : "rounded-lg bg-muted px-3 py-2 text-sm font-medium"
+                booking.openEnded
+                  ? "rounded-lg bg-sky-500/10 px-3 py-2 text-sm font-medium text-sky-600 dark:text-sky-400"
+                  : isOverdue
+                    ? "rounded-lg bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-600 dark:text-rose-400"
+                    : isRunningLow
+                      ? "rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-600 dark:text-amber-400"
+                      : "rounded-lg bg-muted px-3 py-2 text-sm font-medium"
               }
             >
-              {isOverdue
-                ? `Overdue by ${formatHours(-remaining)}`
-                : `${formatHours(remaining)} remaining`}
+              {booking.openEnded
+                ? `Open time — ${formatHours(elapsed)} so far`
+                : isOverdue
+                  ? `Overdue by ${formatHours(-remaining)}`
+                  : `${formatHours(remaining)} remaining`}
               {isRunningLow && !isOverdue && " — less than 30 minutes left"}
             </div>
 
@@ -126,7 +130,7 @@ export function RoomDetailDialog({
                 </>
               )}
               <dt className="text-muted-foreground">Booked hours</dt>
-              <dd>{booking.hoursBooked}h</dd>
+              <dd>{booking.openEnded ? "Open time" : `${booking.hoursBooked}h`}</dd>
               {booking.specialRequests && (
                 <>
                   <dt className="text-muted-foreground">Requests</dt>
@@ -192,6 +196,12 @@ export function RoomDetailDialog({
                 <span>Paid ({PAYMENT_METHOD_LABELS[booking.paymentMethod]})</span>
                 <span>₱{booking.amountPaid.toFixed(2)}</span>
               </div>
+              {booking.paymentMethod === "gcash" && booking.gcashReference && (
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span>GCash Ref</span>
+                  <span>{booking.gcashReference}</span>
+                </div>
+              )}
               {balance > 0 && (
                 <div className="flex items-center justify-between text-amber-600 dark:text-amber-400">
                   <span>Balance</span>

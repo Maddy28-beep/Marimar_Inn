@@ -10,10 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { PrinterStatus } from "@/components/printer-status";
 import { subscribeToActiveBookings } from "@/lib/bookings";
 import { subscribeToRooms } from "@/lib/rooms";
 import { syncCheckoutReminder } from "@/lib/notifications";
-import { primeAlarmAudio } from "@/lib/alarm";
+import { primeAlarmAudio, resumeAlarmAudio } from "@/lib/alarm";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useCheckoutAlarm } from "@/hooks/use-checkout-alarm";
 import type { Booking, Room } from "@/lib/types";
@@ -72,19 +73,33 @@ function AppShell({ children }: { children: React.ReactNode }) {
   useCheckoutAlarm();
 
   // Browsers block audio until the page has seen a user gesture — unlock the
-  // alarm's AudioContext on the first click/keypress so it's ready by the
-  // time a real checkout alarm needs to fire, not silently blocked.
+  // alarm's AudioContext on the first tap/click/keypress so it's ready by
+  // the time a real checkout alarm needs to fire, not silently blocked.
+  // touchstart is listed separately from pointerdown since some mobile
+  // WebKit versions only count the former as a valid unlock gesture.
   useEffect(() => {
     function unlock() {
       primeAlarmAudio();
       window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("touchstart", unlock);
       window.removeEventListener("keydown", unlock);
     }
     window.addEventListener("pointerdown", unlock);
+    window.addEventListener("touchstart", unlock);
     window.addEventListener("keydown", unlock);
+
+    // A locked/backgrounded phone or tablet suspends the AudioContext, and
+    // iOS won't resume it on its own once the app is visible again.
+    function handleVisibility() {
+      if (document.visibilityState === "visible") resumeAlarmAudio();
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+
     return () => {
       window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("touchstart", unlock);
       window.removeEventListener("keydown", unlock);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 
@@ -127,6 +142,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="hidden items-center gap-3 md:flex">
+          <PrinterStatus />
           <NotificationBell />
           <span className="text-sm text-muted-foreground">
             {appUser?.displayName ?? appUser?.email}
@@ -139,6 +155,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="flex items-center gap-1 md:hidden">
+          <PrinterStatus />
           <NotificationBell />
           <Button variant="ghost" size="icon" onClick={() => setMenuOpen(true)}>
             <MenuIcon className="size-5" />
