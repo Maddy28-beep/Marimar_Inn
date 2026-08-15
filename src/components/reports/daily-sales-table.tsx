@@ -128,7 +128,14 @@ export function DailySalesTable({ report }: { report: DailySalesReport }) {
         </div>
       </div>
 
-      <div className="mt-6 hidden grid-cols-3 gap-8 pt-10 text-xs print:grid">
+      <div className="flex items-center justify-between rounded-lg border-2 border-foreground/20 bg-muted p-4">
+        <span className="text-base font-semibold">Overall Sale</span>
+        <span className="text-2xl font-bold">
+          {peso(totals.totalRoomAmount + totals.totalStoreAmount)}
+        </span>
+      </div>
+
+      <div className="mt-6 grid grid-cols-3 gap-8 pt-10 text-xs">
         <div className="border-t pt-1 text-center">Prepared by</div>
         <div className="border-t pt-1 text-center">Checked by</div>
         <div className="border-t pt-1 text-center">Noted by</div>
