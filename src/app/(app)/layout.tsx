@@ -13,7 +13,9 @@ import { NotificationBell } from "@/components/notifications/notification-bell";
 import { subscribeToActiveBookings } from "@/lib/bookings";
 import { subscribeToRooms } from "@/lib/rooms";
 import { syncCheckoutReminder } from "@/lib/notifications";
+import { primeAlarmAudio } from "@/lib/alarm";
 import { useNowTick } from "@/hooks/use-now-tick";
+import { useCheckoutAlarm } from "@/hooks/use-checkout-alarm";
 import type { Booking, Room } from "@/lib/types";
 import {
   BarChart3Icon,
@@ -67,6 +69,24 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   useCheckoutReminderScanner();
+  useCheckoutAlarm();
+
+  // Browsers block audio until the page has seen a user gesture — unlock the
+  // alarm's AudioContext on the first click/keypress so it's ready by the
+  // time a real checkout alarm needs to fire, not silently blocked.
+  useEffect(() => {
+    function unlock() {
+      primeAlarmAudio();
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    }
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
 
   async function handleSignOut() {
     await signOut();
