@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BrandLogo } from "@/components/brand-logo";
+import { BrandMark } from "@/components/brand-mark";
 import { Loader2Icon, TriangleAlertIcon } from "lucide-react";
 
 function firebaseAuthErrorMessage(error: unknown): string {
@@ -55,23 +56,27 @@ export default function LoginPage() {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       <div className="relative hidden overflow-hidden bg-[#0f3d3e] lg:flex lg:flex-col lg:items-center lg:justify-center">
-        <div className="pointer-events-none absolute -top-24 -left-16 size-80 rounded-full bg-[#9d2a6a]/25 blur-3xl" />
-        <div className="pointer-events-none absolute right-0 bottom-0 size-96 rounded-full bg-[#1a6b6d]/50 blur-3xl" />
+        {/* Soft glows echo the plaque's own magenta/teal, positioned as if
+            radiating from the mark itself rather than dropped in the corners. */}
+        <div className="pointer-events-none absolute top-1/2 left-1/2 size-[26rem] -translate-x-[62%] -translate-y-[70%] rounded-full bg-[#9d2a6a]/20 blur-[100px]" />
+        <div className="pointer-events-none absolute top-1/2 left-1/2 size-[26rem] -translate-x-[38%] -translate-y-[30%] rounded-full bg-[#1a6b6d]/30 blur-[100px]" />
+
         <div className="relative flex flex-col items-center px-10 text-center">
-          <BrandLogo
-            className="h-44 w-auto rounded-sm shadow-[0_24px_60px_rgba(0,0,0,0.35)]"
-            priority
-          />
-          <p className="mt-8 text-sm tracking-[0.22em] text-teal-100/80 uppercase">
-            Front desk
-          </p>
+          <div className="rounded-lg bg-[#0f3d3e] p-2 shadow-[0_20px_45px_-15px_rgba(0,0,0,0.55)] ring-1 ring-white/10">
+            <BrandLogo className="h-40 w-auto rounded-[3px]" priority />
+          </div>
+          <div className="mt-7 flex items-center gap-3 text-teal-100/70">
+            <span className="h-px w-8 bg-teal-100/30" />
+            <p className="text-xs tracking-[0.28em] uppercase">Front desk</p>
+            <span className="h-px w-8 bg-teal-100/30" />
+          </div>
         </div>
       </div>
 
       <div className="flex flex-col items-center justify-center bg-[#f6f1ea] px-6 py-12">
         <div className="w-full max-w-[400px]">
           <div className="mb-8 flex flex-col items-center text-center lg:mb-10 lg:items-start lg:text-left">
-            <BrandLogo className="mb-6 h-24 w-auto rounded-sm shadow-md lg:hidden" priority />
+            <BrandMark className="mb-6 lg:hidden" textClassName="text-xl" />
             <h1 className="font-heading text-2xl font-semibold tracking-tight text-[#1f2a2a]">
               Welcome back
             </h1>

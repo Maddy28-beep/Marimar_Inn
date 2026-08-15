@@ -18,8 +18,8 @@ export const metadata: Metadata = {
   title: "Marimar Inn",
   description: "Marimar Inn property management system",
   icons: {
-    icon: "/logo/logo.png",
-    apple: "/logo/logo.png",
+    icon: "/logo/icon.png",
+    apple: "/logo/icon.png",
   },
 };
 

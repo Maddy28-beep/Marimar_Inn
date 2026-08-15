@@ -3,28 +3,46 @@
 import { cn } from "@/lib/utils";
 import { ROOM_TYPE_LABELS, type Booking, type Room, type RoomStatus } from "@/lib/types";
 import { hoursElapsed } from "@/lib/bookings";
-import { UserIcon } from "lucide-react";
+import {
+  BedDoubleIcon,
+  DoorClosedIcon,
+  SparklesIcon,
+  UserIcon,
+  WrenchIcon,
+  type LucideIcon,
+} from "lucide-react";
 
-const STATUS_STYLES: Record<RoomStatus, { label: string; card: string; dot: string }> = {
+const STATUS_STYLES: Record<
+  RoomStatus,
+  { label: string; card: string; dot: string; icon: LucideIcon; iconTint: string }
+> = {
   available: {
     label: "Available",
     card: "border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/15",
     dot: "bg-emerald-500",
+    icon: BedDoubleIcon,
+    iconTint: "text-emerald-600/70 dark:text-emerald-400/60",
   },
   occupied: {
     label: "Occupied",
     card: "border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/15",
     dot: "bg-rose-500",
+    icon: DoorClosedIcon,
+    iconTint: "text-rose-600/70 dark:text-rose-400/60",
   },
   cleaning: {
     label: "Cleaning",
     card: "border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/15",
     dot: "bg-amber-500",
+    icon: SparklesIcon,
+    iconTint: "text-amber-600/70 dark:text-amber-400/60",
   },
   maintenance: {
     label: "Maintenance",
     card: "border-muted-foreground/30 bg-muted hover:bg-muted/80",
     dot: "bg-muted-foreground",
+    icon: WrenchIcon,
+    iconTint: "text-muted-foreground/70",
   },
 };
 
@@ -60,15 +78,26 @@ export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
       onClick={onClick}
       className={cn(
         // Fixed height so occupied cards (guest + countdown + balance) match empty ones.
-        "flex h-36 w-full flex-col gap-0.5 overflow-hidden rounded-xl border p-2.5 text-left transition-colors",
+        "relative flex h-36 w-full flex-col gap-0.5 overflow-hidden rounded-xl border p-2.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
         style.card
       )}
     >
+      {!booking && (
+        <style.icon
+          className={cn(
+            "pointer-events-none absolute -right-3 -bottom-3 size-20 rotate-[-8deg] opacity-[0.12]",
+            style.iconTint
+          )}
+          strokeWidth={1.5}
+        />
+      )}
+
       <div className="flex items-start justify-between gap-2">
         <span className="font-heading text-xl leading-none font-semibold">{room.roomNumber}</span>
         <span className={cn("mt-1 size-2.5 shrink-0 rounded-full", style.dot)} />
       </div>
-      <div className="text-xs text-muted-foreground">
+      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <style.icon className={cn("size-3 shrink-0", style.iconTint)} strokeWidth={2} />
         {ROOM_TYPE_LABELS[room.type]} · {style.label}
       </div>
 
