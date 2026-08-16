@@ -117,6 +117,11 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
 
   async function handleExport() {
     if (!report) return;
+    // The sheet's subtitle already carries the date, so cells only need the
+    // time — the full toLocaleString() (date + time + seconds) is too long
+    // for a readable column width and gets visually clipped by Excel/Sheets.
+    const time = (d: Date | null) =>
+      d ? d.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" }) : "";
     await exportToExcel(`marimar-inn-daily-${dateValue}`, [
       {
         name: "Daily Sales Report",
@@ -144,12 +149,12 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                 room: row.roomNumber,
                 ref: row.refNumber,
                 hrs: row.packageHours,
-                checkIn: row.checkInTime.toLocaleString("en-PH"),
-                schedOut: row.scheduledCheckOutTime.toLocaleString("en-PH"),
+                checkIn: time(row.checkInTime),
+                schedOut: time(row.scheduledCheckOutTime),
                 amount: row.packageAmount,
                 extHrs: row.extensionHours || "",
                 extAmt: row.extensionAmount || "",
-                actualOut: row.actualCheckOutTime ? row.actualCheckOutTime.toLocaleString("en-PH") : "",
+                actualOut: time(row.actualCheckOutTime),
                 roomTotal: row.totalRoomAmount,
                 storeTotal: row.totalStoreAmount,
                 paid: row.totalPaid,
