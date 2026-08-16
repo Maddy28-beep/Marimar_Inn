@@ -21,6 +21,7 @@ import { useCheckoutAlarm } from "@/hooks/use-checkout-alarm";
 import type { Booking, Room } from "@/lib/types";
 import {
   BarChart3Icon,
+  Loader2Icon,
   LogOutIcon,
   MenuIcon,
   PackageIcon,
@@ -82,6 +83,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   useCheckoutReminderScanner();
   useCheckoutAlarm();
 
@@ -117,8 +119,16 @@ function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function handleSignOut() {
-    await signOut();
-    router.replace("/login");
+    // No visible feedback while firebaseSignOut() was in flight made the
+    // button feel unresponsive on slower tablets — it stayed fully
+    // clickable with nothing on screen showing the tap had registered.
+    setSigningOut(true);
+    try {
+      await signOut();
+      router.replace("/login");
+    } finally {
+      setSigningOut(false);
+    }
   }
 
   const visibleLinks = NAV_LINKS.filter(
@@ -164,8 +174,8 @@ function AppShell({ children }: { children: React.ReactNode }) {
             {appUser?.displayName ?? appUser?.email}
           </span>
           <Separator orientation="vertical" className="h-5" />
-          <Button variant="ghost" size="sm" onClick={handleSignOut}>
-            <LogOutIcon className="size-4" />
+          <Button variant="ghost" size="sm" onClick={handleSignOut} disabled={signingOut}>
+            {signingOut ? <Loader2Icon className="size-4 animate-spin" /> : <LogOutIcon className="size-4" />}
             Sign out
           </Button>
         </div>
@@ -174,6 +184,17 @@ function AppShell({ children }: { children: React.ReactNode }) {
           <PrinterStatus />
           <CashDrawerControl />
           <NotificationBell />
+          {/* Directly tappable, not tucked inside the hamburger menu — a
+              tablet in the sub-md bucket otherwise needs two taps (open
+              the sheet, then find Sign out at its bottom) just to log out. */}
+          <Button variant="ghost" size="icon" onClick={handleSignOut} disabled={signingOut}>
+            {signingOut ? (
+              <Loader2Icon className="size-5 animate-spin" />
+            ) : (
+              <LogOutIcon className="size-5" />
+            )}
+            <span className="sr-only">Sign out</span>
+          </Button>
           <Button variant="ghost" size="icon" onClick={() => setMenuOpen(true)}>
             <MenuIcon className="size-5" />
             <span className="sr-only">Open menu</span>
@@ -218,8 +239,8 @@ function AppShell({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
           <div className="mt-auto border-t p-3">
-            <Button variant="outline" className="w-full" onClick={handleSignOut}>
-              <LogOutIcon className="size-4" />
+            <Button variant="outline" className="w-full" onClick={handleSignOut} disabled={signingOut}>
+              {signingOut ? <Loader2Icon className="size-4 animate-spin" /> : <LogOutIcon className="size-4" />}
               Sign out
             </Button>
           </div>

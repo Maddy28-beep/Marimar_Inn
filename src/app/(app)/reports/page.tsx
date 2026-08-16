@@ -196,16 +196,19 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
               { header: "Room", key: "room", width: 6 },
               { header: "Ref #", key: "ref", width: 10 },
               { header: "Hrs", key: "hrs", width: 5, format: "integer" },
-              { header: "Check-in", key: "checkIn", width: 14 },
-              { header: "Checkout", key: "schedOut", width: 14 },
+              { header: "Check-in", key: "checkIn", width: 10 },
+              { header: "Checkout", key: "schedOut", width: 10 },
               { header: "Amount", key: "amount", width: 12, format: "currency" },
               { header: "Ext hrs", key: "extHrs", width: 9, format: "integer" },
               { header: "Ext amt", key: "extAmt", width: 12, format: "currency" },
-              { header: "Actual out", key: "actualOut", width: 14 },
+              { header: "Actual out", key: "actualOut", width: 10 },
               { header: "Room total", key: "roomTotal", width: 14, format: "currency" },
               { header: "Store total", key: "storeTotal", width: 14, format: "currency" },
               { header: "Paid", key: "paid", width: 12, format: "currency" },
-              { header: "Payment", key: "payment", width: 22 },
+              // Split-payment rows print e.g. "Cash ₱150.00 + GCash ₱170.00
+              // (1234 567 890123)" — up to ~52 chars with a full GCash
+              // reference, so this needs real room, not the old 22.
+              { header: "Payment", key: "payment", width: 55 },
             ],
             rows: [
               ...(salesReport?.rows ?? []).map((row) => ({

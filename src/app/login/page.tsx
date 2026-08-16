@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useAuth } from "@/context/auth-context";
@@ -34,11 +34,23 @@ function firebaseAuthErrorMessage(error: unknown): string {
 }
 
 export default function LoginPage() {
-  const { signIn } = useAuth();
+  const { signIn, user, appUser, loading } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Redirect once AuthContext has actually caught up with the signed-in
+  // user, rather than right after signIn()'s promise resolves — Firebase's
+  // onAuthStateChanged listener can fire a beat later than that promise, so
+  // navigating immediately raced ahead of it: ProtectedRoute would still see
+  // a stale null user, bounce straight back to /login, and only the second
+  // login attempt (with the session already cached) would actually work.
+  useEffect(() => {
+    if (!loading && user && appUser) {
+      router.replace("/dashboard");
+    }
+  }, [loading, user, appUser, router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -50,10 +62,11 @@ export default function LoginPage() {
 
     try {
       await signIn(email, password);
-      router.replace("/dashboard");
+      // No manual redirect here — the effect above takes over once
+      // appUser is actually populated, and submitting stays true (keeping
+      // the button disabled) until that navigation actually happens.
     } catch (error) {
       toast.error(firebaseAuthErrorMessage(error));
-    } finally {
       setSubmitting(false);
     }
   }
