@@ -22,10 +22,6 @@ export interface ExportSheet {
 }
 
 const TEAL = "FF0F3D3E";
-const TEAL_SOFT = "FF1A5C5E";
-const CREAM = "FFF6F1EA";
-const CREAM_ALT = "FFEEE7DC";
-const WHITE = "FFFFFFFF";
 const GRID = "FFD4C9B8";
 
 const THIN = { style: "thin" as const, color: { argb: GRID } };
@@ -49,7 +45,7 @@ function cellFormat(
 }
 
 function applyNumberFormat(cell: { numFmt?: string; alignment?: object }, format: ColumnFormat) {
-  cell.alignment = { vertical: "middle", horizontal: "right" };
+  cell.alignment = { vertical: "middle", horizontal: "center" };
   if (format === "currency") cell.numFmt = pesoFormat();
   else if (format === "integer") cell.numFmt = "#,##0";
   else if (format === "percent") cell.numFmt = '0.0"%"';
@@ -70,7 +66,8 @@ export async function exportToExcel(filename: string, sheets: ExportSheet[]) {
     const worksheet = workbook.addWorksheet(sheet.name, {
       views: [{ showGridLines: false }],
       pageSetup: {
-        paperSize: 9,
+        // No paperSize = ExcelJS's own default, Letter (8.5x11 — "short"
+        // bond paper), not A4 or "long"/legal.
         orientation: "landscape",
         fitToPage: true,
         fitToWidth: 1,
@@ -87,16 +84,14 @@ export async function exportToExcel(filename: string, sheets: ExportSheet[]) {
     worksheet.mergeCells(1, 1, 1, colCount);
     const brand = worksheet.getCell(1, 1);
     brand.value = "Marimar Inn";
-    brand.font = { name: "Calibri", size: 20, bold: true, color: { argb: WHITE } };
-    brand.fill = { type: "pattern", pattern: "solid", fgColor: { argb: TEAL } };
+    brand.font = { name: "Calibri", size: 20, bold: true, color: { argb: TEAL } };
     brand.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
     worksheet.getRow(1).height = 32;
 
     worksheet.mergeCells(2, 1, 2, colCount);
     const title = worksheet.getCell(2, 1);
     title.value = sheet.title;
-    title.font = { name: "Calibri", size: 13, bold: true, color: { argb: WHITE } };
-    title.fill = { type: "pattern", pattern: "solid", fgColor: { argb: TEAL_SOFT } };
+    title.font = { name: "Calibri", size: 13, bold: true, color: { argb: TEAL } };
     title.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
     worksheet.getRow(2).height = 22;
 
@@ -106,7 +101,6 @@ export async function exportToExcel(filename: string, sheets: ExportSheet[]) {
       ? `${sheet.subtitle}  ·  Generated ${new Date().toLocaleString("en-PH")}`
       : `Generated ${new Date().toLocaleString("en-PH")}`;
     generated.font = { name: "Calibri", size: 10, italic: true, color: { argb: TEAL } };
-    generated.fill = { type: "pattern", pattern: "solid", fgColor: { argb: CREAM } };
     generated.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
     worksheet.getRow(3).height = 18;
 
@@ -133,9 +127,8 @@ export async function exportToExcel(filename: string, sheets: ExportSheet[]) {
       table.columns.forEach((column, index) => {
         const cell = headerRow.getCell(index + 1);
         cell.value = column.header;
-        cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: WHITE } };
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: TEAL } };
-        cell.alignment = { vertical: "middle", horizontal: "left" };
+        cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: TEAL } };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
         cell.border = BORDER;
       });
       headerRow.height = 20;
@@ -146,7 +139,6 @@ export async function exportToExcel(filename: string, sheets: ExportSheet[]) {
         const empty = worksheet.getCell(rowNumber, 1);
         empty.value = "No data for this period.";
         empty.font = { name: "Calibri", size: 11, italic: true, color: { argb: "FF6B7280" } };
-        empty.fill = { type: "pattern", pattern: "solid", fgColor: { argb: CREAM } };
         rowNumber += 2;
         continue;
       }
@@ -155,28 +147,20 @@ export async function exportToExcel(filename: string, sheets: ExportSheet[]) {
         const excelRow = worksheet.getRow(rowNumber);
         const emphasize =
           table.emphasizeLastRow && rowIndex === table.rows.length - 1;
-        const fillColor = emphasize ? TEAL : rowIndex % 2 === 0 ? CREAM : CREAM_ALT;
-        const fontColor = emphasize ? WHITE : TEAL;
 
         table.columns.forEach((column, colIndex) => {
           const cell = excelRow.getCell(colIndex + 1);
           const value = row[column.key];
           cell.value = (value ?? "") as string | number | Date;
-          cell.font = {
-            name: "Calibri",
-            size: 11,
-            bold: emphasize,
-            color: { argb: emphasize && column.key === "value" ? "FFFFE7C2" : fontColor },
-          };
-          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fillColor } };
+          cell.font = { name: "Calibri", size: 11, bold: emphasize, color: { argb: TEAL } };
           cell.border = BORDER;
-          cell.alignment = { vertical: "middle", horizontal: "left" };
+          cell.alignment = { vertical: "middle", horizontal: "center" };
 
           const resolved = cellFormat(column.format, row, value);
           if (typeof value === "number") {
             applyNumberFormat(cell, resolved);
             if (emphasize && resolved === "currency") {
-              cell.font = { name: "Calibri", size: 12, bold: true, color: { argb: WHITE } };
+              cell.font = { name: "Calibri", size: 12, bold: true, color: { argb: TEAL } };
             }
           }
         });

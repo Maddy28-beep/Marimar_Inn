@@ -130,9 +130,9 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
         tables: [
           {
             columns: [
-              { header: "Room", key: "room", width: 8 },
-              { header: "Ref #", key: "ref", width: 12 },
-              { header: "Hrs", key: "hrs", width: 6, format: "integer" },
+              { header: "Room", key: "room", width: 6 },
+              { header: "Ref #", key: "ref", width: 10 },
+              { header: "Hrs", key: "hrs", width: 5, format: "integer" },
               { header: "Check-in", key: "checkIn", width: 14 },
               { header: "Checkout", key: "schedOut", width: 14 },
               { header: "Amount", key: "amount", width: 12, format: "currency" },
