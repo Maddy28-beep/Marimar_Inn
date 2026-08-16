@@ -139,9 +139,9 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
         name: "Daily Sales Report",
         title: "Daily Sales Report",
         subtitle: formatReportDate(dateValue),
-        dutyInfo: `Front desk: ${frontDesk.trim() || "______________"}     Housekeeping: ${
-          housekeeping.trim() || "______________"
-        }     Time: ${dutyTime ? formatDutyTime(dutyTime) : "________"}`,
+        dutyInfo: `Front desk: ${frontDesk.trim() || "____________________________"}        Housekeeping: ${
+          housekeeping.trim() || "____________________________"
+        }        Time: ${dutyTime ? formatDutyTime(dutyTime) : "______________"}`,
         tables: [
           {
             columns: [
@@ -233,13 +233,6 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                 },
               ]
             : []),
-        ],
-      },
-      {
-        name: "Summary",
-        title: "Daily Report",
-        subtitle: formatReportDate(dateValue),
-        tables: [
           {
             heading: "Summary",
             columns: [

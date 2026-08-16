@@ -185,6 +185,25 @@ export async function exportToExcel(filename: string, sheets: ExportSheet[]) {
     }
 
     worksheet.headerFooter.oddFooter = "&LMarimar Inn — Confidential&C&P of &N&RFront desk report";
+
+    // Locks every cell (the default) so the generated report can't be edited
+    // after the fact — Owner still needs to be able to spot a report that's
+    // been tampered with. Like the drawer PIN, this is a deterrent against
+    // casual edits, not real security: Excel protection can be stripped by
+    // anyone who goes looking for how.
+    await worksheet.protect("marimar-inn-report", {
+      selectLockedCells: true,
+      selectUnlockedCells: true,
+      formatCells: false,
+      formatColumns: false,
+      formatRows: false,
+      insertRows: false,
+      insertColumns: false,
+      deleteRows: false,
+      deleteColumns: false,
+      sort: false,
+      autoFilter: false,
+    });
   }
 
   const buffer = await workbook.xlsx.writeBuffer();

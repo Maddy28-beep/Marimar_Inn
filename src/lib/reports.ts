@@ -104,6 +104,11 @@ export interface DailyReport {
 }
 
 export function computeDailyReport(checkedInToday: Booking[], checkOutsToday: number): DailyReport {
+  // A voided booking never happened as a sale — it must never inflate
+  // check-in counts, revenue, or item tallies just because a room was
+  // briefly assigned to it before the front desk cancelled it.
+  checkedInToday = checkedInToday.filter((b) => b.status !== "voided");
+
   // Bookings created before Phase 3 predate totalFbCharge/items — treat
   // missing numeric fields as 0 rather than letting `undefined` poison the
   // sum into NaN.
@@ -164,7 +169,7 @@ export interface DailySalesReport {
  */
 export function computeDailySalesReport(bookings: Booking[]): DailySalesReport {
   const rows: DailySalesRow[] = bookings
-    .slice()
+    .filter((b) => b.status !== "voided")
     .sort((a, b) => a.checkInTime.toMillis() - b.checkInTime.toMillis())
     .map((booking) => {
       const packageHours = booking.originalPackageHours ?? booking.hoursBooked;
@@ -296,6 +301,8 @@ export function computeMonthlyReport(
   rooms: Room[],
   monthDate: Date
 ): MonthlyReport {
+  bookings = bookings.filter((b) => b.status !== "voided");
+
   const roomTypeById = new Map(rooms.map((r) => [r.roomId, r.type]));
   const numDays = daysInMonth(monthDate);
 
