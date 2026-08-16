@@ -44,6 +44,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RevenueChart } from "@/components/reports/revenue-chart";
@@ -57,6 +64,33 @@ function todayInputValue(): string {
 function thisMonthInputValue(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+type ShiftFilter = "fullDay" | "day" | "night";
+
+const SHIFT_LABELS: Record<ShiftFilter, string> = {
+  fullDay: "Full day",
+  day: "Day shift (7 AM–7 PM)",
+  night: "Night shift (7 PM–7 AM)",
+};
+
+/**
+ * Cashiers work two 12h shifts that don't line up with midnight: day is
+ * 7am-7pm, night is 7pm-7am and crosses into the next calendar date. The
+ * boundary is a half-open interval — a payment at 6:59:59am belongs to the
+ * night shift that's still running, one at exactly 7:00:00am belongs to the
+ * day shift that just started — so shifts never overlap or leave a gap.
+ * `dateValue` is always the calendar date the shift *starts* on.
+ */
+function shiftRange(dateValue: string, shift: ShiftFilter): [Date, Date] {
+  const [y, m, d] = dateValue.split("-").map(Number);
+  if (shift === "day") {
+    return [new Date(y, m - 1, d, 7, 0, 0, 0), new Date(y, m - 1, d, 18, 59, 59, 999)];
+  }
+  if (shift === "night") {
+    return [new Date(y, m - 1, d, 19, 0, 0, 0), new Date(y, m - 1, d + 1, 6, 59, 59, 999)];
+  }
+  return [new Date(y, m - 1, d, 0, 0, 0, 0), new Date(y, m - 1, d, 23, 59, 59, 999)];
 }
 
 function peso(amount: number): string {
@@ -91,6 +125,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
 function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   const printer = useReceiptPrinter();
   const [dateValue, setDateValue] = useState(todayInputValue());
+  const [shift, setShift] = useState<ShiftFilter>("fullDay");
   const [report, setReport] = useState<DailyReport | null>(null);
   const [salesReport, setSalesReport] = useState<DailySalesReport | null>(null);
   const [frontDesk, setFrontDesk] = useState("");
@@ -102,11 +137,11 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
     let cancelled = false;
     async function load() {
       setLoading(true);
-      const date = new Date(`${dateValue}T00:00:00`);
+      const [start, end] = shiftRange(dateValue, shift);
       try {
         const [checkedIn, checkedOut] = await Promise.all([
-          fetchBookingsInRange("checkInTime", startOfDay(date), endOfDay(date)),
-          fetchBookingsInRange("checkOutTime", startOfDay(date), endOfDay(date)),
+          fetchBookingsInRange("checkInTime", start, end),
+          fetchBookingsInRange("checkOutTime", start, end),
         ]);
         if (!cancelled) {
           setReport(computeDailyReport(checkedIn, checkedOut.length));
@@ -122,10 +157,13 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
     return () => {
       cancelled = true;
     };
-  }, [dateValue]);
+  }, [dateValue, shift]);
 
   const occupied = rooms?.filter((r) => r.status === "occupied").length ?? 0;
   const totalRooms = rooms?.length ?? 0;
+
+  const reportLabel =
+    shift === "fullDay" ? formatReportDate(dateValue) : `${formatReportDate(dateValue)} — ${SHIFT_LABELS[shift]}`;
 
   async function handleExport() {
     if (!report) return;
@@ -134,11 +172,12 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
     // for a readable column width and gets visually clipped by Excel/Sheets.
     const time = (d: Date | null) =>
       d ? d.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" }) : "";
-    await exportToExcel(`marimar-inn-daily-${dateValue}`, [
+    const filenameSuffix = shift === "fullDay" ? dateValue : `${dateValue}-${shift}`;
+    await exportToExcel(`marimar-inn-daily-${filenameSuffix}`, [
       {
         name: "Daily Sales Report",
         title: "Daily Sales Report",
-        subtitle: formatReportDate(dateValue),
+        subtitle: reportLabel,
         dutyInfo: `Front desk: ${frontDesk.trim() || "____________________________"}        Housekeeping: ${
           housekeeping.trim() || "____________________________"
         }        Time: ${dutyTime ? formatDutyTime(dutyTime) : "______________"}`,
@@ -201,23 +240,41 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
           },
           ...(salesReport
             ? [
-                {
-                  heading: "Payment breakdown",
-                  columns: [
-                    { header: "Metric", key: "metric", width: 24 },
-                    { header: "Value", key: "value", width: 22, format: "currency" as const },
-                  ],
-                  rows: [
-                    { metric: "Cash collected", value: salesReport.totals.cashCollected },
-                    { metric: "GCash collected", value: salesReport.totals.gcashCollected },
-                    { metric: "Total collected", value: salesReport.totals.totalPaid },
-                    {
-                      metric: "Overall Sale",
-                      value: salesReport.totals.totalRoomAmount + salesReport.totals.totalStoreAmount,
-                    },
-                  ],
-                  emphasizeLastRow: true,
-                },
+                [
+                  {
+                    heading: "Payment breakdown",
+                    columns: [
+                      { header: "Metric", key: "metric", width: 24 },
+                      { header: "Value", key: "value", width: 22, format: "currency" as const },
+                    ],
+                    rows: [
+                      { metric: "Cash collected", value: salesReport.totals.cashCollected },
+                      { metric: "GCash collected", value: salesReport.totals.gcashCollected },
+                      { metric: "Total collected", value: salesReport.totals.totalPaid },
+                      {
+                        metric: "Overall Sale",
+                        value: salesReport.totals.totalRoomAmount + salesReport.totals.totalStoreAmount,
+                      },
+                    ],
+                    emphasizeLastRow: true,
+                  },
+                  {
+                    heading: "Summary",
+                    columns: [
+                      { header: "Metric", key: "metric", width: 28 },
+                      { header: "Value", key: "value", width: 22, format: "auto" as const },
+                    ],
+                    rows: [
+                      { metric: "Date", value: reportLabel },
+                      { metric: "Check-ins", value: report.checkIns },
+                      { metric: "Check-outs", value: report.checkOuts },
+                      { metric: "Room revenue", value: report.roomRevenue },
+                      { metric: "Store items revenue", value: report.fbRevenue },
+                      { metric: "Total revenue", value: report.totalRevenue },
+                    ],
+                    emphasizeLastRow: true,
+                  },
+                ],
                 {
                   heading: "Signatures",
                   columns: [
@@ -233,35 +290,6 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                 },
               ]
             : []),
-          {
-            heading: "Summary",
-            columns: [
-              { header: "Metric", key: "metric", width: 28 },
-              { header: "Value", key: "value", width: 22, format: "auto" },
-            ],
-            rows: [
-              { metric: "Date", value: formatReportDate(dateValue) },
-              { metric: "Check-ins", value: report.checkIns },
-              { metric: "Check-outs", value: report.checkOuts },
-              { metric: "Room revenue", value: report.roomRevenue },
-              { metric: "Store items revenue", value: report.fbRevenue },
-              { metric: "Total revenue", value: report.totalRevenue },
-            ],
-            emphasizeLastRow: true,
-          },
-          {
-            heading: "Most ordered items",
-            columns: [
-              { header: "Item", key: "name", width: 28 },
-              { header: "Quantity", key: "quantity", width: 14, format: "integer" },
-              { header: "Revenue", key: "revenue", width: 18, format: "currency" },
-            ],
-            rows: report.mostOrderedItems.map((item) => ({
-              name: item.name,
-              quantity: item.quantity,
-              revenue: item.revenue,
-            })),
-          },
         ],
       },
     ]);
@@ -274,11 +302,12 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
         // A short format ("Aug 16, 2026") on purpose — the full weekday
         // format used elsewhere can run to 30 characters, right at the edge
         // of 58mm (32-char) paper.
-        dateLabel: new Date(`${dateValue}T00:00:00`).toLocaleDateString("en-PH", {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        }),
+        dateLabel:
+          new Date(`${dateValue}T00:00:00`).toLocaleDateString("en-PH", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          }) + (shift !== "fullDay" ? ` (${shift === "day" ? "Day" : "Night"})` : ""),
         frontDesk: frontDesk.trim() || undefined,
         housekeeping: housekeeping.trim() || undefined,
         dutyTime: dutyTime ? formatDutyTime(dutyTime) : undefined,
@@ -311,6 +340,16 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             onChange={(e) => setDateValue(e.target.value)}
             className="w-44"
           />
+          <Select value={shift} onValueChange={(v) => setShift(v as ShiftFilter)}>
+            <SelectTrigger className="w-48">
+              <SelectValue>{SHIFT_LABELS[shift]}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="fullDay">Full day</SelectItem>
+              <SelectItem value="day">Day shift (7 AM–7 PM)</SelectItem>
+              <SelectItem value="night">Night shift (7 PM–7 AM)</SelectItem>
+            </SelectContent>
+          </Select>
           <Input
             placeholder="Front desk"
             value={frontDesk}
@@ -374,7 +413,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             <div className="font-heading text-lg font-semibold">Marimar Inn - Davao</div>
             <div className="text-sm">Daily Sales Report</div>
             <div className="mt-1 flex justify-center gap-6 text-xs text-muted-foreground">
-              <span>Date: {formatReportDate(dateValue)}</span>
+              <span>Date: {reportLabel}</span>
               {frontDesk && <span>Front desk: {frontDesk}</span>}
               {housekeeping && <span>Housekeeping: {housekeeping}</span>}
               {dutyTime && <span>Time: {formatDutyTime(dutyTime)}</span>}

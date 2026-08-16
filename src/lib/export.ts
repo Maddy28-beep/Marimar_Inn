@@ -1,3 +1,5 @@
+import type { Worksheet } from "exceljs";
+
 export type ColumnFormat = "text" | "integer" | "currency" | "percent" | "auto";
 
 export interface ExportColumn {
@@ -21,7 +23,11 @@ export interface ExportSheet {
   /** e.g. "Front desk: ___   Housekeeping: ___   Time: ___" — a blank line
    * for whoever's on duty to fill in, matching the paper form this replaced. */
   dutyInfo?: string;
-  tables: ExportTable[];
+  /**
+   * Rendered top to bottom. A nested array places its tables side by side
+   * (same starting row, one after another in columns) instead of stacked.
+   */
+  tables: (ExportTable | ExportTable[])[];
 }
 
 const TEAL = "FF0F3D3E";
@@ -54,6 +60,81 @@ function applyNumberFormat(cell: { numFmt?: string; alignment?: object }, format
   else if (format === "percent") cell.numFmt = '0.0"%"';
 }
 
+/** How many columns an entry occupies — a side-by-side group is the sum of
+ * its tables' widths plus a one-column gap between each. */
+function entryWidth(entry: ExportTable | ExportTable[]): number {
+  if (!Array.isArray(entry)) return entry.columns.length;
+  return entry.reduce((sum, t) => sum + t.columns.length, 0) + Math.max(0, entry.length - 1);
+}
+
+/** Renders one table starting at (startRow, startCol) and returns the next
+ * free row below it (including its trailing blank-row gap). */
+function renderTable(worksheet: Worksheet, table: ExportTable, startRow: number, startCol: number): number {
+  let rowNumber = startRow;
+  const lastCol = startCol + table.columns.length - 1;
+
+  const widths = table.columns.map((column) => column.width ?? 16);
+  widths.forEach((width, index) => {
+    const col = worksheet.getColumn(startCol + index);
+    col.width = Math.max(col.width ?? 0, width);
+  });
+
+  if (table.heading) {
+    worksheet.mergeCells(rowNumber, startCol, rowNumber, lastCol);
+    const heading = worksheet.getCell(rowNumber, startCol);
+    heading.value = table.heading;
+    heading.font = { name: "Calibri", size: 12, bold: true, color: { argb: TEAL } };
+    heading.alignment = { vertical: "middle", horizontal: "left" };
+    worksheet.getRow(rowNumber).height = 20;
+    rowNumber += 1;
+  }
+
+  const headerRow = worksheet.getRow(rowNumber);
+  table.columns.forEach((column, index) => {
+    const cell = headerRow.getCell(startCol + index);
+    cell.value = column.header;
+    cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: TEAL } };
+    cell.alignment = { vertical: "middle", horizontal: "center" };
+    cell.border = BORDER;
+  });
+  headerRow.height = 20;
+  rowNumber += 1;
+
+  if (table.rows.length === 0) {
+    worksheet.mergeCells(rowNumber, startCol, rowNumber, lastCol);
+    const empty = worksheet.getCell(rowNumber, startCol);
+    empty.value = "No data for this period.";
+    empty.font = { name: "Calibri", size: 11, italic: true, color: { argb: "FF6B7280" } };
+    return rowNumber + 2;
+  }
+
+  table.rows.forEach((row, rowIndex) => {
+    const excelRow = worksheet.getRow(rowNumber);
+    const emphasize = table.emphasizeLastRow && rowIndex === table.rows.length - 1;
+
+    table.columns.forEach((column, colIndex) => {
+      const cell = excelRow.getCell(startCol + colIndex);
+      const value = row[column.key];
+      cell.value = (value ?? "") as string | number | Date;
+      cell.font = { name: "Calibri", size: 11, bold: emphasize, color: { argb: TEAL } };
+      cell.border = BORDER;
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+
+      const resolved = cellFormat(column.format, row, value);
+      if (typeof value === "number") {
+        applyNumberFormat(cell, resolved);
+        if (emphasize && resolved === "currency") {
+          cell.font = { name: "Calibri", size: 12, bold: true, color: { argb: TEAL } };
+        }
+      }
+    });
+    excelRow.height = emphasize ? 22 : 18;
+    rowNumber += 1;
+  });
+
+  return rowNumber + 1;
+}
+
 /**
  * Dynamically imported — ExcelJS is a fairly large library only needed when
  * an Owner actually clicks "Export," so it shouldn't bloat the initial
@@ -79,10 +160,7 @@ export async function exportToExcel(filename: string, sheets: ExportSheet[]) {
       },
     });
 
-    const colCount = Math.max(
-      2,
-      ...sheet.tables.map((table) => table.columns.length)
-    );
+    const colCount = Math.max(2, ...sheet.tables.map(entryWidth));
 
     worksheet.mergeCells(1, 1, 1, colCount);
     const brand = worksheet.getCell(1, 1);
@@ -119,69 +197,18 @@ export async function exportToExcel(filename: string, sheets: ExportSheet[]) {
       rowNumber = 6;
     }
 
-    for (const table of sheet.tables) {
-      const widths = table.columns.map((column) => column.width ?? 16);
-      widths.forEach((width, index) => {
-        const col = worksheet.getColumn(index + 1);
-        col.width = Math.max(col.width ?? 0, width);
-      });
-
-      if (table.heading) {
-        worksheet.mergeCells(rowNumber, 1, rowNumber, table.columns.length);
-        const heading = worksheet.getCell(rowNumber, 1);
-        heading.value = table.heading;
-        heading.font = { name: "Calibri", size: 12, bold: true, color: { argb: TEAL } };
-        heading.alignment = { vertical: "middle", horizontal: "left" };
-        worksheet.getRow(rowNumber).height = 20;
-        rowNumber += 1;
+    for (const entry of sheet.tables) {
+      if (Array.isArray(entry)) {
+        let col = 1;
+        let nextRow = rowNumber;
+        for (const table of entry) {
+          nextRow = Math.max(nextRow, renderTable(worksheet, table, rowNumber, col));
+          col += table.columns.length + 1;
+        }
+        rowNumber = nextRow;
+      } else {
+        rowNumber = renderTable(worksheet, entry, rowNumber, 1);
       }
-
-      const headerRow = worksheet.getRow(rowNumber);
-      table.columns.forEach((column, index) => {
-        const cell = headerRow.getCell(index + 1);
-        cell.value = column.header;
-        cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: TEAL } };
-        cell.alignment = { vertical: "middle", horizontal: "center" };
-        cell.border = BORDER;
-      });
-      headerRow.height = 20;
-      rowNumber += 1;
-
-      if (table.rows.length === 0) {
-        worksheet.mergeCells(rowNumber, 1, rowNumber, table.columns.length);
-        const empty = worksheet.getCell(rowNumber, 1);
-        empty.value = "No data for this period.";
-        empty.font = { name: "Calibri", size: 11, italic: true, color: { argb: "FF6B7280" } };
-        rowNumber += 2;
-        continue;
-      }
-
-      table.rows.forEach((row, rowIndex) => {
-        const excelRow = worksheet.getRow(rowNumber);
-        const emphasize =
-          table.emphasizeLastRow && rowIndex === table.rows.length - 1;
-
-        table.columns.forEach((column, colIndex) => {
-          const cell = excelRow.getCell(colIndex + 1);
-          const value = row[column.key];
-          cell.value = (value ?? "") as string | number | Date;
-          cell.font = { name: "Calibri", size: 11, bold: emphasize, color: { argb: TEAL } };
-          cell.border = BORDER;
-          cell.alignment = { vertical: "middle", horizontal: "center" };
-
-          const resolved = cellFormat(column.format, row, value);
-          if (typeof value === "number") {
-            applyNumberFormat(cell, resolved);
-            if (emphasize && resolved === "currency") {
-              cell.font = { name: "Calibri", size: 12, bold: true, color: { argb: TEAL } };
-            }
-          }
-        });
-        excelRow.height = emphasize ? 22 : 18;
-        rowNumber += 1;
-      });
-
-      rowNumber += 1;
     }
 
     worksheet.headerFooter.oddFooter = "&LMarimar Inn — Confidential&C&P of &N&RFront desk report";
