@@ -74,6 +74,15 @@ const SHIFT_LABELS: Record<ShiftFilter, string> = {
   night: "Night shift (7 PM–7 AM)",
 };
 
+// Duty time is locked to the shift's official start — not editable — so a
+// cashier can't write in an earlier or later time than they actually clocked
+// in for. "Full day" isn't a real shift, so it has no fixed start.
+const SHIFT_START_TIME: Record<ShiftFilter, string> = {
+  fullDay: "",
+  day: "07:00",
+  night: "19:00",
+};
+
 /**
  * Cashiers work two 12h shifts that don't line up with midnight: day is
  * 7am-7pm, night is 7pm-7am and crosses into the next calendar date. The
@@ -130,7 +139,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   const [salesReport, setSalesReport] = useState<DailySalesReport | null>(null);
   const [frontDesk, setFrontDesk] = useState("");
   const [housekeeping, setHousekeeping] = useState("");
-  const [dutyTime, setDutyTime] = useState("");
+  const dutyTime = SHIFT_START_TIME[shift];
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -362,13 +371,14 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             onChange={(e) => setHousekeeping(e.target.value)}
             className="w-36"
           />
-          <Input
-            type="time"
-            aria-label="Duty start time"
-            value={dutyTime}
-            onChange={(e) => setDutyTime(e.target.value)}
-            className="w-32"
-          />
+          {shift !== "fullDay" && (
+            <div
+              className="flex h-9 w-32 items-center rounded-md border bg-muted px-3 text-sm text-muted-foreground"
+              title="Locked to the shift's official start time — not editable, so no early or late clock-ins get written in."
+            >
+              Time: {formatDutyTime(dutyTime)}
+            </div>
+          )}
         </div>
         <div className="flex flex-col items-end gap-1">
           <div className="flex gap-2">
