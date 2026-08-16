@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { checkIn } from "@/lib/bookings";
+import { checkIn, OPEN_TIME_RATE_PER_HOUR } from "@/lib/bookings";
 import { subscribeToRatePackages, updateRoomStatus } from "@/lib/rooms";
 import { subscribeToInventory } from "@/lib/inventory";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
@@ -59,6 +59,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
   const [guestCount, setGuestCount] = useState("2");
   const [ratePackages, setRatePackages] = useState<RatePackage[] | null>(null);
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
+  const [openTimeMode, setOpenTimeMode] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [gcashReference, setGcashReference] = useState("");
   const [amountPaid, setAmountPaid] = useState("");
@@ -101,8 +102,18 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
 
   if (!room) return null;
 
-  const selectedPackage =
-    ratePackages?.find((p) => p.packageId === selectedPackageId) ?? ratePackages?.[0] ?? null;
+  // Open time still floors at the shortest configured package — a guest who
+  // picks it and leaves after 1 hour still pays that minimum, same as the
+  // Extend Stay → Open time conversion already charges. Whichever package
+  // has the fewest hours is treated as "the minimum," so this stays correct
+  // even if the Owner edits rate packages later.
+  const shortestPackage =
+    ratePackages && ratePackages.length > 0
+      ? [...ratePackages].sort((a, b) => a.hours - b.hours)[0]
+      : null;
+  const selectedPackage = openTimeMode
+    ? shortestPackage
+    : (ratePackages?.find((p) => p.packageId === selectedPackageId) ?? ratePackages?.[0] ?? null);
   const roomTotal = selectedPackage?.price ?? 0;
   const total = roomTotal + fbTotal;
   // GCash payments are exact digital transfers — no manual entry, no chance
@@ -144,6 +155,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
         guestCount: guestCount ? Number(guestCount) : undefined,
         packageHours: selectedPackage.hours,
         packagePrice: selectedPackage.price,
+        openEnded: openTimeMode || undefined,
         paymentMethod,
         amountPaid: amountCollected,
         gcashReference: usesGcashRef ? gcashReference.trim() || undefined : undefined,
@@ -164,6 +176,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
         hoursBooked: selectedPackage.hours,
         originalPackageHours: selectedPackage.hours,
         originalPackagePrice: selectedPackage.price,
+        openEnded: openTimeMode,
         totalRoomCharge: roomTotal,
         totalFbCharge: fbTotal,
         totalAmount: total,
@@ -420,14 +433,35 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
                     key={pkg.packageId}
                     type="button"
                     size="sm"
-                    variant={selectedPackage?.packageId === pkg.packageId ? "default" : "outline"}
-                    onClick={() => setSelectedPackageId(pkg.packageId)}
+                    variant={!openTimeMode && selectedPackageId === pkg.packageId ? "default" : "outline"}
+                    onClick={() => {
+                      setOpenTimeMode(false);
+                      setSelectedPackageId(pkg.packageId);
+                    }}
                     disabled={submitting}
                   >
                     {pkg.hours}h · ₱{pkg.price}
                   </Button>
                 ))}
+                {shortestPackage && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={openTimeMode ? "default" : "outline"}
+                    onClick={() => setOpenTimeMode(true)}
+                    disabled={submitting}
+                  >
+                    Open time
+                  </Button>
+                )}
               </div>
+            )}
+            {openTimeMode && shortestPackage && (
+              <p className="text-xs text-muted-foreground">
+                No fixed end time — the {shortestPackage.hours}h package (₱{shortestPackage.price})
+                still applies as a paid minimum. If the stay runs past {shortestPackage.hours}h, the
+                overage bills at ₱{OPEN_TIME_RATE_PER_HOUR}/hr in 30-min blocks, entered at checkout.
+              </p>
             )}
           </div>
 
@@ -485,7 +519,9 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
 
           <div className="flex flex-col gap-1 rounded-lg bg-muted px-3 py-2 text-sm">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span>Room ({selectedPackage?.hours ?? "—"}h)</span>
+              <span>
+                Room ({openTimeMode ? `open time, ${selectedPackage?.hours ?? "—"}h min` : `${selectedPackage?.hours ?? "—"}h`})
+              </span>
               <span>₱{roomTotal.toFixed(2)}</span>
             </div>
             {fbTotal > 0 && (

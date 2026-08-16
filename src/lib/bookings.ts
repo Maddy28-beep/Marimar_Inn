@@ -49,6 +49,11 @@ export interface CheckInInput {
   guestCount?: number;
   packageHours: number;
   packagePrice: number;
+  // True for a guest who chooses "open time" right at check-in instead of a
+  // fixed package — the package above still applies as a paid floor (same
+  // math as converting an active booking via extendStay's Open time mode),
+  // just starting from the very first transaction instead of a later one.
+  openEnded?: boolean;
   paymentMethod: PaymentMethod;
   amountPaid: number;
   gcashReference?: string;
@@ -176,6 +181,7 @@ export async function checkIn(input: CheckInInput) {
       ...(input.guestCount !== undefined ? { guestCount: input.guestCount } : {}),
       ...(input.specialRequests ? { specialRequests: input.specialRequests } : {}),
       ...(input.gcashReference ? { gcashReference: input.gcashReference } : {}),
+      ...(input.openEnded ? { openEnded: true } : {}),
     };
 
     tx.set(bookingRef, booking);
