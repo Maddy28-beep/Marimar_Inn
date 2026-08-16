@@ -11,11 +11,9 @@ import {
   computeDailySalesReport,
   computeMonthlyReport,
   computeOverdueHistory,
-  endOfDay,
   endOfMonth,
   fetchActiveBookings,
   fetchBookingsInRange,
-  startOfDay,
   startOfMonth,
   type DailyReport,
   type DailySalesReport,
@@ -864,7 +862,10 @@ function InventoryReportTab() {
 
 function OverdueReportTab() {
   const now = useNowTick(30_000);
-  const [dateValue, setDateValue] = useState(todayInputValue());
+  // Monthly, not per-day — checking overdue history one day at a time meant
+  // clicking through the calendar day by day to spot a pattern; a month at a
+  // glance is what an Owner actually wants to review.
+  const [monthValue, setMonthValue] = useState(thisMonthInputValue());
   const [bookings, setBookings] = useState<Booking[] | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -872,18 +873,19 @@ function OverdueReportTab() {
     let cancelled = false;
     async function load() {
       setLoading(true);
-      const date = new Date(`${dateValue}T00:00:00`);
+      const [year, month] = monthValue.split("-").map(Number);
+      const monthDate = new Date(year, month - 1, 1);
       try {
-        // Merge the selected day's check-ins (for resolved history) with
+        // Merge the selected month's check-ins (for resolved history) with
         // every currently-active booking (so a room that's overdue *right
-        // now* always shows up, even if its guest checked in on a different
-        // day than the one currently picked).
-        const [dayBookings, activeBookings] = await Promise.all([
-          fetchBookingsInRange("checkInTime", startOfDay(date), endOfDay(date)),
+        // now* always shows up, even if its guest checked in in a different
+        // month than the one currently picked).
+        const [monthBookings, activeBookings] = await Promise.all([
+          fetchBookingsInRange("checkInTime", startOfMonth(monthDate), endOfMonth(monthDate)),
           fetchActiveBookings(),
         ]);
         const merged = new Map<string, Booking>();
-        for (const booking of dayBookings) merged.set(booking.bookingId, booking);
+        for (const booking of monthBookings) merged.set(booking.bookingId, booking);
         for (const booking of activeBookings) merged.set(booking.bookingId, booking);
         if (!cancelled) setBookings(Array.from(merged.values()));
       } catch {
@@ -896,7 +898,7 @@ function OverdueReportTab() {
     return () => {
       cancelled = true;
     };
-  }, [dateValue]);
+  }, [monthValue]);
 
   // Recomputed on every render from the fetched bookings — cheap, and it
   // means "still ongoing" durations keep counting up live off the same
@@ -907,9 +909,9 @@ function OverdueReportTab() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <Input
-          type="date"
-          value={dateValue}
-          onChange={(e) => setDateValue(e.target.value)}
+          type="month"
+          value={monthValue}
+          onChange={(e) => setMonthValue(e.target.value)}
           className="w-44"
         />
       </div>
@@ -918,12 +920,12 @@ function OverdueReportTab() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : records.length === 0 ? (
         <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-          No overdue rooms that day.
+          No overdue rooms that month.
         </div>
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>Overdue rooms — {formatReportDate(dateValue)}</CardTitle>
+            <CardTitle>Overdue rooms — {formatReportMonth(monthValue)}</CardTitle>
             <CardDescription>
               Every room that ran past its booked time, worst first — including ones already
               checked out, so this stays useful even if you weren&apos;t watching live.
