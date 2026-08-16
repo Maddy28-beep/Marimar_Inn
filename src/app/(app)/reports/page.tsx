@@ -225,9 +225,15 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                 storeTotal: row.totalStoreAmount,
                 paid: row.totalPaid,
                 payment: (() => {
+                  // A booking can mix methods across check-in/extend/
+                  // checkout, so show the real breakdown whenever both
+                  // portions are actually nonzero rather than trusting the
+                  // final paymentMethod label alone.
+                  const cashPortion = row.splitCashAmount ?? 0;
+                  const gcashPortion = row.splitGcashAmount ?? 0;
                   const base =
-                    row.paymentMethod === "split"
-                      ? `Cash ${peso(row.splitCashAmount ?? 0)} + GCash ${peso(row.splitGcashAmount ?? 0)}`
+                    cashPortion > 0 && gcashPortion > 0
+                      ? `Cash ${peso(cashPortion)} + GCash ${peso(gcashPortion)}`
                       : PAYMENT_METHOD_LABELS[row.paymentMethod];
                   return row.gcashReference ? `${base} (${row.gcashReference})` : base;
                 })(),

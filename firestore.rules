@@ -95,6 +95,7 @@ service cloud.firestore {
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'guestPhone', 'guestCount', 'hoursBooked', 'hoursUsed', 'hoursRemaining',
           'openEnded', 'totalRoomCharge', 'totalFbCharge', 'totalAmount', 'amountPaid',
+          'paymentMethod', 'gcashReference', 'splitCashAmount', 'splitGcashAmount',
           'paymentStatus', 'status', 'checkOutTime', 'items', 'transactions',
           'specialRequests', 'updatedAt'
         ]);

@@ -1,13 +1,23 @@
 "use client";
 
 import { PAYMENT_METHOD_LABELS } from "@/lib/types";
-import type { DailySalesReport } from "@/lib/reports";
+import type { DailySalesReport, DailySalesRow } from "@/lib/reports";
 
 function peso(amount: number): string {
   return `₱${amount.toLocaleString("en-PH", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+// A booking can mix methods across check-in/extend/checkout, so its final
+// paymentMethod label alone can be misleading — show the real cash/GCash
+// breakdown whenever both portions are actually nonzero.
+function paymentLabel(row: DailySalesRow): string {
+  const cash = row.splitCashAmount ?? 0;
+  const gcash = row.splitGcashAmount ?? 0;
+  if (cash > 0 && gcash > 0) return `Cash ${peso(cash)} + GCash ${peso(gcash)}`;
+  return PAYMENT_METHOD_LABELS[row.paymentMethod];
 }
 
 function time(d: Date | null): string {
@@ -84,9 +94,7 @@ export function DailySalesTable({ report }: { report: DailySalesReport }) {
                   </td>
                   <td className="border p-1 text-right whitespace-nowrap">{peso(row.totalPaid)}</td>
                   <td className="border p-1 whitespace-nowrap">
-                    {row.paymentMethod === "split"
-                      ? `Cash ${peso(row.splitCashAmount ?? 0)} + GCash ${peso(row.splitGcashAmount ?? 0)}`
-                      : PAYMENT_METHOD_LABELS[row.paymentMethod]}
+                    {paymentLabel(row)}
                     {row.gcashReference ? ` (${row.gcashReference})` : ""}
                   </td>
                   <td className="border p-1" />

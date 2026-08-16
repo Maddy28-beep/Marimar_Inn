@@ -207,7 +207,13 @@ export function computeDailySalesReport(bookings: Booking[]): DailySalesReport {
       acc.totalRoomAmount += row.totalRoomAmount;
       acc.totalStoreAmount += row.totalStoreAmount;
       acc.totalPaid += row.totalPaid;
-      if (row.paymentMethod === "split") {
+      // splitCashAmount/splitGcashAmount track the running cash/GCash total
+      // across every transaction on the booking (check-in, extend,
+      // checkout), so they're the source of truth whenever present — a
+      // booking can end up with a non-"split" final paymentMethod even
+      // after mixing methods across transactions. Only bookings from
+      // before this tracking existed fall back to the single-method guess.
+      if (row.splitCashAmount !== undefined || row.splitGcashAmount !== undefined) {
         acc.cashCollected += row.splitCashAmount ?? 0;
         acc.gcashCollected += row.splitGcashAmount ?? 0;
       } else if (row.paymentMethod === "cash") {

@@ -64,6 +64,35 @@ function paymentStatusFor(amountPaid: number, totalAmount: number): PaymentStatu
   return amountPaid >= totalAmount ? "paid" : "partial";
 }
 
+/**
+ * A booking can be paid across several transactions (check-in, extend,
+ * checkout) that each pick their own method — splitCashAmount/
+ * splitGcashAmount track the running cash-vs-GCash total across all of
+ * them, not just the latest one. Falls back to inferring the breakdown
+ * from paymentMethod + amountPaid for bookings written before these
+ * fields existed.
+ */
+export function paymentBreakdown(
+  booking: Pick<Booking, "paymentMethod" | "amountPaid" | "splitCashAmount" | "splitGcashAmount">
+): { cash: number; gcash: number } {
+  if (booking.splitCashAmount !== undefined || booking.splitGcashAmount !== undefined) {
+    return { cash: booking.splitCashAmount ?? 0, gcash: booking.splitGcashAmount ?? 0 };
+  }
+  if (booking.paymentMethod === "gcash") return { cash: 0, gcash: booking.amountPaid };
+  return { cash: booking.amountPaid, gcash: 0 };
+}
+
+export function methodContribution(
+  method: PaymentMethod,
+  amount: number,
+  splitCash?: number,
+  splitGcash?: number
+): { cash: number; gcash: number } {
+  if (method === "gcash") return { cash: 0, gcash: amount };
+  if (method === "split") return { cash: splitCash ?? 0, gcash: splitGcash ?? 0 };
+  return { cash: amount, gcash: 0 };
+}
+
 /** Open-time rate: ₱100/hour, billed in 30-minute blocks rounded up. */
 export const OPEN_TIME_RATE_PER_HOUR = 100;
 
@@ -107,6 +136,12 @@ export async function checkIn(input: CheckInInput) {
 
     const totalFbCharge = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
     const totalAmount = totalRoomCharge + totalFbCharge;
+    const initialSplit = methodContribution(
+      input.paymentMethod,
+      input.amountPaid,
+      input.splitCashAmount,
+      input.splitGcashAmount
+    );
 
     const booking: Omit<Booking, "checkInTime" | "updatedAt"> & {
       checkInTime: ReturnType<typeof serverTimestamp>;
@@ -125,6 +160,11 @@ export async function checkIn(input: CheckInInput) {
       totalAmount,
       amountPaid: input.amountPaid,
       paymentMethod: input.paymentMethod,
+      // Tracked from the first transaction on, regardless of method, so
+      // later transactions (extend, checkout) always have an accurate
+      // running total to accumulate onto — see paymentBreakdown().
+      splitCashAmount: initialSplit.cash,
+      splitGcashAmount: initialSplit.gcash,
       paymentStatus: paymentStatusFor(input.amountPaid, totalAmount),
       status: "active",
       items: orderItems,
@@ -136,8 +176,6 @@ export async function checkIn(input: CheckInInput) {
       ...(input.guestCount !== undefined ? { guestCount: input.guestCount } : {}),
       ...(input.specialRequests ? { specialRequests: input.specialRequests } : {}),
       ...(input.gcashReference ? { gcashReference: input.gcashReference } : {}),
-      ...(input.splitCashAmount !== undefined ? { splitCashAmount: input.splitCashAmount } : {}),
-      ...(input.splitGcashAmount !== undefined ? { splitGcashAmount: input.splitGcashAmount } : {}),
     };
 
     tx.set(bookingRef, booking);
@@ -159,12 +197,22 @@ export async function recordCheckout(
   if (Math.round(newAmountPaid * 100) < Math.round(booking.totalAmount * 100)) {
     throw new Error("Cannot check out until the full amount is paid.");
   }
+  // Checkout doesn't ask which method settled the balance — attribute it to
+  // the booking's current method, falling back to cash for "split" since
+  // there's no ratio to split a single top-up payment by here.
+  const priorSplit = paymentBreakdown(booking);
+  const thisSplit = methodContribution(
+    booking.paymentMethod === "split" ? "cash" : booking.paymentMethod,
+    additionalPayment
+  );
 
   const batch = writeBatch(firestore);
   batch.update(doc(firestore, "bookings", booking.bookingId), {
     status: "checked_out",
     checkOutTime: serverTimestamp(),
     amountPaid: newAmountPaid,
+    splitCashAmount: priorSplit.cash + thisSplit.cash,
+    splitGcashAmount: priorSplit.gcash + thisSplit.gcash,
     paymentStatus: paymentStatusFor(newAmountPaid, booking.totalAmount),
     updatedAt: serverTimestamp(),
   });
@@ -196,25 +244,47 @@ export async function deleteBooking(bookingId: string) {
   await deleteDoc(doc(firestore, "bookings", bookingId));
 }
 
+export interface ExtendStayPayment {
+  paymentMethod: PaymentMethod;
+  gcashReference?: string;
+  splitCashAmount?: number;
+  splitGcashAmount?: number;
+}
+
 export async function extendStay(
   booking: Booking,
   packageHours: number,
   packagePrice: number,
-  additionalPayment: number
+  additionalPayment: number,
+  payment: ExtendStayPayment
 ) {
   const firestore = requireDb();
   const newHoursBooked = booking.hoursBooked + packageHours;
   const newTotalRoomCharge = booking.totalRoomCharge + packagePrice;
   const newTotalAmount = newTotalRoomCharge + booking.totalFbCharge;
   const newAmountPaid = booking.amountPaid + additionalPayment;
+  const priorSplit = paymentBreakdown(booking);
+  const thisSplit = methodContribution(
+    payment.paymentMethod,
+    additionalPayment,
+    payment.splitCashAmount,
+    payment.splitGcashAmount
+  );
 
   await updateDoc(doc(firestore, "bookings", booking.bookingId), {
     hoursBooked: newHoursBooked,
     totalRoomCharge: newTotalRoomCharge,
     totalAmount: newTotalAmount,
     amountPaid: newAmountPaid,
+    // paymentMethod reflects how the guest most recently settled up — the
+    // running cash/GCash totals below are what stay accurate across mixed
+    // methods, not this field alone.
+    paymentMethod: payment.paymentMethod,
+    splitCashAmount: priorSplit.cash + thisSplit.cash,
+    splitGcashAmount: priorSplit.gcash + thisSplit.gcash,
     paymentStatus: paymentStatusFor(newAmountPaid, newTotalAmount),
     updatedAt: serverTimestamp(),
+    ...(payment.gcashReference ? { gcashReference: payment.gcashReference } : {}),
   });
   // Extending pushes the checkout deadline back out — clear any 30-min-
   // warning/overdue reminder (and its repeating alarm) raised before the

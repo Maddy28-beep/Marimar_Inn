@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   computeOpenTimeCharge,
+  methodContribution,
+  paymentBreakdown,
   recordCheckout,
   settleOpenTimeCharge,
   hoursElapsed,
@@ -74,6 +76,7 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
   // (matters for open-time stays, where the room charge is only locked in
   // at this point) rather than the stale pre-checkout booking prop.
   const receiptData = settledBooking ?? booking;
+  const { cash: receiptCashPaid, gcash: receiptGcashPaid } = paymentBreakdown(receiptData);
 
   const balanceBefore = Math.max(effectiveTotalAmount - booking.amountPaid, 0);
   const paymentInput = Number(finalPayment) || 0;
@@ -102,12 +105,26 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
     }
     setSubmitting(true);
     const amountCollectedNow = Math.min(paymentInput, balanceBefore);
+    // Checkout doesn't ask which method covered the top-up — same fallback
+    // recordCheckout() applies server-side — so the receipt's cash/GCash
+    // breakdown (which now includes this payment) stays accurate too.
+    const priorSplit = paymentBreakdown(effectiveBooking);
+    const thisSplit = methodContribution(
+      booking.paymentMethod === "split" ? "cash" : booking.paymentMethod,
+      amountCollectedNow
+    );
+    const finalBooking: Booking = {
+      ...effectiveBooking,
+      amountPaid: finalAmountPaid,
+      splitCashAmount: priorSplit.cash + thisSplit.cash,
+      splitGcashAmount: priorSplit.gcash + thisSplit.gcash,
+    };
     try {
       if (booking.openEnded) {
         await settleOpenTimeCharge(booking, effectiveRoomCharge, Math.round(hoursUsed * 10) / 10);
       }
       await recordCheckout(effectiveBooking, amountCollectedNow);
-      setSettledBooking(effectiveBooking);
+      setSettledBooking(finalBooking);
       setCheckOutTime(new Date());
       setPhase("receipt");
 
@@ -116,7 +133,7 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
           if (shouldOpenDrawer(booking.paymentMethod, amountCollectedNow)) {
             openCashDrawer();
           }
-          printThermalReceipt(effectiveBooking, room, { staffName, finalAmountPaid, change });
+          printThermalReceipt(finalBooking, room, { staffName, finalAmountPaid, change });
         } catch {
           toast.error("Checked out, but the thermal printer didn't respond.");
         }
@@ -291,10 +308,23 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
                 <span>Total</span>
                 <span>₱{receiptData.totalAmount.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-muted-foreground">
-                <span>Paid via {PAYMENT_METHOD_LABELS[booking.paymentMethod]}</span>
-                <span>₱{finalAmountPaid.toFixed(2)}</span>
-              </div>
+              {receiptCashPaid > 0 && receiptGcashPaid > 0 ? (
+                <>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Paid via Cash</span>
+                    <span>₱{receiptCashPaid.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Paid via GCash</span>
+                    <span>₱{receiptGcashPaid.toFixed(2)}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Paid via {PAYMENT_METHOD_LABELS[booking.paymentMethod]}</span>
+                  <span>₱{finalAmountPaid.toFixed(2)}</span>
+                </div>
+              )}
               {(booking.paymentMethod === "gcash" || booking.paymentMethod === "split") &&
                 booking.gcashReference && (
                   <div className="flex justify-between text-muted-foreground">

@@ -263,17 +263,24 @@ export function buildReceiptBytes(booking: Booking, room: Room, extras: ReceiptE
     .line(twoColumn("Total", money(booking.totalAmount), width))
     .bold(false);
 
-  if (booking.paymentMethod === "split") {
+  // splitCashAmount/splitGcashAmount track the running total across every
+  // transaction on the booking, so this is accurate even at checkout after
+  // check-in and an extension used different methods — a single "Paid
+  // (method)" line would misattribute the whole cumulative amount to
+  // whichever method happened to be used most recently.
+  const cashPaid = booking.splitCashAmount ?? 0;
+  const gcashPaid = booking.splitGcashAmount ?? 0;
+  if (cashPaid > 0 && gcashPaid > 0) {
     encoder
-      .line(twoColumn("Paid (Cash)", money(booking.splitCashAmount ?? 0), width))
-      .line(twoColumn("Paid (GCash)", money(booking.splitGcashAmount ?? 0), width));
+      .line(twoColumn("Paid (Cash)", money(cashPaid), width))
+      .line(twoColumn("Paid (GCash)", money(gcashPaid), width));
   } else {
     encoder.line(
       twoColumn(`Paid (${PAYMENT_METHOD_LABELS[booking.paymentMethod]})`, money(extras.finalAmountPaid), width)
     );
   }
 
-  if ((booking.paymentMethod === "gcash" || booking.paymentMethod === "split") && booking.gcashReference) {
+  if (booking.gcashReference) {
     encoder.line(`GCash Ref: ${booking.gcashReference}`);
   }
 
@@ -303,6 +310,10 @@ export interface ExtensionReceiptExtras {
   amountCharged: number;
   amountPaid: number;
   change: number;
+  paymentMethod: PaymentMethod;
+  gcashReference?: string;
+  splitCashAmount?: number;
+  splitGcashAmount?: number;
 }
 
 /**
@@ -341,10 +352,21 @@ export function buildExtensionReceiptBytes(
     .newline()
     .bold(true)
     .line(twoColumn("Total", money(extras.amountCharged), width))
-    .bold(false)
-    .line(
-      twoColumn(`Paid (${PAYMENT_METHOD_LABELS[booking.paymentMethod]})`, money(extras.amountPaid), width)
+    .bold(false);
+
+  if (extras.paymentMethod === "split") {
+    encoder
+      .line(twoColumn("Paid (Cash)", money(extras.splitCashAmount ?? 0), width))
+      .line(twoColumn("Paid (GCash)", money(extras.splitGcashAmount ?? 0), width));
+  } else {
+    encoder.line(
+      twoColumn(`Paid (${PAYMENT_METHOD_LABELS[extras.paymentMethod]})`, money(extras.amountPaid), width)
     );
+  }
+
+  if ((extras.paymentMethod === "gcash" || extras.paymentMethod === "split") && extras.gcashReference) {
+    encoder.line(`GCash Ref: ${extras.gcashReference}`);
+  }
 
   if (extras.change > 0) {
     encoder.line(twoColumn("Change", money(extras.change), width));

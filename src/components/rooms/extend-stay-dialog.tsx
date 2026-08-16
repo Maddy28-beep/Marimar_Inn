@@ -14,12 +14,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   convertToOpenTime,
   extendStay,
   hoursElapsed,
   OPEN_TIME_RATE_PER_HOUR,
 } from "@/lib/bookings";
-import { PAYMENT_METHOD_LABELS, type Booking, type Room } from "@/lib/types";
+import { PAYMENT_METHOD_LABELS, type Booking, type PaymentMethod, type Room } from "@/lib/types";
+import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { useAuth } from "@/context/auth-context";
@@ -39,6 +47,15 @@ interface ExtendStayDialogProps {
 
 type ExtendMode = "hour" | "open";
 
+// Past this much overdue, neither extend option is offered — "+1 hour"
+// is a cheap flat top-up that undercharges a guest who's been gone a while,
+// and "Open time" would let the same guest linger indefinitely without
+// ever having to commit to a fresh booking. The guest goes through a
+// regular booking (3h minimum) instead. A short grace window still covers
+// someone just a few minutes behind wrapping up.
+const EXTEND_OVERDUE_CUTOFF_MINUTES = 10;
+const REGULAR_BOOKING_MIN_HOURS = 3;
+
 export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogProps) {
   const now = useNowTick(1000);
   const printer = useReceiptPrinter();
@@ -46,34 +63,63 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
   const staffName = appUser?.displayName ?? appUser?.email ?? "Staff";
   const [mode, setMode] = useState<ExtendMode>("hour");
   const [hourPrice, setHourPrice] = useState(String(OPEN_TIME_RATE_PER_HOUR));
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [gcashReference, setGcashReference] = useState("");
   const [amountPaid, setAmountPaid] = useState("");
+  const [splitCash, setSplitCash] = useState("");
+  const [splitGcash, setSplitGcash] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [phase, setPhase] = useState<"form" | "receipt">("form");
   const [receipt, setReceipt] = useState<{
     amountCharged: number;
     amountPaid: number;
     change: number;
+    paymentMethod: PaymentMethod;
+    gcashReference?: string;
+    splitCashAmount?: number;
+    splitGcashAmount?: number;
   } | null>(null);
 
   const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, now);
+  const overdueMinutes = remaining < 0 ? -remaining * 60 : 0;
+  const tooOverdueToExtend = overdueMinutes >= EXTEND_OVERDUE_CUTOFF_MINUTES;
   const packageHours = booking.originalPackageHours ?? booking.hoursBooked;
   const packagePrice = booking.originalPackagePrice ?? booking.totalRoomCharge;
   const additionalCost = Number(hourPrice) || 0;
-  const paid = Number(amountPaid) || 0;
+  const splitCashValue = Number(splitCash) || 0;
+  const splitGcashValue = Number(splitGcash) || 0;
+  const paid =
+    paymentMethod === "gcash"
+      ? additionalCost
+      : paymentMethod === "split"
+        ? splitCashValue + splitGcashValue
+        : Number(amountPaid) || 0;
   const change = paid > additionalCost ? paid - additionalCost : 0;
 
   async function handleExtendByHour() {
+    if (tooOverdueToExtend) {
+      toast.error("Too overdue for a quick extension — start a new booking instead.");
+      return;
+    }
     if (additionalCost <= 0) {
       toast.error("Enter the price for the extra hour.");
       return;
     }
     setSubmitting(true);
     const amountCollected = Math.min(paid, additionalCost);
+    const usesGcashRef = paymentMethod === "gcash" || paymentMethod === "split";
+    const cashPortion = paymentMethod === "split" ? splitCashValue : amountCollected;
+    const gcashPortion = paymentMethod === "split" ? splitGcashValue : undefined;
     try {
-      await extendStay(booking, 1, additionalCost, amountCollected);
+      await extendStay(booking, 1, additionalCost, amountCollected, {
+        paymentMethod,
+        gcashReference: usesGcashRef ? gcashReference.trim() || undefined : undefined,
+        splitCashAmount: paymentMethod === "split" ? splitCashValue : undefined,
+        splitGcashAmount: gcashPortion,
+      });
       toast.success(`Room ${room.roomNumber} extended by 1h.`);
       if (printer.connected) {
-        if (shouldOpenDrawer(booking.paymentMethod, amountCollected)) {
+        if (shouldOpenDrawer(paymentMethod, cashPortion)) {
           try {
             openCashDrawer();
           } catch {
@@ -87,12 +133,24 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
             amountCharged: additionalCost,
             amountPaid: amountCollected,
             change,
+            paymentMethod,
+            gcashReference: usesGcashRef ? gcashReference.trim() || undefined : undefined,
+            splitCashAmount: paymentMethod === "split" ? splitCashValue : undefined,
+            splitGcashAmount: gcashPortion,
           });
         } catch {
           toast.error("Extended, but the thermal printer didn't respond.");
         }
       }
-      setReceipt({ amountCharged: additionalCost, amountPaid: amountCollected, change });
+      setReceipt({
+        amountCharged: additionalCost,
+        amountPaid: amountCollected,
+        change,
+        paymentMethod,
+        gcashReference: usesGcashRef ? gcashReference.trim() || undefined : undefined,
+        splitCashAmount: paymentMethod === "split" ? splitCashValue : undefined,
+        splitGcashAmount: gcashPortion,
+      });
       setPhase("receipt");
     } catch (error) {
       console.error(error);
@@ -111,6 +169,10 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
         amountCharged: receipt.amountCharged,
         amountPaid: receipt.amountPaid,
         change: receipt.change,
+        paymentMethod: receipt.paymentMethod,
+        gcashReference: receipt.gcashReference,
+        splitCashAmount: receipt.splitCashAmount,
+        splitGcashAmount: receipt.splitGcashAmount,
       });
     } catch {
       toast.error("Couldn't print to the thermal printer.");
@@ -118,6 +180,10 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
   }
 
   async function handleConvertToOpenTime() {
+    if (tooOverdueToExtend) {
+      toast.error("Too overdue to extend — start a new booking instead.");
+      return;
+    }
     setSubmitting(true);
     try {
       await convertToOpenTime(booking.bookingId);
@@ -186,10 +252,30 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
               <span>+1h extension</span>
               <span>₱{receipt.amountCharged.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-muted-foreground">
-              <span>Paid via {PAYMENT_METHOD_LABELS[booking.paymentMethod]}</span>
-              <span>₱{receipt.amountPaid.toFixed(2)}</span>
-            </div>
+            {receipt.paymentMethod === "split" ? (
+              <>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Paid via Cash</span>
+                  <span>₱{(receipt.splitCashAmount ?? 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Paid via GCash</span>
+                  <span>₱{(receipt.splitGcashAmount ?? 0).toFixed(2)}</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex justify-between text-muted-foreground">
+                <span>Paid via {PAYMENT_METHOD_LABELS[receipt.paymentMethod]}</span>
+                <span>₱{receipt.amountPaid.toFixed(2)}</span>
+              </div>
+            )}
+            {(receipt.paymentMethod === "gcash" || receipt.paymentMethod === "split") &&
+              receipt.gcashReference && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>GCash Ref</span>
+                  <span>{receipt.gcashReference}</span>
+                </div>
+              )}
             {receipt.change > 0 && (
               <div className="flex justify-between text-muted-foreground">
                 <span>Change</span>
@@ -259,20 +345,93 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
             </div>
           </div>
 
-          {mode === "hour" ? (
+          {tooOverdueToExtend ? (
+            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+              This room is already {formatHours(overdueMinutes / 60)} overdue — too late to
+              extend, either by the hour or to open time. Check the guest out and start a new
+              booking ({REGULAR_BOOKING_MIN_HOURS}h minimum) instead.
+            </p>
+          ) : mode === "hour" ? (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="hourPrice">Price for the hour</Label>
+                <Input
+                  id="hourPrice"
+                  type="number"
+                  min={0}
+                  value={hourPrice}
+                  onChange={(e) => setHourPrice(e.target.value)}
+                  disabled={submitting}
+                  className="max-w-40"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label>Payment method</Label>
+                <Select
+                  value={paymentMethod}
+                  onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}
+                  disabled={submitting}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue>{PAYMENT_METHOD_LABELS[paymentMethod]}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {(paymentMethod === "gcash" || paymentMethod === "split") && (
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="hourPrice">Price for the hour</Label>
+                  <Label htmlFor="extGcashReference">GCash reference number</Label>
                   <Input
-                    id="hourPrice"
-                    type="number"
-                    min={0}
-                    value={hourPrice}
-                    onChange={(e) => setHourPrice(e.target.value)}
+                    id="extGcashReference"
+                    value={gcashReference}
+                    onChange={(e) => setGcashReference(e.target.value)}
+                    placeholder="e.g. 1234 567 890123"
                     disabled={submitting}
                   />
                 </div>
+              )}
+
+              {paymentMethod === "gcash" ? (
+                <div className="flex flex-col gap-1.5">
+                  <Label>Amount paid</Label>
+                  <div className="flex h-9 items-center rounded-md border bg-muted px-3 text-sm text-muted-foreground">
+                    Full amount — ₱{additionalCost.toFixed(2)} via GCash
+                  </div>
+                </div>
+              ) : paymentMethod === "split" ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="extSplitCash">Cash amount</Label>
+                    <Input
+                      id="extSplitCash"
+                      type="number"
+                      min={0}
+                      value={splitCash}
+                      onChange={(e) => setSplitCash(e.target.value)}
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="extSplitGcash">GCash amount</Label>
+                    <Input
+                      id="extSplitGcash"
+                      type="number"
+                      min={0}
+                      value={splitGcash}
+                      onChange={(e) => setSplitGcash(e.target.value)}
+                      disabled={submitting}
+                    />
+                  </div>
+                </div>
+              ) : (
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="amountPaid">Amount paid</Label>
                   <Input
@@ -284,7 +443,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
                     disabled={submitting}
                   />
                 </div>
-              </div>
+              )}
 
               <div className="flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-sm">
                 <span className="text-muted-foreground">Change</span>
@@ -306,12 +465,20 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
             Cancel
           </Button>
           {mode === "hour" ? (
-            <Button onClick={handleExtendByHour} disabled={submitting}>
+            <Button
+              onClick={handleExtendByHour}
+              disabled={submitting || tooOverdueToExtend}
+              title={tooOverdueToExtend ? "Too overdue — start a new booking instead" : undefined}
+            >
               {submitting && <Loader2Icon className="size-4 animate-spin" />}
               Extend by 1 hour
             </Button>
           ) : (
-            <Button onClick={handleConvertToOpenTime} disabled={submitting}>
+            <Button
+              onClick={handleConvertToOpenTime}
+              disabled={submitting || tooOverdueToExtend}
+              title={tooOverdueToExtend ? "Too overdue — start a new booking instead" : undefined}
+            >
               {submitting && <Loader2Icon className="size-4 animate-spin" />}
               Switch to open time
             </Button>

@@ -11,9 +11,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { voidBooking, hoursElapsed } from "@/lib/bookings";
+import { voidBooking, hoursElapsed, paymentBreakdown } from "@/lib/bookings";
 import { removeOrderItem } from "@/lib/orders";
-import { PAYMENT_METHOD_LABELS, type Booking, type Room } from "@/lib/types";
+import type { Booking, Room } from "@/lib/types";
 import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useAuth } from "@/context/auth-context";
@@ -46,6 +46,7 @@ export function RoomDetailDialog({
   const isOverdue = !booking.openEnded && remaining <= 0;
   const isRunningLow = !booking.openEnded && !isOverdue && remaining <= 0.5;
   const balance = Math.max(booking.totalAmount - booking.amountPaid, 0);
+  const { cash: cashPaid, gcash: gcashPaid } = paymentBreakdown(booking);
   const isOwner = appUser?.role === "owner";
   const canRemoveOrderItems = isOwner;
 
@@ -188,30 +189,28 @@ export function RoomDetailDialog({
                 <span>Total</span>
                 <span>₱{booking.totalAmount.toFixed(2)}</span>
               </div>
-              {booking.paymentMethod === "split" ? (
-                <>
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <span>Paid (Cash)</span>
-                    <span>₱{(booking.splitCashAmount ?? 0).toFixed(2)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <span>Paid (GCash)</span>
-                    <span>₱{(booking.splitGcashAmount ?? 0).toFixed(2)}</span>
-                  </div>
-                </>
-              ) : (
+              {/* Cash/GCash shown as separate lines whenever both are
+                  nonzero — a booking can mix methods across check-in,
+                  extend, and checkout, so a single "Paid (method)" label
+                  would misrepresent the true breakdown. */}
+              {cashPaid > 0 && (
                 <div className="flex items-center justify-between text-muted-foreground">
-                  <span>Paid ({PAYMENT_METHOD_LABELS[booking.paymentMethod]})</span>
-                  <span>₱{booking.amountPaid.toFixed(2)}</span>
+                  <span>Paid (Cash)</span>
+                  <span>₱{cashPaid.toFixed(2)}</span>
                 </div>
               )}
-              {(booking.paymentMethod === "gcash" || booking.paymentMethod === "split") &&
-                booking.gcashReference && (
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <span>GCash Ref</span>
-                    <span>{booking.gcashReference}</span>
-                  </div>
-                )}
+              {gcashPaid > 0 && (
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span>Paid (GCash)</span>
+                  <span>₱{gcashPaid.toFixed(2)}</span>
+                </div>
+              )}
+              {booking.gcashReference && (
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span>GCash Ref</span>
+                  <span>{booking.gcashReference}</span>
+                </div>
+              )}
               {balance > 0 && (
                 <div className="flex items-center justify-between text-amber-600 dark:text-amber-400">
                   <span>Balance</span>
