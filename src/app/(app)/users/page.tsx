@@ -1,20 +1,53 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { ProtectedRoute } from "@/components/auth/protected-route";
-import { subscribeToUsers, type StaffUser } from "@/lib/users";
+import { useAuth } from "@/context/auth-context";
+import { deleteStaffUser, resetStaffPassword, subscribeToUsers, type StaffUser } from "@/lib/users";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { UserFormDialog } from "@/components/users/user-form-dialog";
-import { PlusIcon } from "lucide-react";
+import { KeyRoundIcon, Loader2Icon, PlusIcon, TrashIcon } from "lucide-react";
 
 function ManageStaffContent() {
+  const { appUser } = useAuth();
   const [users, setUsers] = useState<StaffUser[] | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [busyUid, setBusyUid] = useState<string | null>(null);
 
   useEffect(() => {
     return subscribeToUsers(setUsers);
   }, []);
+
+  async function handleResetPassword(user: StaffUser) {
+    setBusyUid(user.uid);
+    try {
+      await resetStaffPassword(user.email);
+      toast.success(`Password reset email sent to ${user.email}.`);
+    } catch {
+      toast.error("Couldn't send the reset email — please try again.");
+    } finally {
+      setBusyUid(null);
+    }
+  }
+
+  async function handleDelete(user: StaffUser) {
+    if (user.uid === appUser?.uid) {
+      toast.error("You can't delete your own account.");
+      return;
+    }
+    if (!window.confirm(`Delete ${user.displayName}'s account? This can't be undone.`)) return;
+    setBusyUid(user.uid);
+    try {
+      await deleteStaffUser(user.uid);
+      toast.success(`${user.displayName} removed.`);
+    } catch {
+      toast.error("Couldn't delete the account — please try again.");
+    } finally {
+      setBusyUid(null);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -39,6 +72,7 @@ function ManageStaffContent() {
               <th className="px-4 py-2 font-medium">Name</th>
               <th className="px-4 py-2 font-medium">Email</th>
               <th className="px-4 py-2 font-medium">Role</th>
+              <th className="px-4 py-2 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -51,11 +85,40 @@ function ManageStaffContent() {
                     {user.role}
                   </Badge>
                 </td>
+                <td className="px-4 py-2">
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleResetPassword(user)}
+                      disabled={busyUid === user.uid}
+                      title="Send password reset email"
+                    >
+                      {busyUid === user.uid ? (
+                        <Loader2Icon className="size-3.5 animate-spin" />
+                      ) : (
+                        <KeyRoundIcon className="size-3.5" />
+                      )}
+                      Reset password
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(user)}
+                      disabled={busyUid === user.uid || user.uid === appUser?.uid}
+                      className="text-destructive hover:text-destructive"
+                      title="Delete account"
+                    >
+                      <TrashIcon className="size-3.5" />
+                      Delete
+                    </Button>
+                  </div>
+                </td>
               </tr>
             ))}
             {users?.length === 0 && (
               <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
                   No staff accounts yet.
                 </td>
               </tr>

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { ROOM_TYPE_LABELS, type Booking, type Room, type RoomStatus } from "@/lib/types";
 import { hoursElapsed } from "@/lib/bookings";
 import { formatHours } from "@/lib/time";
+import { useAuth } from "@/context/auth-context";
 import {
   BedDoubleIcon,
   DoorClosedIcon,
@@ -56,6 +57,8 @@ interface RoomCardProps {
 }
 
 export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
+  const { appUser } = useAuth();
+  const isOwner = appUser?.role === "owner";
   const style = STATUS_STYLES[room.status];
   const elapsed = booking ? hoursElapsed(booking.checkInTime, now) : 0;
   const remaining = booking && !booking.openEnded ? booking.hoursBooked - elapsed : null;
@@ -113,11 +116,13 @@ export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
             {booking.openEnded
               ? `Open · ${formatHours(elapsed)}`
               : isOverdue
-                ? // Deliberately just "Overdue" here, no duration — the exact
-                  // overdue time is Owner-only (see RoomGrid's alert panel and
-                  // RoomDetailDialog), so cashiers can't game how late they
-                  // report a checkout.
-                  "Overdue"
+                ? // Owner sees the exact overdue duration right on the card;
+                  // cashiers only see "Overdue" (no number) so they can't game
+                  // how late they report a checkout — the Owner can still spot
+                  // the real duration here or in Reports > Overdue.
+                  isOwner
+                  ? `Overdue ${formatHours(-remaining!)}`
+                  : "Overdue"
                 : `${formatHours(remaining!)} left`}
           </div>
           {balance > 0 && (

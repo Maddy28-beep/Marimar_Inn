@@ -10,18 +10,29 @@ import {
   computeDailyReport,
   computeDailySalesReport,
   computeMonthlyReport,
+  computeOverdueHistory,
   endOfDay,
   endOfMonth,
+  fetchActiveBookings,
   fetchBookingsInRange,
   startOfDay,
   startOfMonth,
   type DailyReport,
   type DailySalesReport,
   type MonthlyReport,
+  type OverdueRecord,
 } from "@/lib/reports";
 import { DailySalesTable } from "@/components/reports/daily-sales-table";
 import { exportToExcel, formatReportDate, formatReportMonth } from "@/lib/export";
-import { PAYMENT_METHOD_LABELS, ROOM_TYPE_LABELS, type InventoryItem, type Room } from "@/lib/types";
+import {
+  PAYMENT_METHOD_LABELS,
+  ROOM_TYPE_LABELS,
+  type Booking,
+  type InventoryItem,
+  type Room,
+} from "@/lib/types";
+import { formatHours } from "@/lib/time";
+import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { printDailySalesReceipt } from "@/lib/receipt-printer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -299,27 +310,38 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             className="w-36"
           />
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleExport} disabled={!report}>
-            <DownloadIcon className="size-3.5" />
-            Export Excel
-          </Button>
-          {printer.connected && (
-            <Button variant="outline" size="sm" onClick={handlePrintThermal} disabled={!salesReport}>
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleExport} disabled={!report}>
+              <DownloadIcon className="size-3.5" />
+              Export Excel
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrintThermal}
+              disabled={!salesReport || !printer.connected}
+              title={!printer.connected ? "Connect a thermal printer first (printer icon, top right)" : undefined}
+            >
               <PrinterIcon className="size-3.5" />
               Print (thermal)
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+              disabled={!report}
+              title="Choose Landscape in the print dialog for the best fit"
+            >
+              <PrinterIcon className="size-3.5" />
+              Print / PDF
+            </Button>
+          </div>
+          {!printer.connected && (
+            <p className="text-xs text-muted-foreground">
+              Connect a thermal printer (printer icon, top right) to enable
+            </p>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.print()}
-            disabled={!report}
-            title="Choose Landscape in the print dialog for the best fit"
-          >
-            <PrinterIcon className="size-3.5" />
-            Print / PDF
-          </Button>
         </div>
       </div>
 
@@ -750,6 +772,128 @@ function InventoryReportTab() {
   );
 }
 
+function OverdueReportTab() {
+  const now = useNowTick(30_000);
+  const [dateValue, setDateValue] = useState(todayInputValue());
+  const [bookings, setBookings] = useState<Booking[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      const date = new Date(`${dateValue}T00:00:00`);
+      try {
+        // Merge the selected day's check-ins (for resolved history) with
+        // every currently-active booking (so a room that's overdue *right
+        // now* always shows up, even if its guest checked in on a different
+        // day than the one currently picked).
+        const [dayBookings, activeBookings] = await Promise.all([
+          fetchBookingsInRange("checkInTime", startOfDay(date), endOfDay(date)),
+          fetchActiveBookings(),
+        ]);
+        const merged = new Map<string, Booking>();
+        for (const booking of dayBookings) merged.set(booking.bookingId, booking);
+        for (const booking of activeBookings) merged.set(booking.bookingId, booking);
+        if (!cancelled) setBookings(Array.from(merged.values()));
+      } catch {
+        if (!cancelled) toast.error("Couldn't load overdue history.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [dateValue]);
+
+  // Recomputed on every render from the fetched bookings — cheap, and it
+  // means "still ongoing" durations keep counting up live off the same
+  // 30s tick that drives the room grid, no separate refetch needed.
+  const records: OverdueRecord[] | null = bookings ? computeOverdueHistory(bookings, now) : null;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <Input
+          type="date"
+          value={dateValue}
+          onChange={(e) => setDateValue(e.target.value)}
+          className="w-44"
+        />
+      </div>
+
+      {loading || records === null ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : records.length === 0 ? (
+        <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+          No overdue rooms that day.
+        </div>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Overdue rooms — {formatReportDate(dateValue)}</CardTitle>
+            <CardDescription>
+              Every room that ran past its booked time, worst first — including ones already
+              checked out, so this stays useful even if you weren&apos;t watching live.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-muted-foreground">
+                  <tr>
+                    <th className="py-1 font-medium">Room</th>
+                    <th className="py-1 font-medium">Guest</th>
+                    <th className="py-1 font-medium">Check-in</th>
+                    <th className="py-1 font-medium">Booked until</th>
+                    <th className="py-1 font-medium">Checked out</th>
+                    <th className="py-1 font-medium">Overdue by</th>
+                    <th className="py-1 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records
+                    .slice()
+                    .sort((a, b) => b.overdueByHours - a.overdueByHours)
+                    .map((record) => (
+                      <tr key={record.bookingId} className="border-t">
+                        <td className="py-1.5 font-medium">{record.roomNumber}</td>
+                        <td className="py-1.5">{record.guestName}</td>
+                        <td className="py-1.5">{record.checkInTime.toLocaleTimeString("en-PH")}</td>
+                        <td className="py-1.5">{record.bookedUntil.toLocaleTimeString("en-PH")}</td>
+                        <td className="py-1.5">
+                          {record.actualCheckOutTime
+                            ? record.actualCheckOutTime.toLocaleTimeString("en-PH")
+                            : "—"}
+                        </td>
+                        <td className="py-1.5 font-semibold text-rose-600 dark:text-rose-400">
+                          {formatHours(record.overdueByHours)}
+                        </td>
+                        <td className="py-1.5">
+                          {record.stillOngoing ? (
+                            <Badge variant="secondary" className="text-rose-600 dark:text-rose-400">
+                              Still ongoing
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-muted-foreground">
+                              Resolved
+                            </Badge>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function ReportsContent() {
   const { appUser } = useAuth();
   const [rooms, setRooms] = useState<Room[] | null>(null);
@@ -763,7 +907,7 @@ function ReportsContent() {
         <h1 className="font-heading text-2xl font-semibold tracking-tight">Reports</h1>
         <p className="text-sm text-muted-foreground">
           {isOwner
-            ? "Revenue, occupancy, and sales — daily, monthly, and inventory views."
+            ? "Revenue, occupancy, sales, and overdue tracking — daily, monthly, and inventory views."
             : "Today's sales — print or export to hand off at end of shift."}
         </p>
       </div>
@@ -773,6 +917,7 @@ function ReportsContent() {
           <TabsList>
             <TabsTrigger value="daily">Daily</TabsTrigger>
             <TabsTrigger value="monthly">Monthly</TabsTrigger>
+            <TabsTrigger value="overdue">Overdue</TabsTrigger>
             <TabsTrigger value="inventory">Inventory</TabsTrigger>
           </TabsList>
           <TabsContent value="daily">
@@ -780,6 +925,9 @@ function ReportsContent() {
           </TabsContent>
           <TabsContent value="monthly">
             <MonthlyReportTab rooms={rooms} />
+          </TabsContent>
+          <TabsContent value="overdue">
+            <OverdueReportTab />
           </TabsContent>
           <TabsContent value="inventory">
             <InventoryReportTab />

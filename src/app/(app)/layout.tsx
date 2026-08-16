@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { PrinterStatus } from "@/components/printer-status";
+import { CashDrawerControl } from "@/components/cash-drawer-control";
 import { subscribeToActiveBookings } from "@/lib/bookings";
 import { subscribeToRooms } from "@/lib/rooms";
 import { syncCheckoutReminder } from "@/lib/notifications";
@@ -143,6 +144,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="hidden items-center gap-3 md:flex">
           <PrinterStatus />
+          <CashDrawerControl />
           <NotificationBell />
           <span className="text-sm text-muted-foreground">
             {appUser?.displayName ?? appUser?.email}
@@ -156,6 +158,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="flex items-center gap-1 md:hidden">
           <PrinterStatus />
+          <CashDrawerControl />
           <NotificationBell />
           <Button variant="ghost" size="icon" onClick={() => setMenuOpen(true)}>
             <MenuIcon className="size-5" />

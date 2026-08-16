@@ -57,6 +57,21 @@ export async function fetchBookingsInRange(
   return snap.docs.map((d) => d.data() as Booking);
 }
 
+/**
+ * Every currently-active booking, regardless of check-in date. A room can be
+ * overdue right now while its guest checked in on a *previous* calendar day
+ * (long stays, or a check-in shortly before midnight) — scoping the overdue
+ * report purely by the selected day's check-ins would silently miss it, so
+ * this is merged in on top of that day-scoped query no matter which date is
+ * picked.
+ */
+export async function fetchActiveBookings(): Promise<Booking[]> {
+  const firestore = requireDb();
+  const q = query(collection(firestore, "bookings"), where("status", "==", "active"));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data() as Booking);
+}
+
 interface ItemTally {
   name: string;
   quantity: number;
@@ -199,6 +214,55 @@ export function computeDailySalesReport(bookings: Booking[]): DailySalesReport {
   );
 
   return { rows, totals };
+}
+
+export interface OverdueRecord {
+  bookingId: string;
+  roomNumber: string;
+  guestName: string;
+  checkInTime: Date;
+  bookedUntil: Date;
+  actualCheckOutTime: Date | null;
+  overdueByHours: number;
+  stillOngoing: boolean;
+}
+
+/**
+ * Works for both live and historical review from the same data: an active
+ * booking's overdue duration is measured against "now" (so it grows as you
+ * watch), while a checked-out booking's is measured against its actual
+ * checkOutTime and then frozen forever — this is what lets the Owner check
+ * "who was overdue" days later, not just while the room card is on screen.
+ * Voided bookings and open-time stays (no fixed end time) are excluded.
+ */
+export function computeOverdueHistory(bookings: Booking[], now: Date): OverdueRecord[] {
+  const records: OverdueRecord[] = [];
+
+  for (const booking of bookings) {
+    if (booking.openEnded || booking.status === "voided") continue;
+
+    const checkInDate = booking.checkInTime.toDate();
+    const bookedUntil = new Date(checkInDate.getTime() + (booking.hoursBooked ?? 0) * 60 * 60 * 1000);
+    const actualCheckOutTime = booking.checkOutTime ? booking.checkOutTime.toDate() : null;
+    const referenceEnd = actualCheckOutTime ?? now;
+    const overdueByHours = Math.max(0, (referenceEnd.getTime() - bookedUntil.getTime()) / (1000 * 60 * 60));
+
+    if (overdueByHours <= 0) continue;
+
+    records.push({
+      bookingId: booking.bookingId,
+      roomNumber: booking.roomNumber,
+      guestName: booking.guestName,
+      checkInTime: checkInDate,
+      bookedUntil,
+      actualCheckOutTime,
+      overdueByHours,
+      stillOngoing: booking.status === "active",
+    });
+  }
+
+  records.sort((a, b) => b.checkInTime.getTime() - a.checkInTime.getTime());
+  return records;
 }
 
 export interface DailyRevenuePoint {
