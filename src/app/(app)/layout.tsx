@@ -147,7 +147,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
               {appUser.role}
             </Badge>
           )}
-          <nav className="hidden items-center gap-1 md:flex">
+          <nav className="hidden items-center gap-1 lg:flex">
             {visibleLinks.map((link) => (
               <Link
                 key={link.href}
@@ -164,7 +164,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
 
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden items-center gap-3 lg:flex">
           <HeaderClock />
           <Separator orientation="vertical" className="h-5" />
           <PrinterStatus />
@@ -180,12 +180,12 @@ function AppShell({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
 
-        <div className="flex items-center gap-1 md:hidden">
+        <div className="flex items-center gap-1 lg:hidden">
           <PrinterStatus />
           <CashDrawerControl />
           <NotificationBell />
           {/* Directly tappable, not tucked inside the hamburger menu — a
-              tablet in the sub-md bucket otherwise needs two taps (open
+              tablet in the sub-lg bucket otherwise needs two taps (open
               the sheet, then find Sign out at its bottom) just to log out. */}
           <Button variant="ghost" size="icon" onClick={handleSignOut} disabled={signingOut}>
             {signingOut ? (
@@ -202,7 +202,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <div className="border-b bg-muted/30 px-4 py-1 text-center md:hidden">
+      <div className="border-b bg-muted/30 px-4 py-1 text-center lg:hidden">
         <HeaderClock className="text-xs" />
       </div>
 
