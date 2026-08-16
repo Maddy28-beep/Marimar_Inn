@@ -64,6 +64,15 @@ export function playWarningChime() {
   beep(ctx, 880, now + 0.2, 0.16, 0.1);
 }
 
+/** Sharper double chime — used once when a room drops to 15 minutes left. */
+export function playCriticalChime() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  beep(ctx, 880, now, 0.18, 0.16);
+  beep(ctx, 880, now + 0.24, 0.18, 0.16);
+}
+
 /** Urgent triple alarm — used when a room goes overdue, and repeated until checked out. */
 export function playOverdueAlarm() {
   const ctx = getAudioContext();

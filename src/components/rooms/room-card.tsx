@@ -62,7 +62,11 @@ export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
   const style = STATUS_STYLES[room.status];
   const elapsed = booking ? hoursElapsed(booking.checkInTime, now) : 0;
   const remaining = booking && !booking.openEnded ? booking.hoursBooked - elapsed : null;
-  const isRunningLow = remaining !== null && remaining <= 0.5 && remaining > 0;
+  // 15 minutes left is its own, more urgent tier than the general "running
+  // low" 30-minute one — "running low" now only covers 15–30 minutes so the
+  // two don't overlap.
+  const isCritical = remaining !== null && remaining <= 0.25 && remaining > 0;
+  const isRunningLow = remaining !== null && remaining <= 0.5 && remaining > 0.25;
   const isOverdue = remaining !== null && remaining <= 0;
   const balance = booking ? Math.max(booking.totalAmount - booking.amountPaid, 0) : 0;
 
@@ -73,7 +77,12 @@ export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
       className={cn(
         // Fixed height so occupied cards (guest + countdown + balance) match empty ones.
         "relative flex h-36 w-full flex-col gap-0.5 overflow-hidden rounded-xl border p-2.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
-        style.card
+        // 15 minutes left or overdue gets a dark-red card, not just the
+        // usual light "occupied" rose — a glance at the grid should make
+        // these rooms impossible to miss.
+        isCritical || isOverdue
+          ? "border-red-700/70 bg-red-700/20 hover:bg-red-700/25 dark:border-red-600/70 dark:bg-red-600/25 dark:hover:bg-red-600/30"
+          : style.card
       )}
     >
       {!booking && (
@@ -107,10 +116,12 @@ export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
               booking.openEnded
                 ? "text-sky-600 dark:text-sky-400"
                 : isOverdue
-                  ? "text-rose-600 dark:text-rose-400"
-                  : isRunningLow
-                    ? "text-amber-600 dark:text-amber-400"
-                    : "text-foreground"
+                  ? "text-red-700 dark:text-red-400"
+                  : isCritical
+                    ? "text-red-700 dark:text-red-400"
+                    : isRunningLow
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-foreground"
             )}
           >
             {booking.openEnded

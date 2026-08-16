@@ -85,26 +85,32 @@ export async function syncLowStockNotification(
   }
 }
 
+const WARNING_THRESHOLD_HOURS = 0.5; // 30 minutes
+const CRITICAL_THRESHOLD_HOURS = 0.25; // 15 minutes
+
 /**
  * Idempotent: creates a checkout-reminder notification once a booking drops
  * under 30 minutes remaining, escalates the message (and re-surfaces it as
- * unread for everyone) once it goes overdue. Deterministic doc ID
- * (`checkout-reminder-${bookingId}`) — same duplicate-safety reasoning as
- * syncLowStockNotification.
+ * unread for everyone) at 15 minutes and again once it goes overdue.
+ * Deterministic doc ID (`checkout-reminder-${bookingId}`) — same
+ * duplicate-safety reasoning as syncLowStockNotification.
  */
 export async function syncCheckoutReminder(booking: Booking, room: Room, now: Date) {
   // Open-time bookings have no fixed end time by definition — nothing to remind about.
   if (booking.openEnded) return;
 
   const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, now);
-  if (remaining > 0.5) return;
+  if (remaining > WARNING_THRESHOLD_HOURS) return;
 
   const firestore = requireDb();
   const ref = doc(firestore, "notifications", `checkout-reminder-${booking.bookingId}`);
   const overdue = remaining <= 0;
+  const critical = !overdue && remaining <= CRITICAL_THRESHOLD_HOURS;
   const message = overdue
     ? `Room ${room.roomNumber} — ${booking.guestName}'s stay has ended, please check out.`
-    : `Room ${room.roomNumber} — ${booking.guestName} has less than 30 minutes left.`;
+    : critical
+      ? `Room ${room.roomNumber} — ${booking.guestName} has less than 15 minutes left.`
+      : `Room ${room.roomNumber} — ${booking.guestName} has less than 30 minutes left.`;
 
   const snap = await getDoc(ref);
   if (!snap.exists()) {
@@ -125,7 +131,7 @@ export async function syncCheckoutReminder(booking: Booking, room: Room, now: Da
   }
 
   const existing = snap.data() as AppNotification;
-  if (overdue && existing.message !== message) {
+  if ((overdue || critical) && existing.message !== message) {
     await updateDoc(ref, { message, readBy: [] });
   }
 }
