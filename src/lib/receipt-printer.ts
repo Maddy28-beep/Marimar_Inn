@@ -261,10 +261,19 @@ export function buildReceiptBytes(booking: Booking, room: Room, extras: ReceiptE
     .newline()
     .bold(true)
     .line(twoColumn("Total", money(booking.totalAmount), width))
-    .bold(false)
-    .line(twoColumn(`Paid (${PAYMENT_METHOD_LABELS[booking.paymentMethod]})`, money(extras.finalAmountPaid), width));
+    .bold(false);
 
-  if (booking.paymentMethod === "gcash" && booking.gcashReference) {
+  if (booking.paymentMethod === "split") {
+    encoder
+      .line(twoColumn("Paid (Cash)", money(booking.splitCashAmount ?? 0), width))
+      .line(twoColumn("Paid (GCash)", money(booking.splitGcashAmount ?? 0), width));
+  } else {
+    encoder.line(
+      twoColumn(`Paid (${PAYMENT_METHOD_LABELS[booking.paymentMethod]})`, money(extras.finalAmountPaid), width)
+    );
+  }
+
+  if ((booking.paymentMethod === "gcash" || booking.paymentMethod === "split") && booking.gcashReference) {
     encoder.line(`GCash Ref: ${booking.gcashReference}`);
   }
 
@@ -485,6 +494,11 @@ export function openCashDrawer() {
   send(encoder.pulse().encode());
 }
 
+/**
+ * `amount` should be the cash portion specifically — for a split payment,
+ * that's the cash half only, not the combined total, since the drawer only
+ * needs to open when actual cash is changing hands.
+ */
 export function shouldOpenDrawer(paymentMethod: PaymentMethod, amount: number): boolean {
-  return paymentMethod === "cash" && amount > 0;
+  return (paymentMethod === "cash" || paymentMethod === "split") && amount > 0;
 }

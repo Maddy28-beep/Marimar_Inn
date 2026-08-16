@@ -221,9 +221,13 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                 roomTotal: row.totalRoomAmount,
                 storeTotal: row.totalStoreAmount,
                 paid: row.totalPaid,
-                payment: row.gcashReference
-                  ? `${PAYMENT_METHOD_LABELS[row.paymentMethod]} (${row.gcashReference})`
-                  : PAYMENT_METHOD_LABELS[row.paymentMethod],
+                payment: (() => {
+                  const base =
+                    row.paymentMethod === "split"
+                      ? `Cash ${peso(row.splitCashAmount ?? 0)} + GCash ${peso(row.splitGcashAmount ?? 0)}`
+                      : PAYMENT_METHOD_LABELS[row.paymentMethod];
+                  return row.gcashReference ? `${base} (${row.gcashReference})` : base;
+                })(),
               })),
               ...(salesReport && salesReport.rows.length > 0
                 ? [
@@ -271,10 +275,16 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                     heading: "Summary",
                     columns: [
                       { header: "Metric", key: "metric", width: 28 },
-                      { header: "Value", key: "value", width: 22, format: "auto" as const },
+                      // Wide enough for the longest date label, e.g.
+                      // "Saturday, August 15, 2026 — Night shift (7 PM–7 AM)"
+                      // (~52 chars) — too narrow a column here visually clips
+                      // centered text on both sides instead of just spilling
+                      // rightward the way left-aligned overflow would.
+                      { header: "Value", key: "value", width: 55, format: "auto" as const },
                     ],
                     rows: [
                       { metric: "Date", value: reportLabel },
+                      { metric: "Time", value: dutyTime ? formatDutyTime(dutyTime) : "—" },
                       { metric: "Check-ins", value: report.checkIns },
                       { metric: "Check-outs", value: report.checkOuts },
                       { metric: "Room revenue", value: report.roomRevenue },

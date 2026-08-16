@@ -30,6 +30,18 @@ import {
 import { BrandLogo } from "@/components/brand-logo";
 import { cn } from "@/lib/utils";
 
+function HeaderClock({ className }: { className?: string }) {
+  const now = useNowTick(30_000);
+  const label = now.toLocaleString("en-PH", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return <span className={cn("text-sm text-muted-foreground", className)}>{label}</span>;
+}
+
 function useCheckoutReminderScanner() {
   const [bookingsByRoom, setBookingsByRoom] = useState<Map<string, Booking>>(new Map());
   const [roomsById, setRoomsById] = useState<Map<string, Room>>(new Map());
@@ -143,6 +155,8 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="hidden items-center gap-3 md:flex">
+          <HeaderClock />
+          <Separator orientation="vertical" className="h-5" />
           <PrinterStatus />
           <CashDrawerControl />
           <NotificationBell />
@@ -166,6 +180,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
       </header>
+
+      <div className="border-b bg-muted/30 px-4 py-1 text-center md:hidden">
+        <HeaderClock className="text-xs" />
+      </div>
 
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <SheetContent side="left" className="flex w-4/5 flex-col p-0">

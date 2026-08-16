@@ -295,12 +295,13 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
                 <span>Paid via {PAYMENT_METHOD_LABELS[booking.paymentMethod]}</span>
                 <span>₱{finalAmountPaid.toFixed(2)}</span>
               </div>
-              {booking.paymentMethod === "gcash" && booking.gcashReference && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>GCash Ref</span>
-                  <span>{booking.gcashReference}</span>
-                </div>
-              )}
+              {(booking.paymentMethod === "gcash" || booking.paymentMethod === "split") &&
+                booking.gcashReference && (
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>GCash Ref</span>
+                    <span>{booking.gcashReference}</span>
+                  </div>
+                )}
               {change > 0 && (
                 <div className="flex justify-between text-muted-foreground">
                   <span>Change</span>

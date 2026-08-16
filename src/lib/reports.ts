@@ -145,6 +145,8 @@ export interface DailySalesRow {
   totalPaid: number;
   paymentMethod: PaymentMethod;
   gcashReference?: string;
+  splitCashAmount?: number;
+  splitGcashAmount?: number;
 }
 
 export interface DailySalesTotals {
@@ -193,6 +195,8 @@ export function computeDailySalesReport(bookings: Booking[]): DailySalesReport {
         totalPaid: booking.amountPaid ?? 0,
         paymentMethod: booking.paymentMethod,
         gcashReference: booking.gcashReference,
+        splitCashAmount: booking.splitCashAmount,
+        splitGcashAmount: booking.splitGcashAmount,
       };
     });
 
@@ -203,8 +207,14 @@ export function computeDailySalesReport(bookings: Booking[]): DailySalesReport {
       acc.totalRoomAmount += row.totalRoomAmount;
       acc.totalStoreAmount += row.totalStoreAmount;
       acc.totalPaid += row.totalPaid;
-      if (row.paymentMethod === "cash") acc.cashCollected += row.totalPaid;
-      else acc.gcashCollected += row.totalPaid;
+      if (row.paymentMethod === "split") {
+        acc.cashCollected += row.splitCashAmount ?? 0;
+        acc.gcashCollected += row.splitGcashAmount ?? 0;
+      } else if (row.paymentMethod === "cash") {
+        acc.cashCollected += row.totalPaid;
+      } else {
+        acc.gcashCollected += row.totalPaid;
+      }
       return acc;
     },
     {

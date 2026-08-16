@@ -52,6 +52,8 @@ export interface CheckInInput {
   paymentMethod: PaymentMethod;
   amountPaid: number;
   gcashReference?: string;
+  splitCashAmount?: number;
+  splitGcashAmount?: number;
   specialRequests?: string;
   cashierId: string;
   cartItems?: CheckInCartLine[];
@@ -134,6 +136,8 @@ export async function checkIn(input: CheckInInput) {
       ...(input.guestCount !== undefined ? { guestCount: input.guestCount } : {}),
       ...(input.specialRequests ? { specialRequests: input.specialRequests } : {}),
       ...(input.gcashReference ? { gcashReference: input.gcashReference } : {}),
+      ...(input.splitCashAmount !== undefined ? { splitCashAmount: input.splitCashAmount } : {}),
+      ...(input.splitGcashAmount !== undefined ? { splitGcashAmount: input.splitGcashAmount } : {}),
     };
 
     tx.set(bookingRef, booking);

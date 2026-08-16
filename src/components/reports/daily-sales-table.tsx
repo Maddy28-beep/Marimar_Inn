@@ -84,7 +84,9 @@ export function DailySalesTable({ report }: { report: DailySalesReport }) {
                   </td>
                   <td className="border p-1 text-right whitespace-nowrap">{peso(row.totalPaid)}</td>
                   <td className="border p-1 whitespace-nowrap">
-                    {PAYMENT_METHOD_LABELS[row.paymentMethod]}
+                    {row.paymentMethod === "split"
+                      ? `Cash ${peso(row.splitCashAmount ?? 0)} + GCash ${peso(row.splitGcashAmount ?? 0)}`
+                      : PAYMENT_METHOD_LABELS[row.paymentMethod]}
                     {row.gcashReference ? ` (${row.gcashReference})` : ""}
                   </td>
                   <td className="border p-1" />

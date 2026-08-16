@@ -188,16 +188,30 @@ export function RoomDetailDialog({
                 <span>Total</span>
                 <span>₱{booking.totalAmount.toFixed(2)}</span>
               </div>
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span>Paid ({PAYMENT_METHOD_LABELS[booking.paymentMethod]})</span>
-                <span>₱{booking.amountPaid.toFixed(2)}</span>
-              </div>
-              {booking.paymentMethod === "gcash" && booking.gcashReference && (
+              {booking.paymentMethod === "split" ? (
+                <>
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span>Paid (Cash)</span>
+                    <span>₱{(booking.splitCashAmount ?? 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span>Paid (GCash)</span>
+                    <span>₱{(booking.splitGcashAmount ?? 0).toFixed(2)}</span>
+                  </div>
+                </>
+              ) : (
                 <div className="flex items-center justify-between text-muted-foreground">
-                  <span>GCash Ref</span>
-                  <span>{booking.gcashReference}</span>
+                  <span>Paid ({PAYMENT_METHOD_LABELS[booking.paymentMethod]})</span>
+                  <span>₱{booking.amountPaid.toFixed(2)}</span>
                 </div>
               )}
+              {(booking.paymentMethod === "gcash" || booking.paymentMethod === "split") &&
+                booking.gcashReference && (
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span>GCash Ref</span>
+                    <span>{booking.gcashReference}</span>
+                  </div>
+                )}
               {balance > 0 && (
                 <div className="flex items-center justify-between text-amber-600 dark:text-amber-400">
                   <span>Balance</span>

@@ -11,7 +11,7 @@ export interface AppUser {
 
 export type RoomStatus = "available" | "occupied" | "cleaning" | "maintenance";
 export type RoomType = "standard" | "deluxe" | "suite";
-export type PaymentMethod = "cash" | "gcash";
+export type PaymentMethod = "cash" | "gcash" | "split";
 export type PaymentStatus = "unpaid" | "partial" | "paid";
 export type BookingStatus = "active" | "checked_out" | "voided";
 
@@ -78,8 +78,13 @@ export interface Booking {
   amountPaid: number;
   paymentMethod: PaymentMethod;
   // GCash transaction reference number, so the Owner can cross-check the
-  // payment later. Only collected when paymentMethod is "gcash".
+  // payment later. Collected when paymentMethod is "gcash" or "split".
   gcashReference?: string;
+  // Only set when paymentMethod is "split" — the cash/GCash breakdown of
+  // amountPaid, so reports can attribute each portion to the right total
+  // instead of guessing from a single lump sum.
+  splitCashAmount?: number;
+  splitGcashAmount?: number;
   paymentStatus: PaymentStatus;
   status: BookingStatus;
   items: OrderItem[];
@@ -129,4 +134,5 @@ export const ROOM_TYPE_LABELS: Record<RoomType, string> = {
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   cash: "Cash",
   gcash: "GCash",
+  split: "Split",
 };
