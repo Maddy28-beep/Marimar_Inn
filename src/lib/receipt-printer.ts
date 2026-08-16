@@ -382,6 +382,7 @@ export interface DailySalesReceiptData {
   dateLabel: string;
   frontDesk?: string;
   housekeeping?: string;
+  dutyTime?: string;
   rows: DailySalesReceiptRow[];
   totals: DailySalesReceiptTotals;
 }
@@ -412,6 +413,7 @@ export function buildDailySalesReceiptBytes(data: DailySalesReceiptData): Uint8A
 
   if (data.frontDesk) encoder.line(clampLine(`Front desk: ${data.frontDesk}`, width));
   if (data.housekeeping) encoder.line(clampLine(`Housekeeping: ${data.housekeeping}`, width));
+  if (data.dutyTime) encoder.line(clampLine(`Time: ${data.dutyTime}`, width));
 
   encoder.align("left").newline().line(rule);
 

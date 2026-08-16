@@ -66,6 +66,17 @@ function peso(amount: number): string {
   })}`;
 }
 
+// <input type="time"> gives 24h "HH:MM" — display it the way staff write it
+// on the paper form ("7:00 AM").
+function formatDutyTime(value: string): string {
+  if (!value) return "";
+  const [h, m] = value.split(":").map(Number);
+  return new Date(2000, 0, 1, h, m).toLocaleTimeString("en-PH", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
     <Card size="sm">
@@ -84,6 +95,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   const [salesReport, setSalesReport] = useState<DailySalesReport | null>(null);
   const [frontDesk, setFrontDesk] = useState("");
   const [housekeeping, setHousekeeping] = useState("");
+  const [dutyTime, setDutyTime] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -127,6 +139,9 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
         name: "Daily Sales Report",
         title: "Daily Sales Report",
         subtitle: formatReportDate(dateValue),
+        dutyInfo: `Front desk: ${frontDesk.trim() || "______________"}     Housekeeping: ${
+          housekeeping.trim() || "______________"
+        }     Time: ${dutyTime ? formatDutyTime(dutyTime) : "________"}`,
         tables: [
           {
             columns: [
@@ -273,6 +288,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
         }),
         frontDesk: frontDesk.trim() || undefined,
         housekeeping: housekeeping.trim() || undefined,
+        dutyTime: dutyTime ? formatDutyTime(dutyTime) : undefined,
         rows: salesReport.rows.map((row) => ({
           roomNumber: row.roomNumber,
           refNumber: row.refNumber,
@@ -313,6 +329,13 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             value={housekeeping}
             onChange={(e) => setHousekeeping(e.target.value)}
             className="w-36"
+          />
+          <Input
+            type="time"
+            aria-label="Duty start time"
+            value={dutyTime}
+            onChange={(e) => setDutyTime(e.target.value)}
+            className="w-32"
           />
         </div>
         <div className="flex flex-col items-end gap-1">
@@ -361,6 +384,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
               <span>Date: {formatReportDate(dateValue)}</span>
               {frontDesk && <span>Front desk: {frontDesk}</span>}
               {housekeeping && <span>Housekeeping: {housekeeping}</span>}
+              {dutyTime && <span>Time: {formatDutyTime(dutyTime)}</span>}
             </div>
           </div>
 

@@ -18,6 +18,9 @@ export interface ExportSheet {
   name: string;
   title: string;
   subtitle?: string;
+  /** e.g. "Front desk: ___   Housekeeping: ___   Time: ___" — a blank line
+   * for whoever's on duty to fill in, matching the paper form this replaced. */
+  dutyInfo?: string;
   tables: ExportTable[];
 }
 
@@ -105,6 +108,16 @@ export async function exportToExcel(filename: string, sheets: ExportSheet[]) {
     worksheet.getRow(3).height = 18;
 
     let rowNumber = 5;
+
+    if (sheet.dutyInfo) {
+      worksheet.mergeCells(4, 1, 4, colCount);
+      const duty = worksheet.getCell(4, 1);
+      duty.value = sheet.dutyInfo;
+      duty.font = { name: "Calibri", size: 10, bold: true, color: { argb: TEAL } };
+      duty.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+      worksheet.getRow(4).height = 18;
+      rowNumber = 6;
+    }
 
     for (const table of sheet.tables) {
       const widths = table.columns.map((column) => column.width ?? 16);
