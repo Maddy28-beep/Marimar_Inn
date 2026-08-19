@@ -49,7 +49,12 @@ class PrinterBridge {
             val adapter = BluetoothAdapter.getDefaultAdapter()
                 ?: return@runOnPrinterThread "Bluetooth is not available on this tablet."
             if (!adapter.isEnabled) return@runOnPrinterThread "Turn Bluetooth on first."
-            adapter.cancelDiscovery()
+            try {
+                adapter.cancelDiscovery()
+            } catch (_: SecurityException) {
+                // BLUETOOTH_SCAN may be missing on first run — connecting to an
+                // already-paired printer still works without cancelling discovery.
+            }
             val device = adapter.getRemoteDevice(mac)
             val connected = tryConnect(device, insecure = true)
                 ?: tryConnect(device, insecure = false)

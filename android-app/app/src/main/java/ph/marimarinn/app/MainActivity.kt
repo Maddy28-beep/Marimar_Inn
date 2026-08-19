@@ -17,7 +17,7 @@ class MainActivity : AppCompatActivity() {
     private val printerBridge = PrinterBridge()
 
     private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
+        ActivityResultContracts.RequestMultiplePermissions()
     ) { loadApp() }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -42,7 +42,12 @@ class MainActivity : AppCompatActivity() {
         webView.addJavascriptInterface(printerBridge, "MarimarNativePrinter")
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.BLUETOOTH_CONNECT,
+                    Manifest.permission.BLUETOOTH_SCAN,
+                )
+            )
         } else {
             loadApp()
         }
