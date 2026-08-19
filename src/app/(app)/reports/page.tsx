@@ -21,6 +21,7 @@ import {
   type OverdueRecord,
 } from "@/lib/reports";
 import { DailySalesTable } from "@/components/reports/daily-sales-table";
+import { OpenDrawerForm } from "@/components/cash-drawer-open";
 import { exportToExcel, formatReportDate, formatReportMonth } from "@/lib/export";
 import {
   PAYMENT_METHOD_LABELS,
@@ -453,6 +454,27 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
           </div>
 
           {salesReport && <DailySalesTable report={salesReport} />}
+
+          {salesReport && (
+            <Card className="print:hidden">
+              <CardHeader>
+                <CardTitle>End of shift</CardTitle>
+                <CardDescription>
+                  Open the cash drawer with the Owner PIN, count the cash against this
+                  report, then print or export.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div className="text-sm">
+                  <span className="text-muted-foreground">Cash to count</span>
+                  <div className="text-xl font-semibold">
+                    {peso(salesReport.totals.cashCollected)}
+                  </div>
+                </div>
+                <OpenDrawerForm />
+              </CardContent>
+            </Card>
+          )}
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
             <StatCard label="Check-ins" value={String(report.checkIns)} />
