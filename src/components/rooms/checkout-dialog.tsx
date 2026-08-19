@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -18,7 +18,6 @@ import {
   methodContribution,
   paymentBreakdown,
   recordCheckout,
-  settleOpenTimeCharge,
   hoursElapsed,
 } from "@/lib/bookings";
 import { type Booking, type Room } from "@/lib/types";
@@ -93,6 +92,14 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
   const finalAmountPaid = booking.amountPaid + Math.min(paid, balanceBefore);
   const canComplete = Math.round(paid * 100) >= Math.round(balanceBefore * 100);
 
+  useEffect(() => {
+    if (balanceBefore <= 0) return;
+    setPayment((current) => {
+      if (current.method !== "cash" || current.amountPaid !== "") return current;
+      return { ...current, amountPaid: balanceBefore.toFixed(2) };
+    });
+  }, [balanceBefore]);
+
   async function printThermalCopy() {
     if (!printer.connected || !settledBooking) return;
     try {
@@ -133,11 +140,8 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
       splitQrphAmount: priorSplit.qrph + thisSplit.qrph,
     };
     try {
-      if (booking.openEnded) {
-        await settleOpenTimeCharge(booking, effectiveRoomCharge, Math.round(hoursUsed * 10) / 10);
-      }
       await recordCheckout(
-        effectiveBooking,
+        booking,
         amountCollectedNow,
         payload
           ? {
@@ -147,6 +151,12 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
               splitCashAmount: payload.splitCashAmount,
               splitGcashAmount: payload.splitGcashAmount,
               splitQrphAmount: payload.splitQrphAmount,
+            }
+          : undefined,
+        booking.openEnded
+          ? {
+              finalRoomCharge: effectiveRoomCharge,
+              actualHoursStayed: Math.round(hoursUsed * 10) / 10,
             }
           : undefined
       );
@@ -168,8 +178,13 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
           toast.error(`Checked out, but the printer said: ${printerErrorMessage(error)}`);
         }
       }
-    } catch {
-      toast.error("Couldn't complete checkout — please try again.");
+    } catch (error) {
+      console.error(error);
+      const message =
+        error instanceof Error && error.message && !error.message.toLowerCase().includes("permission")
+          ? error.message
+          : "Couldn't complete checkout — please try again.";
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -257,7 +272,7 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
               <Button variant="outline" onClick={onClose} disabled={submitting}>
                 Cancel
               </Button>
-              <Button onClick={handleConfirm} disabled={submitting || !canComplete}>
+              <Button onClick={handleConfirm} disabled={submitting}>
                 {submitting && <Loader2Icon className="size-4 animate-spin" />}
                 Complete checkout
               </Button>

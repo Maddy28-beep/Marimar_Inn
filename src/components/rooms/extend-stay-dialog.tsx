@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -19,7 +19,6 @@ import {
   hoursElapsed,
   OPEN_TIME_RATE_PER_HOUR,
 } from "@/lib/bookings";
-import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { useAuth } from "@/context/auth-context";
@@ -49,15 +48,6 @@ interface ExtendStayDialogProps {
 
 type ExtendMode = "hour" | "open";
 
-// Past this much overdue, neither extend option is offered — "+1 hour"
-// is a cheap flat top-up that undercharges a guest who's been gone a while,
-// and "Open time" would let the same guest linger indefinitely without
-// ever having to commit to a fresh booking. The guest goes through a
-// regular booking (3h minimum) instead. A short grace window still covers
-// someone just a few minutes behind wrapping up.
-const EXTEND_OVERDUE_CUTOFF_MINUTES = 10;
-const REGULAR_BOOKING_MIN_HOURS = 3;
-
 export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogProps) {
   const now = useNowTick(1000);
   const printer = useReceiptPrinter();
@@ -65,7 +55,10 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
   const staffName = appUser?.displayName ?? appUser?.email ?? "Staff";
   const [mode, setMode] = useState<ExtendMode>("hour");
   const [hourPrice, setHourPrice] = useState(String(OPEN_TIME_RATE_PER_HOUR));
-  const [payment, setPayment] = useState<PaymentDraft>(emptyPaymentDraft);
+  const [payment, setPayment] = useState<PaymentDraft>(() => ({
+    ...emptyPaymentDraft(),
+    amountPaid: String(OPEN_TIME_RATE_PER_HOUR),
+  }));
   const [submitting, setSubmitting] = useState(false);
   const [phase, setPhase] = useState<"form" | "receipt">("form");
   const [receipt, setReceipt] = useState<{
@@ -81,8 +74,6 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
   } | null>(null);
 
   const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, now);
-  const overdueMinutes = remaining < 0 ? -remaining * 60 : 0;
-  const tooOverdueToExtend = overdueMinutes >= EXTEND_OVERDUE_CUTOFF_MINUTES;
   const packageHours = booking.originalPackageHours ?? booking.hoursBooked;
   const packagePrice = booking.originalPackagePrice ?? booking.totalRoomCharge;
   const additionalCost = Number(hourPrice) || 0;
@@ -90,10 +81,6 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
   const change = paid > additionalCost ? paid - additionalCost : 0;
 
   async function handleExtendByHour() {
-    if (tooOverdueToExtend) {
-      toast.error("Too overdue for a quick extension — start a new booking instead.");
-      return;
-    }
     if (additionalCost <= 0) {
       toast.error("Enter the price for the extra hour.");
       return;
@@ -173,10 +160,6 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
   }
 
   async function handleConvertToOpenTime() {
-    if (tooOverdueToExtend) {
-      toast.error("Too overdue to extend — start a new booking instead.");
-      return;
-    }
     setSubmitting(true);
     try {
       await convertToOpenTime(booking.bookingId);
@@ -320,13 +303,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
             </div>
           </div>
 
-          {tooOverdueToExtend ? (
-            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
-              This room is already {formatHours(overdueMinutes / 60)} overdue — too late to
-              extend, either by the hour or to open time. Check the guest out and start a new
-              booking ({REGULAR_BOOKING_MIN_HOURS}h minimum) instead.
-            </p>
-          ) : mode === "hour" ? (
+          {mode === "hour" ? (
             <>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="hourPrice">Price for the hour</Label>
@@ -366,8 +343,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
           {mode === "hour" ? (
             <Button
               onClick={handleExtendByHour}
-              disabled={submitting || tooOverdueToExtend}
-              title={tooOverdueToExtend ? "Too overdue — start a new booking instead" : undefined}
+              disabled={submitting}
             >
               {submitting && <Loader2Icon className="size-4 animate-spin" />}
               Extend by 1 hour
@@ -375,8 +351,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
           ) : (
             <Button
               onClick={handleConvertToOpenTime}
-              disabled={submitting || tooOverdueToExtend}
-              title={tooOverdueToExtend ? "Too overdue — start a new booking instead" : undefined}
+              disabled={submitting}
             >
               {submitting && <Loader2Icon className="size-4 animate-spin" />}
               Switch to open time

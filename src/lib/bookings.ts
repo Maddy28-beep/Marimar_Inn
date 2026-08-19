@@ -232,17 +232,47 @@ export async function checkIn(input: CheckInInput) {
   return bookingRef.id;
 }
 
+function runningSplitUpdates(booking: Booking, extra: PaymentPortions) {
+  const prior = paymentBreakdown(booking);
+  const updates: {
+    splitCashAmount: number;
+    splitGcashAmount: number;
+    splitQrphAmount?: number;
+  } = {
+    splitCashAmount: prior.cash + extra.cash,
+    splitGcashAmount: prior.gcash + extra.gcash,
+  };
+  // Avoid adding splitQrphAmount to older bookings unless QRPh was actually
+  // used — older Firestore rules reject that new field and block checkout.
+  const nextQrph = prior.qrph + extra.qrph;
+  if (booking.splitQrphAmount !== undefined || nextQrph > 0) {
+    updates.splitQrphAmount = nextQrph;
+  }
+  return updates;
+}
+
+async function clearCheckoutReminder(bookingId: string) {
+  try {
+    await resolveCheckoutReminder(bookingId);
+  } catch {
+    // The booking write already succeeded; don't fail the front-desk action
+    // because the reminder doc couldn't be marked resolved.
+  }
+}
+
 export async function recordCheckout(
   booking: Booking,
   additionalPayment: number,
-  payment?: ExtendStayPayment
+  payment?: ExtendStayPayment,
+  openTime?: { finalRoomCharge: number; actualHoursStayed: number }
 ) {
   const firestore = requireDb();
+  const totalRoomCharge = openTime?.finalRoomCharge ?? booking.totalRoomCharge;
+  const totalAmount = totalRoomCharge + booking.totalFbCharge;
   const newAmountPaid = booking.amountPaid + additionalPayment;
-  if (Math.round(newAmountPaid * 100) < Math.round(booking.totalAmount * 100)) {
-    throw new Error("Cannot check out until the full amount is paid.");
+  if (Math.round(newAmountPaid * 100) < Math.round(totalAmount * 100)) {
+    throw new Error("Collect the remaining balance before checking out.");
   }
-  const priorSplit = paymentBreakdown(booking);
   const thisSplit =
     additionalPayment > 0
       ? methodContribution(payment?.paymentMethod ?? "cash", additionalPayment, {
@@ -257,11 +287,16 @@ export async function recordCheckout(
     status: "checked_out",
     checkOutTime: serverTimestamp(),
     amountPaid: newAmountPaid,
-    splitCashAmount: priorSplit.cash + thisSplit.cash,
-    splitGcashAmount: priorSplit.gcash + thisSplit.gcash,
-    splitQrphAmount: priorSplit.qrph + thisSplit.qrph,
-    paymentStatus: paymentStatusFor(newAmountPaid, booking.totalAmount),
+    ...runningSplitUpdates(booking, thisSplit),
+    paymentStatus: paymentStatusFor(newAmountPaid, totalAmount),
     updatedAt: serverTimestamp(),
+    ...(openTime
+      ? {
+          hoursBooked: openTime.actualHoursStayed,
+          totalRoomCharge,
+          totalAmount,
+        }
+      : {}),
     ...(additionalPayment > 0 && payment?.paymentMethod
       ? { paymentMethod: payment.paymentMethod }
       : {}),
@@ -273,7 +308,7 @@ export async function recordCheckout(
     lastUpdated: serverTimestamp(),
   });
   await batch.commit();
-  await resolveCheckoutReminder(booking.bookingId);
+  await clearCheckoutReminder(booking.bookingId);
 }
 
 export async function voidBooking(booking: Booking) {
@@ -288,7 +323,7 @@ export async function voidBooking(booking: Booking) {
     lastUpdated: serverTimestamp(),
   });
   await batch.commit();
-  await resolveCheckoutReminder(booking.bookingId);
+  await clearCheckoutReminder(booking.bookingId);
 }
 
 export async function deleteBooking(bookingId: string) {
@@ -317,7 +352,6 @@ export async function extendStay(
   const newTotalRoomCharge = booking.totalRoomCharge + packagePrice;
   const newTotalAmount = newTotalRoomCharge + booking.totalFbCharge;
   const newAmountPaid = booking.amountPaid + additionalPayment;
-  const priorSplit = paymentBreakdown(booking);
   const thisSplit = methodContribution(payment.paymentMethod, additionalPayment, {
     cash: payment.splitCashAmount,
     gcash: payment.splitGcashAmount,
@@ -333,9 +367,7 @@ export async function extendStay(
     // running cash/GCash/QRPh totals below are what stay accurate across mixed
     // methods, not this field alone.
     paymentMethod: payment.paymentMethod,
-    splitCashAmount: priorSplit.cash + thisSplit.cash,
-    splitGcashAmount: priorSplit.gcash + thisSplit.gcash,
-    splitQrphAmount: priorSplit.qrph + thisSplit.qrph,
+    ...runningSplitUpdates(booking, thisSplit),
     paymentStatus: paymentStatusFor(newAmountPaid, newTotalAmount),
     updatedAt: serverTimestamp(),
     ...(payment.gcashReference ? { gcashReference: payment.gcashReference } : {}),
@@ -345,7 +377,7 @@ export async function extendStay(
   // warning/overdue reminder (and its repeating alarm) raised before the
   // extension, otherwise it keeps ringing for a room that now has plenty
   // of time left.
-  await resolveCheckoutReminder(booking.bookingId);
+  await clearCheckoutReminder(booking.bookingId);
 }
 
 /**
@@ -361,7 +393,7 @@ export async function convertToOpenTime(bookingId: string) {
   });
   // Open-ended bookings have no fixed end time — clear any reminder raised
   // before the conversion, same reasoning as extendStay().
-  await resolveCheckoutReminder(bookingId);
+  await clearCheckoutReminder(bookingId);
 }
 
 /**
