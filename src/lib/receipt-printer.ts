@@ -1,7 +1,4 @@
 import ReceiptPrinterEncoder from "@point-of-sale/receipt-printer-encoder";
-import WebBluetoothReceiptPrinter, {
-  type ConnectedPrinterInfo as BluetoothPrinterInfo,
-} from "@point-of-sale/webbluetooth-receipt-printer";
 import WebSerialReceiptPrinter, {
   type ConnectedPrinterInfo as SerialPrinterInfo,
 } from "@point-of-sale/webserial-receipt-printer";
@@ -13,7 +10,6 @@ import {
 } from "@/lib/types";
 
 type PrinterKind = "bluetooth" | "serial";
-type ConnectedInfo = BluetoothPrinterInfo | SerialPrinterInfo;
 
 interface PrinterState {
   kind: PrinterKind | null;
@@ -23,7 +19,58 @@ interface PrinterState {
 
 const STORAGE_KEY = "marimar-inn:thermal-printer";
 
-let bluetoothPrinter: WebBluetoothReceiptPrinter | null = null;
+interface BleLePrinterProfile {
+  filters: BluetoothLEScanFilter[];
+  serviceUuid: string;
+  characteristicUuid: string;
+  language: "esc-pos" | "star-prnt";
+  codepageMapping: string;
+}
+
+// Trimmed down from the device-matching table that used to ship inside
+// @point-of-sale/webbluetooth-receipt-printer (ESC/POS-only — the only
+// language this app's printers use) and reimplemented locally so we can
+// choose the write mode ourselves — see connectBleCharacteristic() below.
+const BLE_PRINTER_PROFILES: BleLePrinterProfile[] = [
+  {
+    filters: [{ name: "BlueTooth Printer", services: ["000018f0-0000-1000-8000-00805f9b34fb"] }],
+    serviceUuid: "000018f0-0000-1000-8000-00805f9b34fb",
+    characteristicUuid: "00002af1-0000-1000-8000-00805f9b34fb",
+    language: "esc-pos",
+    codepageMapping: "zjiang",
+  },
+  {
+    filters: [{ name: "Printer001", services: ["000018f0-0000-1000-8000-00805f9b34fb"] }],
+    serviceUuid: "000018f0-0000-1000-8000-00805f9b34fb",
+    characteristicUuid: "00002af1-0000-1000-8000-00805f9b34fb",
+    language: "esc-pos",
+    codepageMapping: "xprinter",
+  },
+  {
+    filters: [{ name: "MPT-II", services: ["000018f0-0000-1000-8000-00805f9b34fb"] }],
+    serviceUuid: "000018f0-0000-1000-8000-00805f9b34fb",
+    characteristicUuid: "00002af1-0000-1000-8000-00805f9b34fb",
+    language: "esc-pos",
+    codepageMapping: "mpt",
+  },
+  {
+    // Generic fallback — matches most no-name-brand 58/80mm ESC/POS clones
+    // (this app's RPP02N included) purely by service UUID.
+    filters: [{ services: ["000018f0-0000-1000-8000-00805f9b34fb"] }],
+    serviceUuid: "000018f0-0000-1000-8000-00805f9b34fb",
+    characteristicUuid: "00002af1-0000-1000-8000-00805f9b34fb",
+    language: "esc-pos",
+    codepageMapping: "default",
+  },
+];
+
+interface ConnectedBlePrinter {
+  device: BluetoothDevice;
+  characteristic: BluetoothRemoteGATTCharacteristic;
+  writeWithoutResponse: boolean;
+}
+
+let blePrinter: ConnectedBlePrinter | null = null;
 let serialPrinter: WebSerialReceiptPrinter | null = null;
 let printerLanguage: "esc-pos" | "star-prnt" = "esc-pos";
 let printerCodepageMapping: string | undefined;
@@ -70,50 +117,90 @@ function saveStoredDevice(device: StoredDevice) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(device));
 }
 
-function onConnected(kind: PrinterKind, info: ConnectedInfo) {
+function onSerialConnected(info: SerialPrinterInfo) {
   printerLanguage = info.language;
   printerCodepageMapping = info.codepageMapping;
-  state.kind = kind;
-  state.name =
-    kind === "bluetooth"
-      ? (info as BluetoothPrinterInfo).name
-      : (info as SerialPrinterInfo).productName || "Serial printer";
+  state.kind = "serial";
+  state.name = info.productName || "Serial printer";
   emit();
 
   const existing = loadStoredDevice();
   const paperWidth = existing?.paperWidth ?? state.paperWidth;
   state.paperWidth = paperWidth;
-  if (kind === "bluetooth") {
-    saveStoredDevice({ kind, paperWidth, bluetoothId: (info as BluetoothPrinterInfo).id });
-  } else {
-    const s = info as SerialPrinterInfo;
-    saveStoredDevice({ kind, paperWidth, serialVendorId: s.vendorId, serialProductId: s.productId });
-  }
+  saveStoredDevice({ kind: "serial", paperWidth, serialVendorId: info.vendorId, serialProductId: info.productId });
 }
+
+function onBleConnected(name: string, id: string, profile: BleLePrinterProfile) {
+  printerLanguage = profile.language;
+  printerCodepageMapping = profile.codepageMapping;
+  state.kind = "bluetooth";
+  state.name = name;
+  emit();
+
+  const existing = loadStoredDevice();
+  const paperWidth = existing?.paperWidth ?? state.paperWidth;
+  state.paperWidth = paperWidth;
+  saveStoredDevice({ kind: "bluetooth", paperWidth, bluetoothId: id });
+}
+
+function onDisconnected() {
+  blePrinter = null;
+  state.kind = null;
+  state.name = null;
+  emit();
+}
+
+/**
+ * Connects the GATT server on an already-picked/already-authorized device
+ * and finds whichever printer profile's service+characteristic it exposes.
+ */
+async function connectBleCharacteristic(device: BluetoothDevice): Promise<void> {
+  if (!device.gatt) throw new Error("Device has no GATT server.");
+  device.addEventListener("gattserverdisconnected", onDisconnected);
+  const server = await device.gatt.connect();
+
+  let lastError: unknown;
+  for (const profile of BLE_PRINTER_PROFILES) {
+    try {
+      const service = await server.getPrimaryService(profile.serviceUuid);
+      const characteristic = await service.getCharacteristic(profile.characteristicUuid);
+      // Many cheap generic ESC/POS clones (this app's RPP02N included) only
+      // expose "Write Without Response" on their print characteristic —
+      // calling writeValueWithResponse() on those is rejected immediately,
+      // with no paper feed and previously no error surfaced at all (that
+      // rejection used to happen inside an unguarded async queue in the npm
+      // library this replaces). Checking what the characteristic actually
+      // advertises and matching the write call to it avoids that whole
+      // class of failure instead of guessing.
+      const writeWithoutResponse =
+        characteristic.properties.writeWithoutResponse && !characteristic.properties.write;
+      blePrinter = { device, characteristic, writeWithoutResponse };
+      onBleConnected(device.name ?? "Bluetooth printer", device.id, profile);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("No matching printer service found on this device.");
+}
+
+const BLE_ALL_FILTERS = BLE_PRINTER_PROFILES.flatMap((p) => p.filters);
+const BLE_OPTIONAL_SERVICES = Array.from(new Set(BLE_PRINTER_PROFILES.map((p) => p.serviceUuid)));
 
 /** Must be called from a click handler — browsers require a user gesture to open the device picker. */
 export async function connectBluetoothPrinter(): Promise<void> {
-  bluetoothPrinter = new WebBluetoothReceiptPrinter();
-  bluetoothPrinter.addEventListener("connected", (info) =>
-    onConnected("bluetooth", info)
-  );
-  bluetoothPrinter.addEventListener("disconnected", () => {
-    state.kind = null;
-    state.name = null;
-    emit();
+  const device = await navigator.bluetooth.requestDevice({
+    filters: BLE_ALL_FILTERS,
+    optionalServices: BLE_OPTIONAL_SERVICES,
   });
-  await bluetoothPrinter.connect();
+  await connectBleCharacteristic(device);
 }
 
 /** Must be called from a click handler — browsers require a user gesture to open the port picker. */
 export async function connectSerialPrinter(): Promise<void> {
   serialPrinter = new WebSerialReceiptPrinter();
-  serialPrinter.addEventListener("connected", (info) => onConnected("serial", info));
-  serialPrinter.addEventListener("disconnected", () => {
-    state.kind = null;
-    state.name = null;
-    emit();
-  });
+  serialPrinter.addEventListener("connected", (info) => onSerialConnected(info));
+  serialPrinter.addEventListener("disconnected", onDisconnected);
   await serialPrinter.connect();
 }
 
@@ -126,14 +213,13 @@ export async function connectSerialPrinter(): Promise<void> {
 export async function tryReconnectPrinter(): Promise<void> {
   // Every component that calls useReceiptPrinter() (PrinterStatus, plus
   // every dialog that can print) fires this on its own mount. Without this
-  // guard, opening a dialog while already connected would build a brand new
-  // WebBluetoothReceiptPrinter and re-run reconnect() on top of a
-  // perfectly working connection — clobbering the working instance's print
-  // characteristic with a fresh one if the redundant reconnect is slower,
-  // fails partway through, or races the original. The UI would keep
-  // showing "Connected" (state.kind is untouched unless a fresh attempt
-  // actually succeeds or the device fires its own disconnect event) while
-  // prints silently go nowhere.
+  // guard, opening a dialog while already connected would re-run the whole
+  // reconnect flow on top of a perfectly working connection — clobbering
+  // the working characteristic reference with a fresh (and possibly
+  // failed) one if the redundant attempt races or fails partway through.
+  // The UI would keep showing "Connected" (state.kind is untouched unless
+  // a fresh attempt actually succeeds or the device fires its own
+  // disconnect event) while prints silently go nowhere.
   if (state.kind !== null) return;
 
   const stored = loadStoredDevice();
@@ -142,22 +228,14 @@ export async function tryReconnectPrinter(): Promise<void> {
 
   try {
     if (stored.kind === "bluetooth" && stored.bluetoothId) {
-      bluetoothPrinter = new WebBluetoothReceiptPrinter();
-      bluetoothPrinter.addEventListener("connected", (info) => onConnected("bluetooth", info));
-      bluetoothPrinter.addEventListener("disconnected", () => {
-        state.kind = null;
-        state.name = null;
-        emit();
-      });
-      await bluetoothPrinter.reconnect({ id: stored.bluetoothId });
+      if (!navigator.bluetooth.getDevices) return;
+      const devices = await navigator.bluetooth.getDevices();
+      const device = devices.find((d) => d.id === stored.bluetoothId);
+      if (device) await connectBleCharacteristic(device);
     } else if (stored.kind === "serial") {
       serialPrinter = new WebSerialReceiptPrinter();
-      serialPrinter.addEventListener("connected", (info) => onConnected("serial", info));
-      serialPrinter.addEventListener("disconnected", () => {
-        state.kind = null;
-        state.name = null;
-        emit();
-      });
+      serialPrinter.addEventListener("connected", (info) => onSerialConnected(info));
+      serialPrinter.addEventListener("disconnected", onDisconnected);
       await serialPrinter.reconnect({
         vendorId: stored.serialVendorId,
         productId: stored.serialProductId,
@@ -175,24 +253,42 @@ export function setPaperWidth(width: 32 | 48) {
   emit();
 }
 
-// The underlying print() promise can hang indefinitely instead of rejecting
-// if a single write partway through its internal queue fails — the library
-// has no reject path for that case, only a resolve once every queued write
-// has gone through. Racing it against a timeout turns a dead/stuck BLE
-// connection into a normal, catchable error instead of freezing whichever
-// flow (check-in, checkout, extend) is waiting on the print to finish.
+const BLE_CHUNK_SIZE = 100;
+// "Write Without Response" gets no acknowledgment from the printer, so
+// pacing chunks avoids overrunning cheap printer firmware's receive
+// buffer — there's no flow control to push back if we write too fast.
+const BLE_CHUNK_DELAY_MS = 20;
 const PRINT_TIMEOUT_MS = 8000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function writeBleData(printer: ConnectedBlePrinter, data: Uint8Array): Promise<void> {
+  for (let offset = 0; offset < data.length; offset += BLE_CHUNK_SIZE) {
+    const chunk = data.subarray(offset, offset + BLE_CHUNK_SIZE);
+    if (printer.writeWithoutResponse) {
+      await printer.characteristic.writeValueWithoutResponse(chunk);
+      await sleep(BLE_CHUNK_DELAY_MS);
+    } else {
+      await printer.characteristic.writeValueWithResponse(chunk);
+    }
+  }
+}
 
 async function send(data: Uint8Array): Promise<void> {
   let printPromise: Promise<unknown>;
-  if (state.kind === "bluetooth" && bluetoothPrinter) {
-    printPromise = bluetoothPrinter.print(data);
+  if (state.kind === "bluetooth" && blePrinter) {
+    printPromise = writeBleData(blePrinter, data);
   } else if (state.kind === "serial" && serialPrinter) {
     printPromise = serialPrinter.print(data);
   } else {
     throw new Error("No thermal printer connected.");
   }
 
+  // Guards against a hung write (e.g. a dead connection the
+  // gattserverdisconnected event hasn't caught up with yet) turning into a
+  // frozen flow instead of a normal, catchable error.
   await Promise.race([
     printPromise,
     new Promise<never>((_, reject) =>

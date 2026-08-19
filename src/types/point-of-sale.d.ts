@@ -1,7 +1,10 @@
 // These packages ship untyped JS builds — minimal ambient declarations
 // covering only what this app actually calls, based on their published
 // READMEs (github.com/NielsLeenheer/ReceiptPrinterEncoder,
-// WebBluetoothReceiptPrinter, WebSerialReceiptPrinter).
+// WebSerialReceiptPrinter). Bluetooth printing talks to
+// navigator.bluetooth directly (see web-bluetooth.d.ts) instead of going
+// through @point-of-sale/webbluetooth-receipt-printer — see the comment
+// in receipt-printer.ts's connectBleCharacteristic() for why.
 
 declare module "@point-of-sale/receipt-printer-encoder" {
   export interface ReceiptPrinterEncoderOptions {
@@ -23,25 +26,6 @@ declare module "@point-of-sale/receipt-printer-encoder" {
     cut(value?: "full" | "partial"): this;
     pulse(pin?: number, on?: number, off?: number): this;
     encode(): Uint8Array;
-  }
-}
-
-declare module "@point-of-sale/webbluetooth-receipt-printer" {
-  export interface ConnectedPrinterInfo {
-    type: "bluetooth";
-    name: string;
-    id: string;
-    language: "esc-pos" | "star-prnt";
-    codepageMapping: string;
-  }
-
-  export default class WebBluetoothReceiptPrinter {
-    connect(): Promise<void>;
-    reconnect(lastUsedDevice: { id: string }): Promise<void>;
-    print(data: Uint8Array): Promise<void>;
-    addEventListener(type: "connected", listener: (device: ConnectedPrinterInfo) => void): void;
-    addEventListener(type: "disconnected", listener: () => void): void;
-    addEventListener(type: string, listener: (payload: unknown) => void): void;
   }
 }
 
