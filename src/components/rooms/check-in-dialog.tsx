@@ -212,8 +212,12 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
             finalAmountPaid: amountCollected,
             change,
           });
-        } catch {
-          toast.error("Checked in, but the thermal printer didn't respond.");
+        } catch (error) {
+          toast.error(
+            error instanceof Error
+              ? `Checked in, but the printer said: ${error.message}`
+              : "Checked in, but the thermal printer didn't respond."
+          );
         }
       }
 
@@ -239,8 +243,10 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
         finalAmountPaid: receipt.finalAmountPaid,
         change: receipt.change,
       });
-    } catch {
-      toast.error("Couldn't print to the thermal printer.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Couldn't print to the thermal printer."
+      );
     }
   }
 

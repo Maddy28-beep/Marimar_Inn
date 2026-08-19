@@ -77,7 +77,7 @@ const BLE_PRINTER_PROFILES: BleLePrinterProfile[] = [
     serviceUuid: "000018f0-0000-1000-8000-00805f9b34fb",
     characteristicUuid: "00002af1-0000-1000-8000-00805f9b34fb",
     language: "esc-pos",
-    codepageMapping: "default",
+    codepageMapping: "epson",
   },
 ];
 
@@ -90,7 +90,19 @@ interface ConnectedBlePrinter {
 let blePrinter: ConnectedBlePrinter | null = null;
 let serialPrinter: WebSerialReceiptPrinter | null = null;
 let printerLanguage: "esc-pos" | "star-prnt" = "esc-pos";
-let printerCodepageMapping: string | undefined;
+let printerCodepageMapping = "epson";
+
+function createEncoder(width?: number) {
+  const mapping =
+    printerCodepageMapping && printerCodepageMapping !== "default"
+      ? printerCodepageMapping
+      : "epson";
+  return new ReceiptPrinterEncoder({
+    language: printerLanguage,
+    codepageMapping: mapping,
+    ...(width != null ? { width } : {}),
+  });
+}
 
 const state: PrinterState = { kind: null, name: null, paperWidth: 32 };
 const listeners = new Set<(state: PrinterState) => void>();
@@ -164,6 +176,8 @@ export async function connectNativePrinter(printer: PairedPrinter): Promise<void
   if (!bridge) throw new Error("Open Marimar Inn from the tablet app to print.");
   const result = bridge.connect(printer.id);
   if (result !== "ok") throw new Error(result || "Couldn't connect to the printer.");
+  printerLanguage = "esc-pos";
+  printerCodepageMapping = "epson";
   state.kind = "native";
   state.name = printer.name;
   emit();
@@ -455,7 +469,8 @@ async function send(data: Uint8Array): Promise<void> {
   if (state.kind === "native") {
     const bridge = getNativePrinterBridge();
     if (!bridge) throw new Error("Open Marimar Inn from the tablet app to print.");
-    const result = bridge.writeBase64(uint8ArrayToBase64(data));
+    const payload = uint8ArrayToBase64(data instanceof Uint8Array ? data : new Uint8Array(data ?? []));
+    const result = String(bridge.writeBase64(payload) ?? "").trim();
     if (result !== "ok") throw new Error(result || "The printer didn't accept the job.");
     return;
   }
@@ -532,11 +547,7 @@ export function referenceNumberFor(bookingId: string): string {
 
 export function buildReceiptBytes(booking: Booking, room: Room, extras: ReceiptExtras): Uint8Array {
   const width = state.paperWidth;
-  const encoder = new ReceiptPrinterEncoder({
-    language: printerLanguage,
-    codepageMapping: printerCodepageMapping,
-    width,
-  });
+  const encoder = createEncoder(width);
 
   encoder
     .initialize()
@@ -635,11 +646,7 @@ export function buildExtensionReceiptBytes(
   extras: ExtensionReceiptExtras
 ): Uint8Array {
   const width = state.paperWidth;
-  const encoder = new ReceiptPrinterEncoder({
-    language: printerLanguage,
-    codepageMapping: printerCodepageMapping,
-    width,
-  });
+  const encoder = createEncoder(width);
 
   encoder
     .initialize()
@@ -734,11 +741,7 @@ export interface DailySalesReceiptData {
 export function buildDailySalesReceiptBytes(data: DailySalesReceiptData): Uint8Array {
   const width = state.paperWidth;
   const rule = "-".repeat(width);
-  const encoder = new ReceiptPrinterEncoder({
-    language: printerLanguage,
-    codepageMapping: printerCodepageMapping,
-    width,
-  });
+  const encoder = createEncoder(width);
 
   encoder
     .initialize()
@@ -815,11 +818,7 @@ export async function printDailySalesReceipt(data: DailySalesReceiptData) {
 }
 
 export async function printTestPage() {
-  const encoder = new ReceiptPrinterEncoder({
-    language: printerLanguage,
-    codepageMapping: printerCodepageMapping,
-    width: state.paperWidth,
-  });
+  const encoder = createEncoder(state.paperWidth);
   encoder
     .initialize()
     .align("center")
@@ -838,10 +837,7 @@ export async function printTestPage() {
 
 /** Sends the drawer-kick pulse — the drawer must be cabled into the printer's RJ11 port. */
 export async function openCashDrawer() {
-  const encoder = new ReceiptPrinterEncoder({
-    language: printerLanguage,
-    codepageMapping: printerCodepageMapping,
-  });
+  const encoder = createEncoder();
   await send(encoder.pulse().encode());
 }
 

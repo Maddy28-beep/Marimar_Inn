@@ -16,13 +16,14 @@ import java.util.concurrent.TimeUnit
 /**
  * Classic Bluetooth SPP bridge — same path the working Flutter POS APK uses
  * (`00001101-0000-1000-8000-00805F9B34FB`, insecure then secure socket).
- * Chrome cannot do this; that's why "connected" in the browser still prints nothing.
+ * Cheap printers often drop an idle socket, so each print job reconnects.
  */
 class PrinterBridge {
     private val sppUuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
     private val executor = Executors.newSingleThreadExecutor()
     private var socket: BluetoothSocket? = null
     private var output: OutputStream? = null
+    private var lastMac: String? = null
 
     @JavascriptInterface
     fun isNative(): Boolean = true
@@ -45,24 +46,35 @@ class PrinterBridge {
     @JavascriptInterface
     fun connect(mac: String): String {
         return runOnPrinterThread {
-            disconnectLocked()
-            val adapter = BluetoothAdapter.getDefaultAdapter()
-                ?: return@runOnPrinterThread "Bluetooth is not available on this tablet."
-            if (!adapter.isEnabled) return@runOnPrinterThread "Turn Bluetooth on first."
-            try {
-                adapter.cancelDiscovery()
-            } catch (_: SecurityException) {
-                // BLUETOOTH_SCAN may be missing on first run — connecting to an
-                // already-paired printer still works without cancelling discovery.
+            val result = connectLocked(mac)
+            if (result == "ok") {
+                lastMac = mac
             }
-            val device = adapter.getRemoteDevice(mac)
-            val connected = tryConnect(device, insecure = true)
-                ?: tryConnect(device, insecure = false)
-                ?: return@runOnPrinterThread "Couldn't open the printer. Pair it in Android Settings → Bluetooth, then try again."
-            socket = connected
-            output = connected.outputStream
-            "ok"
+            result
         }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun connectLocked(mac: String): String {
+        disconnectLocked()
+        val adapter = BluetoothAdapter.getDefaultAdapter()
+            ?: return "Bluetooth is not available on this tablet."
+        if (!adapter.isEnabled) return "Turn Bluetooth on first."
+        try {
+            adapter.cancelDiscovery()
+        } catch (_: SecurityException) {
+            // Connecting to an already-paired printer still works without this.
+        }
+        val device = adapter.getRemoteDevice(mac)
+        val connected = tryConnect(device, insecure = true)
+            ?: tryConnect(device, insecure = false)
+            ?: tryConnectRfcommChannel(device)
+            ?: return "Couldn't open the printer. Pair it in Android Settings → Bluetooth, then try again."
+        socket = connected
+        output = connected.outputStream
+        lastMac = mac
+        Thread.sleep(400)
+        return "ok"
     }
 
     @SuppressLint("MissingPermission")
@@ -74,7 +86,19 @@ class PrinterBridge {
                 device.createRfcommSocketToServiceRecord(sppUuid)
             }
             candidate.connect()
-            candidate
+            if (candidate.isConnected) candidate else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun tryConnectRfcommChannel(device: BluetoothDevice): BluetoothSocket? {
+        return try {
+            val method = device.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
+            val candidate = method.invoke(device, 1) as BluetoothSocket
+            candidate.connect()
+            if (candidate.isConnected) candidate else null
         } catch (_: Exception) {
             null
         }
@@ -83,23 +107,49 @@ class PrinterBridge {
     @JavascriptInterface
     fun writeBase64(data: String): String {
         return runOnPrinterThread {
-            val stream = output ?: return@runOnPrinterThread "Printer is not connected."
+            val mac = lastMac ?: return@runOnPrinterThread "Printer is not connected. Tap the printer icon and connect again."
+            if (output == null || socket?.isConnected != true) {
+                val reopened = connectLocked(mac)
+                if (reopened != "ok") return@runOnPrinterThread reopened
+            }
+            writeLocked(data)
+        }
+    }
+
+    private fun writeLocked(data: String): String {
+        fun attempt(): String {
+            val stream = output ?: return "Printer is not connected. Tap the printer icon and connect again."
             val bytes = Base64.decode(data, Base64.DEFAULT)
             var offset = 0
             while (offset < bytes.size) {
-                val end = minOf(offset + 256, bytes.size)
+                val end = minOf(offset + 64, bytes.size)
                 stream.write(bytes, offset, end - offset)
                 stream.flush()
                 offset = end
-                Thread.sleep(20)
+                Thread.sleep(40)
             }
-            "ok"
+            Thread.sleep(200)
+            return "ok"
+        }
+
+        return try {
+            attempt()
+        } catch (error: Exception) {
+            val mac = lastMac ?: return error.message ?: "Print failed."
+            val reopened = connectLocked(mac)
+            if (reopened != "ok") return reopened
+            try {
+                attempt()
+            } catch (retryError: Exception) {
+                retryError.message ?: "Print failed."
+            }
         }
     }
 
     @JavascriptInterface
     fun disconnect(): String {
         return runOnPrinterThread {
+            lastMac = null
             disconnectLocked()
             "ok"
         }
@@ -127,7 +177,7 @@ class PrinterBridge {
             }
         }
         return try {
-            future.get(20, TimeUnit.SECONDS)
+            future.get(25, TimeUnit.SECONDS)
         } catch (_: Exception) {
             "Printer didn't respond in time."
         }

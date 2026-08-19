@@ -351,8 +351,10 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
         })),
         totals: salesReport.totals,
       });
-    } catch {
-      toast.error("Couldn't print to the thermal printer.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Couldn't print to the thermal printer."
+      );
     }
   }
 

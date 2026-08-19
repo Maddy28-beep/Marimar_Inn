@@ -139,7 +139,11 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
             splitGcashAmount: gcashPortion,
           });
         } catch {
-          toast.error("Extended, but the thermal printer didn't respond.");
+          toast.error(
+            error instanceof Error
+              ? `Extended, but the printer said: ${error.message}`
+              : "Extended, but the thermal printer didn't respond."
+          );
         }
       }
       setReceipt({
@@ -174,8 +178,10 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
         splitCashAmount: receipt.splitCashAmount,
         splitGcashAmount: receipt.splitGcashAmount,
       });
-    } catch {
-      toast.error("Couldn't print to the thermal printer.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Couldn't print to the thermal printer."
+      );
     }
   }
 

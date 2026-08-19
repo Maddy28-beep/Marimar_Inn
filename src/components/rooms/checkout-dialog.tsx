@@ -89,8 +89,10 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
     if (!printer.connected || !settledBooking) return;
     try {
       await printThermalReceipt(settledBooking, room, { staffName, finalAmountPaid, change });
-    } catch {
-      toast.error("Couldn't print to the thermal printer.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Couldn't print to the thermal printer."
+      );
     }
   }
 
@@ -134,8 +136,12 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
             await openCashDrawer();
           }
           await printThermalReceipt(finalBooking, room, { staffName, finalAmountPaid, change });
-        } catch {
-          toast.error("Checked out, but the thermal printer didn't respond.");
+        } catch (error) {
+          toast.error(
+            error instanceof Error
+              ? `Checked out, but the printer said: ${error.message}`
+              : "Checked out, but the thermal printer didn't respond."
+          );
         }
       }
     } catch {
