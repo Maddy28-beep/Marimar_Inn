@@ -649,7 +649,7 @@ export function buildReceiptBytes(booking: Booking, room: Room, extras: ReceiptE
     .bold(true)
     .line("Marimar Inn")
     .bold(false)
-    .line("Official Receipt")
+    .line("This is not an official receipt")
     .line(`Ref: ${referenceNumberFor(booking.bookingId)}`)
     .newline()
     .align("left")

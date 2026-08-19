@@ -278,7 +278,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
             <div className="print-area flex flex-col gap-2 rounded-lg border p-4 text-sm">
               <div className="text-center">
                 <div className="font-heading text-base font-semibold">Marimar Inn</div>
-                <div className="text-xs text-muted-foreground">Official Receipt</div>
+                <div className="text-xs text-muted-foreground">This is not an official receipt</div>
                 <div className="text-xs text-muted-foreground">
                   Ref: {referenceNumberFor(receipt.booking.bookingId)}
                 </div>
