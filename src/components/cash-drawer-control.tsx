@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/context/auth-context";
 import { isDrawerEnabled, setDrawerEnabled } from "@/lib/receipt-printer";
-import { setDrawerPin, subscribeToDrawerPinConfigured } from "@/lib/settings";
+import { normalizePin, setDrawerPin, subscribeToDrawerPinConfigured } from "@/lib/settings";
 import { OpenDrawerForm } from "@/components/cash-drawer-open";
 import { BanknoteIcon, Loader2Icon } from "lucide-react";
 
@@ -18,31 +18,32 @@ export function CashDrawerControl() {
   const [configured, setConfigured] = useState(false);
   const [newPin, setNewPin] = useState("");
   const [savingPin, setSavingPin] = useState(false);
-  const [drawerOn, setDrawerOn] = useState(false);
+  const [openOnCash, setOpenOnCash] = useState(false);
 
   useEffect(() => subscribeToDrawerPinConfigured(setConfigured), []);
-  useEffect(() => setDrawerOn(isDrawerEnabled()), []);
+  useEffect(() => setOpenOnCash(isDrawerEnabled()), []);
 
   function handleToggle() {
-    const next = !drawerOn;
+    const next = !openOnCash;
     setDrawerEnabled(next);
-    setDrawerOn(next);
+    setOpenOnCash(next);
     toast.success(
       next
-        ? "Auto-open on — the drawer will pop when a guest pays cash."
-        : "Auto-open off — use Open drawer (with PIN) at end of shift."
+        ? "On cash pay: the drawer will open when a guest pays cash."
+        : "On cash pay is off. Use Open drawer (with PIN) when you need it."
     );
   }
 
   async function handleSavePin() {
-    if (newPin.trim().length < 4) {
+    const digits = normalizePin(newPin);
+    if (digits.length < 4) {
       toast.error("Use at least 4 digits.");
       return;
     }
     setSavingPin(true);
     try {
-      await setDrawerPin(newPin.trim());
-      toast.success("Drawer PIN saved for cashiers.");
+      await setDrawerPin(digits);
+      toast.success("Drawer PIN saved. Cashiers can use it now.");
       setNewPin("");
     } catch {
       toast.error("Couldn't save the PIN — please try again.");
@@ -59,7 +60,7 @@ export function CashDrawerControl() {
         <BanknoteIcon className="size-5" />
         <span
           className={
-            drawerOn
+            openOnCash
               ? "absolute top-1 right-1 size-2 rounded-full bg-emerald-500"
               : "absolute top-1 right-1 size-2 rounded-full bg-muted-foreground/40"
           }
@@ -68,20 +69,27 @@ export function CashDrawerControl() {
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-3">
         <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Cash drawer</span>
-            <Button size="sm" variant={drawerOn ? "outline" : "default"} onClick={handleToggle}>
-              {drawerOn ? "Auto-open off" : "Auto-open on"}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <span className="text-sm font-medium">On cash pay</span>
+              <p className="text-xs text-muted-foreground">
+                {openOnCash
+                  ? "Drawer opens when a guest pays cash. GCash and QRPh leave it closed. Fully paid checkouts also leave it closed."
+                  : "Drawer stays closed during sales. Open it below with the PIN when you need to count cash."}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant={openOnCash ? "default" : "outline"}
+              className="shrink-0"
+              onClick={handleToggle}
+            >
+              {openOnCash ? "On" : "Off"}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {drawerOn
-              ? "Opens by itself when cash is collected. GCash and QRPh leave it closed. Fully paid checkouts also leave it closed."
-              : "Auto-open is off. At end of shift, open it below with the PIN to count cash."}
-          </p>
 
           <div className="flex flex-col gap-1.5 border-t pt-3">
-            <span className="text-xs font-medium text-muted-foreground">Open to count cash</span>
+            <span className="text-xs font-medium text-muted-foreground">Open drawer</span>
             <OpenDrawerForm />
           </div>
 
@@ -95,10 +103,16 @@ export function CashDrawerControl() {
                   id="newDrawerPin"
                   type="text"
                   inputMode="numeric"
-                  placeholder="e.g. 1234"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  name="marimar-drawer-pin-setup"
+                  placeholder="e.g. 2026"
                   value={newPin}
-                  onChange={(e) => setNewPin(e.target.value)}
+                  onChange={(e) => setNewPin(normalizePin(e.target.value))}
                   disabled={savingPin}
+                  maxLength={8}
                 />
                 <Button size="sm" variant="outline" onClick={handleSavePin} disabled={savingPin}>
                   {savingPin && <Loader2Icon className="size-4 animate-spin" />}

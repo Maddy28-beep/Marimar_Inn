@@ -460,7 +460,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
               <CardHeader>
                 <CardTitle>End of shift</CardTitle>
                 <CardDescription>
-                  Open the cash drawer with the Owner PIN, count the cash against this
+                  Open the cash drawer with the PIN, count the cash against this
                   report, then print or export.
                 </CardDescription>
               </CardHeader>

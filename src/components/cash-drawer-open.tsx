@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/auth-context";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { openCashDrawer, printerErrorMessage } from "@/lib/receipt-printer";
-import { subscribeToDrawerPinConfigured, verifyDrawerPin } from "@/lib/settings";
+import { normalizePin, subscribeToDrawerPinConfigured, verifyDrawerPin } from "@/lib/settings";
 import { Loader2Icon } from "lucide-react";
 
 export function OpenDrawerForm() {
@@ -32,21 +32,22 @@ export function OpenDrawerForm() {
         toast.error("No drawer PIN yet — ask the Owner to set one.");
         return;
       }
-      if (!pin.trim()) {
+      const digits = normalizePin(pin);
+      if (!digits) {
         toast.error("Enter the drawer PIN.");
         return;
       }
       setOpening(true);
       let ok: boolean;
       try {
-        ok = await verifyDrawerPin(pin.trim());
+        ok = await verifyDrawerPin(digits);
       } catch {
-        toast.error("Couldn't verify the PIN — please try again.");
+        toast.error("Couldn't check the PIN — please try again.");
         setOpening(false);
         return;
       }
       if (!ok) {
-        toast.error("Wrong PIN.");
+        toast.error("That PIN doesn't match. Ask the Owner to save it again (banknote icon).");
         setOpening(false);
         return;
       }
@@ -92,11 +93,18 @@ export function OpenDrawerForm() {
       <div className="flex gap-2">
         <Input
           id="shiftDrawerPin"
-          type="password"
+          type="text"
           inputMode="numeric"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          name="marimar-drawer-pin"
+          placeholder="PIN"
           value={pin}
-          onChange={(e) => setPin(e.target.value)}
+          onChange={(e) => setPin(normalizePin(e.target.value))}
           disabled={opening}
+          maxLength={8}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
