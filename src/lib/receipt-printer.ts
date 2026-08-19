@@ -495,6 +495,31 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+function withDrawerKick(data: Uint8Array, kick?: boolean): Uint8Array {
+  if (!kick) return data;
+  const pulse = new EscPosBuilder().pulse().encode();
+  const combined = new Uint8Array(data.length + pulse.length);
+  combined.set(data, 0);
+  combined.set(pulse, data.length);
+  return combined;
+}
+
+export function printerErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string" && error.trim()) return error;
+  if (error && typeof error === "object" && "message" in error) {
+    const message = String((error as { message: unknown }).message ?? "").trim();
+    if (message) return message;
+  }
+  try {
+    const text = String(error ?? "").trim();
+    if (text && text !== "[object Object]") return text;
+  } catch {
+    // Ignore stringify failures from Java host objects.
+  }
+  return "The thermal printer didn't respond.";
+}
+
 const RAWBT_PACKAGE = "ru.a402d.rawbtprinter";
 
 /**
@@ -532,9 +557,14 @@ async function send(data: Uint8Array): Promise<void> {
   if (state.kind === "native") {
     const bridge = getNativePrinterBridge();
     if (!bridge) throw new Error("Open Marimar Inn from the tablet app to print.");
-    const payload = uint8ArrayToBase64(data instanceof Uint8Array ? data : new Uint8Array(data ?? []));
-    const result = String(bridge.writeBase64(payload) ?? "").trim();
-    if (result !== "ok") throw new Error(result || "The printer didn't accept the job.");
+    const bytes = data instanceof Uint8Array ? data : new Uint8Array(data ?? []);
+    try {
+      const payload = uint8ArrayToBase64(bytes);
+      const result = String(bridge.writeBase64(payload) ?? "").trim();
+      if (result !== "ok") throw new Error(result || "The printer didn't accept the job.");
+    } catch (error) {
+      throw new Error(printerErrorMessage(error));
+    }
     return;
   }
 
@@ -594,6 +624,7 @@ export interface ReceiptExtras {
   staffName: string;
   finalAmountPaid: number;
   change: number;
+  kickDrawer?: boolean;
 }
 
 /**
@@ -629,7 +660,7 @@ export function buildReceiptBytes(booking: Booking, room: Room, extras: ReceiptE
     .newline()
     .line(twoColumn(`Room (${booking.hoursBooked}h)`, money(booking.totalRoomCharge), width));
 
-  for (const item of booking.items) {
+  for (const item of booking.items ?? []) {
     encoder.line(
       twoColumn(`${item.quantity}x ${item.name}`, money(item.subtotal), width)
     );
@@ -682,7 +713,7 @@ export function buildReceiptBytes(booking: Booking, room: Room, extras: ReceiptE
 }
 
 export async function printThermalReceipt(booking: Booking, room: Room, extras: ReceiptExtras) {
-  await send(buildReceiptBytes(booking, room, extras));
+  await send(withDrawerKick(buildReceiptBytes(booking, room, extras), extras.kickDrawer));
 }
 
 export interface ExtensionReceiptExtras {
@@ -695,6 +726,7 @@ export interface ExtensionReceiptExtras {
   gcashReference?: string;
   splitCashAmount?: number;
   splitGcashAmount?: number;
+  kickDrawer?: boolean;
 }
 
 /**
@@ -762,7 +794,7 @@ export function buildExtensionReceiptBytes(
 }
 
 export async function printExtensionReceipt(booking: Booking, room: Room, extras: ExtensionReceiptExtras) {
-  await send(buildExtensionReceiptBytes(booking, room, extras));
+  await send(withDrawerKick(buildExtensionReceiptBytes(booking, room, extras), extras.kickDrawer));
 }
 
 export interface DailySalesReceiptRow {

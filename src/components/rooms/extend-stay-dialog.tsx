@@ -32,8 +32,8 @@ import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { useAuth } from "@/context/auth-context";
 import {
-  openCashDrawer,
   printExtensionReceipt,
+  printerErrorMessage,
   referenceNumberFor,
   shouldOpenDrawer,
 } from "@/lib/receipt-printer";
@@ -119,13 +119,6 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
       });
       toast.success(`Room ${room.roomNumber} extended by 1h.`);
       if (printer.connected) {
-        if (shouldOpenDrawer(paymentMethod, cashPortion)) {
-          try {
-            await openCashDrawer();
-          } catch {
-            toast.error("Extended, but couldn't open the cash drawer.");
-          }
-        }
         try {
           await printExtensionReceipt(booking, room, {
             staffName,
@@ -137,13 +130,10 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
             gcashReference: usesGcashRef ? gcashReference.trim() || undefined : undefined,
             splitCashAmount: paymentMethod === "split" ? splitCashValue : undefined,
             splitGcashAmount: gcashPortion,
+            kickDrawer: shouldOpenDrawer(paymentMethod, cashPortion),
           });
-        } catch {
-          toast.error(
-            error instanceof Error
-              ? `Extended, but the printer said: ${error.message}`
-              : "Extended, but the thermal printer didn't respond."
-          );
+        } catch (error) {
+          toast.error(`Extended, but the printer said: ${printerErrorMessage(error)}`);
         }
       }
       setReceipt({
@@ -179,9 +169,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
         splitGcashAmount: receipt.splitGcashAmount,
       });
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Couldn't print to the thermal printer."
-      );
+      toast.error(printerErrorMessage(error));
     }
   }
 

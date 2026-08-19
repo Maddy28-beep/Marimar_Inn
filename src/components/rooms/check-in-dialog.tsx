@@ -28,8 +28,8 @@ import { subscribeToInventory } from "@/lib/inventory";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { useAuth } from "@/context/auth-context";
 import {
-  openCashDrawer,
   printThermalReceipt,
+  printerErrorMessage,
   referenceNumberFor,
   shouldOpenDrawer,
 } from "@/lib/receipt-printer";
@@ -199,25 +199,15 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
       };
 
       if (printer.connected) {
-        if (shouldOpenDrawer(paymentMethod, cashPortion)) {
-          try {
-            await openCashDrawer();
-          } catch {
-            toast.error("Checked in, but couldn't open the cash drawer.");
-          }
-        }
         try {
           await printThermalReceipt(receiptBooking, room, {
             staffName,
             finalAmountPaid: amountCollected,
             change,
+            kickDrawer: shouldOpenDrawer(paymentMethod, cashPortion),
           });
         } catch (error) {
-          toast.error(
-            error instanceof Error
-              ? `Checked in, but the printer said: ${error.message}`
-              : "Checked in, but the thermal printer didn't respond."
-          );
+          toast.error(`Checked in, but the printer said: ${printerErrorMessage(error)}`);
         }
       }
 
@@ -244,9 +234,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
         change: receipt.change,
       });
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Couldn't print to the thermal printer."
-      );
+      toast.error(printerErrorMessage(error));
     }
   }
 

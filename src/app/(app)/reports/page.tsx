@@ -32,7 +32,7 @@ import {
 import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
-import { printDailySalesReceipt } from "@/lib/receipt-printer";
+import { printDailySalesReceipt, printerErrorMessage } from "@/lib/receipt-printer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card,
@@ -352,9 +352,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
         totals: salesReport.totals,
       });
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Couldn't print to the thermal printer."
-      );
+      toast.error(printerErrorMessage(error));
     }
   }
 

@@ -24,7 +24,7 @@ import {
 import { PAYMENT_METHOD_LABELS, type Booking, type Room } from "@/lib/types";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
-import { openCashDrawer, printThermalReceipt, referenceNumberFor, shouldOpenDrawer } from "@/lib/receipt-printer";
+import { printThermalReceipt, printerErrorMessage, referenceNumberFor, shouldOpenDrawer } from "@/lib/receipt-printer";
 import { Loader2Icon, PrinterIcon } from "lucide-react";
 
 interface CheckoutDialogProps {
@@ -90,9 +90,7 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
     try {
       await printThermalReceipt(settledBooking, room, { staffName, finalAmountPaid, change });
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Couldn't print to the thermal printer."
-      );
+      toast.error(printerErrorMessage(error));
     }
   }
 
@@ -132,16 +130,14 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
 
       if (printer.connected) {
         try {
-          if (shouldOpenDrawer(booking.paymentMethod, amountCollectedNow)) {
-            await openCashDrawer();
-          }
-          await printThermalReceipt(finalBooking, room, { staffName, finalAmountPaid, change });
+          await printThermalReceipt(finalBooking, room, {
+            staffName,
+            finalAmountPaid,
+            change,
+            kickDrawer: shouldOpenDrawer(booking.paymentMethod, amountCollectedNow),
+          });
         } catch (error) {
-          toast.error(
-            error instanceof Error
-              ? `Checked out, but the printer said: ${error.message}`
-              : "Checked out, but the thermal printer didn't respond."
-          );
+          toast.error(`Checked out, but the printer said: ${printerErrorMessage(error)}`);
         }
       }
     } catch {

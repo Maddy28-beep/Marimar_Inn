@@ -109,9 +109,20 @@ class PrinterBridge {
         return runOnPrinterThread {
             val mac = lastMac ?: return@runOnPrinterThread "Printer is not connected. Tap the printer icon and connect again."
             if (data.isNullOrEmpty()) return@runOnPrinterThread "Nothing to print."
-            val reopened = connectLocked(mac)
-            if (reopened != "ok") return@runOnPrinterThread reopened
-            writeLocked(data)
+            fun sendOnce(): String {
+                val reopened = connectLocked(mac)
+                if (reopened != "ok") return reopened
+                return writeLocked(data)
+            }
+            try {
+                sendOnce()
+            } catch (error: Exception) {
+                try {
+                    sendOnce()
+                } catch (retryError: Exception) {
+                    retryError.message ?: error.message ?: "Print failed."
+                }
+            }
         }
     }
 
@@ -125,33 +136,13 @@ class PrinterBridge {
     }
 
     private fun writeLocked(data: String): String {
-        fun attempt(): String {
-            val stream = output ?: return "Printer is not connected. Tap the printer icon and connect again."
-            val bytes = Base64.decode(data, Base64.DEFAULT)
-            var offset = 0
-            while (offset < bytes.size) {
-                val end = minOf(offset + 64, bytes.size)
-                stream.write(bytes, offset, end - offset)
-                stream.flush()
-                offset = end
-                Thread.sleep(40)
-            }
-            Thread.sleep(200)
-            return "ok"
-        }
-
-        return try {
-            attempt()
-        } catch (error: Exception) {
-            val mac = lastMac ?: return error.message ?: "Print failed."
-            val reopened = connectLocked(mac)
-            if (reopened != "ok") return reopened
-            try {
-                attempt()
-            } catch (retryError: Exception) {
-                retryError.message ?: "Print failed."
-            }
-        }
+        val stream = output ?: return "Printer is not connected. Tap the printer icon and connect again."
+        val bytes = Base64.decode(data, Base64.DEFAULT)
+        if (bytes.isEmpty()) return "Nothing to print."
+        stream.write(bytes)
+        stream.flush()
+        Thread.sleep(300)
+        return "ok"
     }
 
     @JavascriptInterface
