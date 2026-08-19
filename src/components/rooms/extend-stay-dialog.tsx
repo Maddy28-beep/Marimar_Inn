@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -17,8 +17,11 @@ import {
   convertToOpenTime,
   extendStay,
   hoursElapsed,
+  isTooOverdueToExtend,
   OPEN_TIME_RATE_PER_HOUR,
+  REGULAR_BOOKING_MIN_HOURS,
 } from "@/lib/bookings";
+import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { useAuth } from "@/context/auth-context";
@@ -74,6 +77,8 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
   } | null>(null);
 
   const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, now);
+  const overdueMinutes = remaining < 0 ? -remaining * 60 : 0;
+  const tooOverdueToExtend = isTooOverdueToExtend(booking, now);
   const packageHours = booking.originalPackageHours ?? booking.hoursBooked;
   const packagePrice = booking.originalPackagePrice ?? booking.totalRoomCharge;
   const additionalCost = Number(hourPrice) || 0;
@@ -81,6 +86,10 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
   const change = paid > additionalCost ? paid - additionalCost : 0;
 
   async function handleExtendByHour() {
+    if (tooOverdueToExtend) {
+      toast.error("Too overdue for a quick extension — check out and start a new 3h booking.");
+      return;
+    }
     if (additionalCost <= 0) {
       toast.error("Enter the price for the extra hour.");
       return;
@@ -160,6 +169,10 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
   }
 
   async function handleConvertToOpenTime() {
+    if (tooOverdueToExtend) {
+      toast.error("Too overdue to extend — check out and start a new 3h booking.");
+      return;
+    }
     setSubmitting(true);
     try {
       await convertToOpenTime(booking.bookingId);
@@ -287,7 +300,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
                 size="sm"
                 variant={mode === "hour" ? "default" : "outline"}
                 onClick={() => setMode("hour")}
-                disabled={submitting}
+                disabled={submitting || tooOverdueToExtend}
               >
                 +1 hour
               </Button>
@@ -296,14 +309,20 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
                 size="sm"
                 variant={mode === "open" ? "default" : "outline"}
                 onClick={() => setMode("open")}
-                disabled={submitting}
+                disabled={submitting || tooOverdueToExtend}
               >
                 Open time
               </Button>
             </div>
           </div>
 
-          {mode === "hour" ? (
+          {tooOverdueToExtend ? (
+            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+              This room is already {formatHours(overdueMinutes / 60)} overdue — too late to
+              extend, either by the hour or to open time. Check the guest out and start a new
+              booking ({REGULAR_BOOKING_MIN_HOURS}h / ₱200 minimum) instead.
+            </p>
+          ) : mode === "hour" ? (
             <>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="hourPrice">Price for the hour</Label>
@@ -343,7 +362,8 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
           {mode === "hour" ? (
             <Button
               onClick={handleExtendByHour}
-              disabled={submitting}
+              disabled={submitting || tooOverdueToExtend}
+              title={tooOverdueToExtend ? "Too overdue — start a new 3h booking instead" : undefined}
             >
               {submitting && <Loader2Icon className="size-4 animate-spin" />}
               Extend by 1 hour
@@ -351,7 +371,8 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
           ) : (
             <Button
               onClick={handleConvertToOpenTime}
-              disabled={submitting}
+              disabled={submitting || tooOverdueToExtend}
+              title={tooOverdueToExtend ? "Too overdue — start a new 3h booking instead" : undefined}
             >
               {submitting && <Loader2Icon className="size-4 animate-spin" />}
               Switch to open time

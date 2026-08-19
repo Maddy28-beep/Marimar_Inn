@@ -13,7 +13,11 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { AppNotification, Booking, InventoryItem, Room } from "@/lib/types";
-import { hoursElapsed } from "@/lib/bookings";
+import {
+  hoursElapsed,
+  EXTEND_OVERDUE_CUTOFF_HOURS,
+  EXTEND_OVERDUE_CUTOFF_MINUTES,
+} from "@/lib/bookings";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -91,7 +95,8 @@ const CRITICAL_THRESHOLD_HOURS = 0.25; // 15 minutes
 /**
  * Idempotent: creates a checkout-reminder notification once a booking drops
  * under 30 minutes remaining, escalates the message (and re-surfaces it as
- * unread for everyone) at 15 minutes and again once it goes overdue.
+ * unread) at 15 minutes, when time runs out, and again once the guest is
+ * more than 10 minutes overdue (extend is blocked; Owner should see it).
  * Deterministic doc ID (`checkout-reminder-${bookingId}`) — same
  * duplicate-safety reasoning as syncLowStockNotification.
  */
@@ -104,13 +109,16 @@ export async function syncCheckoutReminder(booking: Booking, room: Room, now: Da
 
   const firestore = requireDb();
   const ref = doc(firestore, "notifications", `checkout-reminder-${booking.bookingId}`);
+  const pastExtendCutoff = remaining <= -EXTEND_OVERDUE_CUTOFF_HOURS;
   const overdue = remaining <= 0;
   const critical = !overdue && remaining <= CRITICAL_THRESHOLD_HOURS;
-  const message = overdue
-    ? `Room ${room.roomNumber} — ${booking.guestName}'s stay has ended, please check out.`
-    : critical
-      ? `Room ${room.roomNumber} — ${booking.guestName} has less than 15 minutes left.`
-      : `Room ${room.roomNumber} — ${booking.guestName} has less than 30 minutes left.`;
+  const message = pastExtendCutoff
+    ? `Room ${room.roomNumber} — ${booking.guestName} is more than ${EXTEND_OVERDUE_CUTOFF_MINUTES} minutes overdue. Cannot extend — check out and start a new 3h booking.`
+    : overdue
+      ? `Room ${room.roomNumber} — ${booking.guestName}'s stay has ended, please check out.`
+      : critical
+        ? `Room ${room.roomNumber} — ${booking.guestName} has less than 15 minutes left.`
+        : `Room ${room.roomNumber} — ${booking.guestName} has less than 30 minutes left.`;
 
   const snap = await getDoc(ref);
   if (!snap.exists()) {
@@ -131,7 +139,7 @@ export async function syncCheckoutReminder(booking: Booking, room: Room, now: Da
   }
 
   const existing = snap.data() as AppNotification;
-  if ((overdue || critical) && existing.message !== message) {
+  if ((pastExtendCutoff || overdue || critical) && existing.message !== message) {
     await updateDoc(ref, { message, readBy: [] });
   }
 }

@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { voidBooking, hoursElapsed, paymentBreakdown } from "@/lib/bookings";
+import { voidBooking, hoursElapsed, paymentBreakdown, isTooOverdueToExtend } from "@/lib/bookings";
 import { removeOrderItem } from "@/lib/orders";
 import type { Booking, Room } from "@/lib/types";
 import { formatHours } from "@/lib/time";
@@ -43,6 +43,7 @@ export function RoomDetailDialog({
 
   const elapsed = hoursElapsed(booking.checkInTime, now);
   const remaining = booking.hoursBooked - elapsed;
+  const tooOverdueToExtend = isTooOverdueToExtend(booking, now);
   const isOverdue = !booking.openEnded && remaining <= 0;
   const isRunningLow = !booking.openEnded && !isOverdue && remaining <= 0.5;
   const balance = Math.max(booking.totalAmount - booking.amountPaid, 0);
@@ -232,7 +233,16 @@ export function RoomDetailDialog({
               Cancel booking
             </Button>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setExtendOpen(true)} disabled={voiding}>
+              <Button
+                variant="outline"
+                onClick={() => setExtendOpen(true)}
+                disabled={voiding}
+                title={
+                  tooOverdueToExtend
+                    ? "Too overdue to extend — check out and start a new 3h booking"
+                    : undefined
+                }
+              >
                 <TimerIcon className="size-4" />
                 Extend stay
               </Button>

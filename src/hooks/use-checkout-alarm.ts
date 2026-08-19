@@ -35,6 +35,7 @@ export function useCheckoutAlarm() {
   const knownIdsRef = useRef<Set<string>>(new Set());
   const wasCriticalRef = useRef<Map<string, boolean>>(new Map());
   const wasOverdueRef = useRef<Map<string, boolean>>(new Map());
+  const wasPastCutoffRef = useRef<Map<string, boolean>>(new Map());
   const repeatTimersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
 
   useEffect(() => {
@@ -47,16 +48,20 @@ export function useCheckoutAlarm() {
       const pastWarmup = Date.now() - mountedAtRef.current > WARMUP_MS;
 
       for (const n of reminders) {
-        const isOverdue = n.message.includes("please check out");
+        const isPastCutoff = n.message.includes("more than 10 minutes overdue");
+        const isOverdue =
+          isPastCutoff || n.message.includes("please check out");
         const isCritical = !isOverdue && n.message.includes("15 minutes");
         const wasKnown = knownIdsRef.current.has(n.notificationId);
         const wasCritical = wasCriticalRef.current.get(n.notificationId) ?? false;
         const wasOverdue = wasOverdueRef.current.get(n.notificationId) ?? false;
+        const wasPastCutoff = wasPastCutoffRef.current.get(n.notificationId) ?? false;
 
         if (pastWarmup) {
           if (!wasKnown) playWarningChime();
           if (isCritical && !wasCritical) playCriticalChime();
           if (isOverdue && !wasOverdue) playOverdueAlarm();
+          if (isPastCutoff && !wasPastCutoff) playOverdueAlarm();
         }
 
         if (isOverdue && !repeatTimersRef.current.has(n.notificationId)) {
@@ -67,6 +72,7 @@ export function useCheckoutAlarm() {
         knownIdsRef.current.add(n.notificationId);
         wasCriticalRef.current.set(n.notificationId, isCritical);
         wasOverdueRef.current.set(n.notificationId, isOverdue);
+        wasPastCutoffRef.current.set(n.notificationId, isPastCutoff);
       }
 
       for (const id of Array.from(knownIdsRef.current)) {
@@ -74,6 +80,7 @@ export function useCheckoutAlarm() {
           knownIdsRef.current.delete(id);
           wasCriticalRef.current.delete(id);
           wasOverdueRef.current.delete(id);
+          wasPastCutoffRef.current.delete(id);
           const timer = repeatTimersRef.current.get(id);
           if (timer) {
             clearInterval(timer);

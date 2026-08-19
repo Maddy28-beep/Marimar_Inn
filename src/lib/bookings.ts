@@ -139,6 +139,22 @@ export function paymentPortionLines(portions: PaymentPortions): { label: string;
 export const OPEN_TIME_RATE_PER_HOUR = 100;
 
 /**
+ * Past this much overdue, +1 hour / open-time is blocked — the extra hour
+ * would undercharge a guest who's already been gone a while, so they check
+ * out and book the regular 3h minimum again. The Owner is flagged at the
+ * same cutoff.
+ */
+export const EXTEND_OVERDUE_CUTOFF_MINUTES = 10;
+export const EXTEND_OVERDUE_CUTOFF_HOURS = EXTEND_OVERDUE_CUTOFF_MINUTES / 60;
+export const REGULAR_BOOKING_MIN_HOURS = 3;
+
+export function isTooOverdueToExtend(booking: Pick<Booking, "hoursBooked" | "checkInTime" | "openEnded">, now: Date): boolean {
+  if (booking.openEnded) return false;
+  const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, now);
+  return remaining <= -EXTEND_OVERDUE_CUTOFF_HOURS;
+}
+
+/**
  * e.g. 1h01m and 1h20m both round up to the 1.5h block (₱150); 1h31m rounds
  * up to the 2h block (₱200).
  */

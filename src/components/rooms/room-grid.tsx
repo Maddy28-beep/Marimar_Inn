@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/auth-context";
 import { subscribeToRooms } from "@/lib/rooms";
-import { subscribeToActiveBookings, hoursElapsed } from "@/lib/bookings";
+import { subscribeToActiveBookings, hoursElapsed, EXTEND_OVERDUE_CUTOFF_HOURS, EXTEND_OVERDUE_CUTOFF_MINUTES } from "@/lib/bookings";
 import { formatHours } from "@/lib/time";
 import type { Booking, Room, RoomStatus, RoomType } from "@/lib/types";
 import { ROOM_TYPE_LABELS } from "@/lib/types";
@@ -26,10 +26,6 @@ import { AlertTriangleIcon, SearchIcon } from "lucide-react";
 
 type StatusFilter = "all" | RoomStatus;
 type TypeFilter = "all" | RoomType;
-
-// Grace period before the Owner's overdue panel flags a room — a guest
-// wrapping up just past their time isn't worth surfacing yet.
-const OVERDUE_ALERT_GRACE_HOURS = 10 / 60;
 
 const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
   all: "All statuses",
@@ -82,7 +78,7 @@ export function RoomGrid() {
       const booking = bookingsByRoom.get(room.roomId);
       if (!booking || booking.openEnded) continue;
       const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, now);
-      if (remaining <= -OVERDUE_ALERT_GRACE_HOURS) {
+      if (remaining <= -EXTEND_OVERDUE_CUTOFF_HOURS) {
         list.push({ room, booking, overdueBy: -remaining });
       }
     }
@@ -139,8 +135,8 @@ export function RoomGrid() {
         <div className="flex flex-col gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 p-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-rose-700 dark:text-rose-400">
             <AlertTriangleIcon className="size-4" />
-            {overdueRooms.length} room{overdueRooms.length > 1 ? "s" : ""} overdue — not yet
-            checked out
+            {overdueRooms.length} room{overdueRooms.length > 1 ? "s" : ""} overdue more than{" "}
+            {EXTEND_OVERDUE_CUTOFF_MINUTES} minutes — cannot extend, start a new booking
           </div>
           <div className="flex flex-col gap-1">
             {overdueRooms.map(({ room, booking, overdueBy }) => (
