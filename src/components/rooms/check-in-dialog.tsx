@@ -31,7 +31,6 @@ import {
   printThermalReceipt,
   printerErrorMessage,
   referenceNumberFor,
-  shouldOpenDrawer,
 } from "@/lib/receipt-printer";
 import {
   PAYMENT_METHOD_LABELS,
@@ -142,7 +141,6 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
     // A split payment's two portions are entered independently and aren't
     // scaled down if the guest overpays — only the combined total is capped
     // at what's actually due for amountPaid/paymentStatus purposes.
-    const cashPortion = paymentMethod === "split" ? splitCashValue : amountCollected;
     const gcashPortion = paymentMethod === "split" ? splitGcashValue : undefined;
 
     setSubmitting(true);
@@ -204,7 +202,6 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
             staffName,
             finalAmountPaid: amountCollected,
             change,
-            kickDrawer: shouldOpenDrawer(paymentMethod, cashPortion),
           });
         } catch (error) {
           toast.error(`Checked in, but the printer said: ${printerErrorMessage(error)}`);

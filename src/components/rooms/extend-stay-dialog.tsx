@@ -35,7 +35,6 @@ import {
   printExtensionReceipt,
   printerErrorMessage,
   referenceNumberFor,
-  shouldOpenDrawer,
 } from "@/lib/receipt-printer";
 import { Loader2Icon, PrinterIcon } from "lucide-react";
 
@@ -108,7 +107,6 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
     setSubmitting(true);
     const amountCollected = Math.min(paid, additionalCost);
     const usesGcashRef = paymentMethod === "gcash" || paymentMethod === "split";
-    const cashPortion = paymentMethod === "split" ? splitCashValue : amountCollected;
     const gcashPortion = paymentMethod === "split" ? splitGcashValue : undefined;
     try {
       await extendStay(booking, 1, additionalCost, amountCollected, {
@@ -130,7 +128,6 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
             gcashReference: usesGcashRef ? gcashReference.trim() || undefined : undefined,
             splitCashAmount: paymentMethod === "split" ? splitCashValue : undefined,
             splitGcashAmount: gcashPortion,
-            kickDrawer: shouldOpenDrawer(paymentMethod, cashPortion),
           });
         } catch (error) {
           toast.error(`Extended, but the printer said: ${printerErrorMessage(error)}`);

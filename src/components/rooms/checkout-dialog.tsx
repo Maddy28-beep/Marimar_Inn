@@ -24,7 +24,7 @@ import {
 import { PAYMENT_METHOD_LABELS, type Booking, type Room } from "@/lib/types";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
-import { printThermalReceipt, printerErrorMessage, referenceNumberFor, shouldOpenDrawer } from "@/lib/receipt-printer";
+import { printThermalReceipt, printerErrorMessage, referenceNumberFor } from "@/lib/receipt-printer";
 import { Loader2Icon, PrinterIcon } from "lucide-react";
 
 interface CheckoutDialogProps {
@@ -134,7 +134,6 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
             staffName,
             finalAmountPaid,
             change,
-            kickDrawer: shouldOpenDrawer(booking.paymentMethod, amountCollectedNow),
           });
         } catch (error) {
           toast.error(`Checked out, but the printer said: ${printerErrorMessage(error)}`);
