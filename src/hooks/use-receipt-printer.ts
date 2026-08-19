@@ -3,18 +3,31 @@
 import { useEffect, useState } from "react";
 import {
   connectBluetoothPrinter,
+  connectNativePrinter,
   connectRawBtPrinter,
   connectSerialPrinter,
+  disconnectPrinter,
   getPrinterState,
+  isNativePrinterApp,
+  listNativePairedPrinters,
+  printTestPage,
   setPaperWidth,
   subscribePrinterState,
   tryReconnectPrinter,
+  type PairedPrinter,
 } from "@/lib/receipt-printer";
 
 export function useReceiptPrinter() {
   const [state, setState] = useState(getPrinterState);
+  const [nativeApp, setNativeApp] = useState(false);
+  const [pairedPrinters, setPairedPrinters] = useState<PairedPrinter[]>([]);
 
   useEffect(() => subscribePrinterState(setState), []);
+
+  useEffect(() => {
+    setNativeApp(isNativePrinterApp());
+    setPairedPrinters(listNativePairedPrinters());
+  }, []);
 
   // Attempt a silent reconnect once per app load — no-ops if the browser
   // didn't retain permission for a previously-authorized device.
@@ -27,9 +40,15 @@ export function useReceiptPrinter() {
     kind: state.kind,
     name: state.name,
     paperWidth: state.paperWidth,
+    nativeApp,
+    pairedPrinters,
+    refreshPairedPrinters: () => setPairedPrinters(listNativePairedPrinters()),
     setPaperWidth,
     connectBluetooth: connectBluetoothPrinter,
     connectSerial: connectSerialPrinter,
     connectRawBt: connectRawBtPrinter,
+    connectNative: connectNativePrinter,
+    disconnect: disconnectPrinter,
+    printTest: printTestPage,
   };
 }

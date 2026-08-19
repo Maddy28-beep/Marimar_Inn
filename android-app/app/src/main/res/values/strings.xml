@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Marimar Inn</string>
+    <!-- Live site the tablet app opens. Change this if the Vercel URL is different. -->
+    <string name="app_url">https://marimar-inn.vercel.app</string>
+</resources>

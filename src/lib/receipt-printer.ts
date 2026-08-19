@@ -9,7 +9,7 @@ import {
   type Room,
 } from "@/lib/types";
 
-type PrinterKind = "bluetooth" | "serial" | "rawbt";
+type PrinterKind = "bluetooth" | "serial" | "rawbt" | "native";
 
 interface PrinterState {
   kind: PrinterKind | null;
@@ -115,8 +115,62 @@ interface StoredDevice {
   kind: PrinterKind;
   paperWidth: 32 | 48;
   bluetoothId?: string;
+  name?: string;
   serialVendorId?: number;
   serialProductId?: number;
+}
+
+interface NativePrinterBridge {
+  isNative(): boolean;
+  listPairedJson(): string;
+  connect(mac: string): string;
+  writeBase64(data: string): string;
+  disconnect(): string;
+}
+
+export interface PairedPrinter {
+  id: string;
+  name: string;
+}
+
+function getNativePrinterBridge(): NativePrinterBridge | null {
+  if (typeof window === "undefined") return null;
+  const bridge = (window as Window & { MarimarNativePrinter?: NativePrinterBridge }).MarimarNativePrinter;
+  if (!bridge || typeof bridge.isNative !== "function") return null;
+  try {
+    return bridge.isNative() ? bridge : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isNativePrinterApp(): boolean {
+  return getNativePrinterBridge() !== null;
+}
+
+export function listNativePairedPrinters(): PairedPrinter[] {
+  const bridge = getNativePrinterBridge();
+  if (!bridge) return [];
+  try {
+    const parsed = JSON.parse(bridge.listPairedJson()) as PairedPrinter[];
+    return Array.isArray(parsed) ? parsed.filter((item) => item?.id && item?.name) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function connectNativePrinter(printer: PairedPrinter): Promise<void> {
+  const bridge = getNativePrinterBridge();
+  if (!bridge) throw new Error("Open Marimar Inn from the tablet app to print.");
+  const result = bridge.connect(printer.id);
+  if (result !== "ok") throw new Error(result || "Couldn't connect to the printer.");
+  state.kind = "native";
+  state.name = printer.name;
+  emit();
+  const existing = loadStoredDevice();
+  const paperWidth = existing?.paperWidth ?? state.paperWidth;
+  state.paperWidth = paperWidth;
+  saveStoredDevice({ kind: "native", paperWidth, bluetoothId: printer.id, name: printer.name });
 }
 
 function loadStoredDevice(): StoredDevice | null {
@@ -280,10 +334,36 @@ export async function tryReconnectPrinter(): Promise<void> {
       state.kind = "rawbt";
       state.name = "RawBT app";
       emit();
+    } else if (stored.kind === "native" && stored.bluetoothId) {
+      const name = stored.name ?? "Bluetooth printer";
+      await connectNativePrinter({ id: stored.bluetoothId, name });
     }
   } catch {
     // No previously-authorized device found (or permission wasn't retained) — stays disconnected.
   }
+}
+
+export function disconnectPrinter() {
+  const native = getNativePrinterBridge();
+  if (state.kind === "native" && native) {
+    try {
+      native.disconnect();
+    } catch {
+      // Already gone.
+    }
+  }
+  if (blePrinter?.device.gatt?.connected) {
+    try {
+      blePrinter.device.gatt.disconnect();
+    } catch {
+      // Already gone.
+    }
+  }
+  blePrinter = null;
+  serialPrinter = null;
+  state.kind = null;
+  state.name = null;
+  emit();
 }
 
 export function setPaperWidth(width: 32 | 48) {
@@ -353,14 +433,30 @@ const RAWBT_PACKAGE = "ru.a402d.rawbtprinter";
  */
 function sendViaRawBt(data: Uint8Array): void {
   const base64 = uint8ArrayToBase64(data);
-  const fallback = encodeURIComponent(`https://play.google.com/store/apps/details?id=${RAWBT_PACKAGE}`);
-  const intentUrl = `intent:base64,${base64}#Intent;scheme=rawbt;package=${RAWBT_PACKAGE};S.browser_fallback_url=${fallback};end`;
-  window.open(intentUrl, "_blank");
+  // Chrome on Android silently blocks window.open() of intent: URLs (and
+  // custom schemes after an await), so the previous popup never reached
+  // RawBT even when the app was installed. An iframe src assignment is
+  // what Android Chrome actually delivers to the registered handler.
+  const intentUrl = `intent:base64,${base64}#Intent;scheme=rawbt;package=${RAWBT_PACKAGE};end`;
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.style.display = "none";
+  iframe.src = intentUrl;
+  document.body.appendChild(iframe);
+  window.setTimeout(() => iframe.remove(), 4000);
 }
 
 async function send(data: Uint8Array): Promise<void> {
   if (state.kind === "rawbt") {
     sendViaRawBt(data);
+    return;
+  }
+
+  if (state.kind === "native") {
+    const bridge = getNativePrinterBridge();
+    if (!bridge) throw new Error("Open Marimar Inn from the tablet app to print.");
+    const result = bridge.writeBase64(uint8ArrayToBase64(data));
+    if (result !== "ok") throw new Error(result || "The printer didn't accept the job.");
     return;
   }
 
@@ -716,6 +812,28 @@ export function buildDailySalesReceiptBytes(data: DailySalesReceiptData): Uint8A
 
 export async function printDailySalesReceipt(data: DailySalesReceiptData) {
   await send(buildDailySalesReceiptBytes(data));
+}
+
+export async function printTestPage() {
+  const encoder = new ReceiptPrinterEncoder({
+    language: printerLanguage,
+    codepageMapping: printerCodepageMapping,
+    width: state.paperWidth,
+  });
+  encoder
+    .initialize()
+    .align("center")
+    .bold(true)
+    .line("Marimar Inn")
+    .bold(false)
+    .line("Printer test")
+    .newline()
+    .align("left")
+    .line(new Date().toLocaleString("en-PH"))
+    .newline()
+    .newline()
+    .cut();
+  await send(encoder.encode());
 }
 
 /** Sends the drawer-kick pulse — the drawer must be cabled into the printer's RJ11 port. */

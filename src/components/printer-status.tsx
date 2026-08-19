@@ -18,11 +18,13 @@ import {
 } from "@/components/ui/select";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { BluetoothIcon, CableIcon, PrinterIcon, SmartphoneIcon } from "lucide-react";
+import type { PairedPrinter } from "@/lib/receipt-printer";
 
 const KIND_LABELS: Record<string, string> = {
   bluetooth: "Bluetooth",
   serial: "USB/Serial",
   rawbt: "via RawBT app",
+  native: "Tablet Bluetooth",
 };
 
 export function PrinterStatus() {
@@ -47,7 +49,7 @@ export function PrinterStatus() {
         // User closed the device picker without selecting anything — not an error.
       } else if (via === "bluetooth") {
         toast.error(
-          "Couldn't connect — if the printer doesn't show up, it may only support Bluetooth Classic, which browsers can't use directly. Try USB/Serial, or RawBT if the printer only supports classic Bluetooth."
+          "Couldn't connect — this printer likely uses classic Bluetooth, which Chrome can't print to. Install the Marimar Inn tablet app, or pair the printer in Android Settings and use that app."
         );
       } else if (via === "serial") {
         toast.error("Couldn't connect to the printer over USB/Serial — please try again.");
@@ -56,6 +58,27 @@ export function PrinterStatus() {
       }
     } finally {
       setConnecting(false);
+    }
+  }
+
+  async function handleNativeConnect(device: PairedPrinter) {
+    setConnecting(true);
+    try {
+      await printer.connectNative(device);
+      toast.success(`Connected to ${device.name}.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't connect to the printer.");
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  async function handleTestPrint() {
+    try {
+      await printer.printTest();
+      toast.success("Test sent to the printer.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Test print failed.");
     }
   }
 
@@ -72,7 +95,7 @@ export function PrinterStatus() {
         />
         <span className="sr-only">Thermal printer</span>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-72 p-3">
+      <PopoverContent align="end" className="w-80 p-3">
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">Thermal printer</span>
@@ -88,9 +111,48 @@ export function PrinterStatus() {
           </div>
 
           {printer.connected ? (
-            <p className="text-sm text-muted-foreground">
-              {printer.name} · {printer.kind ? KIND_LABELS[printer.kind] : ""}
-            </p>
+            <>
+              <p className="text-sm text-muted-foreground">
+                {printer.name} · {printer.kind ? KIND_LABELS[printer.kind] : ""}
+              </p>
+              <div className="flex flex-col gap-1.5">
+                <Button variant="outline" size="sm" onClick={handleTestPrint}>
+                  Print test
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => printer.disconnect()}>
+                  Disconnect
+                </Button>
+              </div>
+            </>
+          ) : printer.nativeApp ? (
+            <div className="flex flex-col gap-1.5">
+              {printer.pairedPrinters.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Pair the thermal printer in Android Settings → Bluetooth first,
+                  then tap the printer icon again. No extra print app is needed.
+                </p>
+              ) : (
+                printer.pairedPrinters.map((device) => (
+                  <Button
+                    key={device.id}
+                    variant="outline"
+                    size="sm"
+                    disabled={connecting}
+                    onClick={() => handleNativeConnect(device)}
+                  >
+                    <BluetoothIcon className="size-3.5" />
+                    {device.name}
+                  </Button>
+                ))
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => printer.refreshPairedPrinters()}
+              >
+                Refresh printer list
+              </Button>
+            </div>
           ) : (
             <div className="flex flex-col gap-1.5">
               <Button
@@ -121,11 +183,10 @@ export function PrinterStatus() {
                 Print via RawBT app
               </Button>
               <p className="text-xs text-muted-foreground">
-                Only Chrome and Edge can talk to printers directly. If Bluetooth
-                doesn&apos;t find your printer, it may only support classic
-                Bluetooth, which browsers can&apos;t reach — install the free
-                RawBT app, pair the printer inside it, then choose &quot;Print
-                via RawBT app&quot; here.
+                Chrome cannot print to most cheap thermal printers (they use
+                classic Bluetooth). Install the Marimar Inn tablet app on this
+                device — it prints the same way the other inn app does, with no
+                RawBT.
               </p>
             </div>
           )}
