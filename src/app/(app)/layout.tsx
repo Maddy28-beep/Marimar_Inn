@@ -25,6 +25,7 @@ import {
   LogOutIcon,
   MenuIcon,
   PackageIcon,
+  RefreshCwIcon,
   SettingsIcon,
   UsersIcon,
 } from "lucide-react";
@@ -84,6 +85,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   useCheckoutReminderScanner();
   useCheckoutAlarm();
 
@@ -117,6 +119,11 @@ function AppShell({ children }: { children: React.ReactNode }) {
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
+
+  function handleRefresh() {
+    setRefreshing(true);
+    window.location.reload();
+  }
 
   async function handleSignOut() {
     // No visible feedback while firebaseSignOut() was in flight made the
@@ -164,12 +171,18 @@ function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
 
-        <div className="hidden items-center gap-3 lg:flex">
+        <div className="hidden items-center gap-4 lg:flex">
           <HeaderClock />
           <Separator orientation="vertical" className="h-5" />
-          <PrinterStatus />
-          <CashDrawerControl />
-          <NotificationBell />
+          <div className="flex items-center gap-4">
+            <PrinterStatus />
+            <CashDrawerControl />
+            <NotificationBell />
+            <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={refreshing}>
+              <RefreshCwIcon className={cn("size-5", refreshing && "animate-spin")} />
+              <span className="sr-only">Refresh</span>
+            </Button>
+          </div>
           <span className="text-sm text-muted-foreground">
             {appUser?.displayName ?? appUser?.email}
           </span>
@@ -180,10 +193,18 @@ function AppShell({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
 
-        <div className="flex items-center gap-1 lg:hidden">
+        <div className="flex items-center gap-3 lg:hidden">
           <PrinterStatus />
           <CashDrawerControl />
           <NotificationBell />
+          <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={refreshing}>
+            {refreshing ? (
+              <Loader2Icon className="size-5 animate-spin" />
+            ) : (
+              <RefreshCwIcon className="size-5" />
+            )}
+            <span className="sr-only">Refresh</span>
+          </Button>
           {/* Directly tappable, not tucked inside the hamburger menu — a
               tablet in the sub-lg bucket otherwise needs two taps (open
               the sheet, then find Sign out at its bottom) just to log out. */}
