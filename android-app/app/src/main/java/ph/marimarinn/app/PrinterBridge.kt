@@ -105,15 +105,23 @@ class PrinterBridge {
     }
 
     @JavascriptInterface
-    fun writeBase64(data: String): String {
+    fun writeBase64(data: String?): String {
         return runOnPrinterThread {
             val mac = lastMac ?: return@runOnPrinterThread "Printer is not connected. Tap the printer icon and connect again."
-            if (output == null || socket?.isConnected != true) {
-                val reopened = connectLocked(mac)
-                if (reopened != "ok") return@runOnPrinterThread reopened
-            }
+            if (data.isNullOrEmpty()) return@runOnPrinterThread "Nothing to print."
+            val reopened = connectLocked(mac)
+            if (reopened != "ok") return@runOnPrinterThread reopened
             writeLocked(data)
         }
+    }
+
+    @JavascriptInterface
+    fun printTest(): String {
+        val body = "Marimar Inn\nPrinter test\n\n"
+        val bytes = byteArrayOf(0x1B, 0x40, 0x1B, 0x61, 0x01) +
+            body.toByteArray(Charsets.US_ASCII) +
+            byteArrayOf(0x0A, 0x0A, 0x1D, 0x56, 0x41, 0x03)
+        return writeBase64(Base64.encodeToString(bytes, Base64.NO_WRAP))
     }
 
     private fun writeLocked(data: String): String {

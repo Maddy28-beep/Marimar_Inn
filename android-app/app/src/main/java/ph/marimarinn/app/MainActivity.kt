@@ -30,7 +30,7 @@ class MainActivity : AppCompatActivity() {
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         settings.databaseEnabled = true
-        settings.cacheMode = WebSettings.LOAD_DEFAULT
+        settings.cacheMode = WebSettings.LOAD_NO_CACHE
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
         settings.javaScriptCanOpenWindowsAutomatically = true
 
@@ -54,7 +54,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadApp() {
-        webView.loadUrl(getString(R.string.app_url))
+        webView.clearCache(true)
+        webView.loadUrl("${getString(R.string.app_url)}?v=${BuildConfig.VERSION_NAME}")
     }
 
     @Deprecated("Deprecated in Java")

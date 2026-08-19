@@ -19,7 +19,8 @@ Each printer-app update is a **new file**, never overwrite:
 - `D:\Downloads\MarimarInn-tablet-v1.apk` — first tablet app
 - `D:\Downloads\MarimarInn-tablet-v2.apk` — Bluetooth scan permission (Nearby devices)
 - `D:\Downloads\MarimarInn-tablet-v3.apk` — reconnects on every print so reprint works
-- Next change will be `v4`, and so on
+- `D:\Downloads\MarimarInn-tablet-v4.apk` — Print test built into the app; always reloads a fresh site
+- Next change will be `v5`, and so on
 
 Install the **highest** version number. Allow Nearby devices when Android asks.
 

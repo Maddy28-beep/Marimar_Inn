@@ -1,4 +1,3 @@
-import ReceiptPrinterEncoder from "@point-of-sale/receipt-printer-encoder";
 import WebSerialReceiptPrinter, {
   type ConnectedPrinterInfo as SerialPrinterInfo,
 } from "@point-of-sale/webserial-receipt-printer";
@@ -92,16 +91,79 @@ let serialPrinter: WebSerialReceiptPrinter | null = null;
 let printerLanguage: "esc-pos" | "star-prnt" = "esc-pos";
 let printerCodepageMapping = "epson";
 
-function createEncoder(width?: number) {
-  const mapping =
-    printerCodepageMapping && printerCodepageMapping !== "default"
-      ? printerCodepageMapping
-      : "epson";
-  return new ReceiptPrinterEncoder({
-    language: printerLanguage,
-    codepageMapping: mapping,
-    ...(width != null ? { width } : {}),
+/**
+ * Cheap ESC/POS clones (and Android WebView) trip over ReceiptPrinterEncoder's
+ * code-page tables — Print test threw "Cannot convert undefined or null to object"
+ * before a single byte reached the printer. Receipts here are ASCII-only, so we
+ * emit the standard initialize/align/bold/cut bytes ourselves.
+ */
+class EscPosBuilder {
+  private readonly chunks: number[] = [];
+
+  private push(...bytes: number[]) {
+    this.chunks.push(...bytes);
+    return this;
+  }
+
+  initialize() {
+    return this.push(0x1b, 0x40);
+  }
+
+  align(value: "left" | "center" | "right") {
+    const n = value === "center" ? 1 : value === "right" ? 2 : 0;
+    return this.push(0x1b, 0x61, n);
+  }
+
+  bold(value = true) {
+    return this.push(0x1b, 0x45, value ? 1 : 0);
+  }
+
+  text(value: string) {
+    const ascii = toPrinterAscii(value);
+    for (let i = 0; i < ascii.length; i++) this.chunks.push(ascii.charCodeAt(i));
+    return this;
+  }
+
+  line(value: string) {
+    return this.text(value).newline();
+  }
+
+  newline() {
+    return this.push(0x0a);
+  }
+
+  cut() {
+    return this.push(0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x41, 0x03);
+  }
+
+  pulse() {
+    return this.push(0x1b, 0x70, 0x00, 0x19, 0xfa);
+  }
+
+  encode() {
+    return Uint8Array.from(this.chunks);
+  }
+}
+
+function toPrinterAscii(value: string): string {
+  return value.normalize("NFKD").replace(/[^\x20-\x7E]/g, (ch) => {
+    const map: Record<string, string> = {
+      "₱": "P",
+      "ñ": "n",
+      "Ñ": "N",
+      "—": "-",
+      "–": "-",
+      "’": "'",
+      "‘": "'",
+      "“": '"',
+      "”": '"',
+    };
+    return map[ch] ?? "?";
   });
+}
+
+function createEncoder(_width?: number) {
+  return new EscPosBuilder();
 }
 
 const state: PrinterState = { kind: null, name: null, paperWidth: 32 };
@@ -137,6 +199,7 @@ interface NativePrinterBridge {
   listPairedJson(): string;
   connect(mac: string): string;
   writeBase64(data: string): string;
+  printTest?: () => string;
   disconnect(): string;
 }
 
@@ -818,7 +881,14 @@ export async function printDailySalesReceipt(data: DailySalesReceiptData) {
 }
 
 export async function printTestPage() {
-  const encoder = createEncoder(state.paperWidth);
+  const native = getNativePrinterBridge();
+  if (state.kind === "native" && native && typeof native.printTest === "function") {
+    const result = String(native.printTest() ?? "").trim();
+    if (result !== "ok") throw new Error(result || "Test print failed.");
+    return;
+  }
+
+  const encoder = createEncoder();
   encoder
     .initialize()
     .align("center")
