@@ -108,21 +108,14 @@ class EscPosBuilder {
   }
 
   initialize() {
-    // Only commands this cheap 58mm clone actually understands. Extra
-    // Epson/Xprinter density bytes were printing as garbage ("á(K12") and
-    // double-strike cut white stripes through every letter.
-    this.push(0x1b, 0x40); // reset
-    this.push(0x1b, 0x4d, 0x00); // Font A (larger)
-    this.push(0x12, 0x23, 0x08); // DC2 # 8 — Gprinter/Zjiang max density
-    this.push(0x1b, 0x45, 0x01); // emphasized / bold
-    this.push(0x1d, 0x21, 0x01); // double height, normal width (32 chars still fit)
+    // Cheap 58mm clones ignore Epson density/speed bytes (they printed as
+    // garbage) and double-height made every receipt huge. Font A + bold is
+    // what this head actually renders.
+    this.push(0x1b, 0x40);
+    this.push(0x1b, 0x4d, 0x00); // Font A
+    this.push(0x12, 0x23, 0x08); // DC2 # 8 — Gprinter/Zjiang density
+    this.push(0x1b, 0x45, 0x01); // bold
     return this;
-  }
-
-  /** 1 or 2× width/height. Width 2 would only fit 16 chars on 58mm paper. */
-  size(widthMul: 1 | 2, heightMul: 1 | 2) {
-    const n = ((widthMul - 1) << 4) | (heightMul - 1);
-    return this.push(0x1d, 0x21, n);
   }
 
   align(value: "left" | "center" | "right") {
@@ -620,6 +613,12 @@ async function send(data: Uint8Array): Promise<void> {
   ]);
 }
 
+function layoutWidth(paperWidth: number) {
+  // 58mm Font A is 32 columns, but the last few sit on the weak edge of the
+  // head — that's why peso amounts on the right printed grey. Keep a margin.
+  return Math.max(20, paperWidth - 3);
+}
+
 function money(amount: number): string {
   // Most thermal printers' built-in codepages (CP437, WCP1252, etc.) don't
   // include the ₱ glyph — it would print as a garbled character or blank.
@@ -672,15 +671,13 @@ export function referenceNumberFor(bookingId: string): string {
 }
 
 export function buildReceiptBytes(booking: Booking, room: Room, extras: ReceiptExtras): Uint8Array {
-  const width = state.paperWidth;
+  const width = layoutWidth(state.paperWidth);
   const encoder = createEncoder(width);
 
   encoder
     .initialize()
     .align("center")
-    .size(2, 2)
     .line("Marimar Inn")
-    .size(1, 2)
     .line("This is not an official receipt")
     .line(`Ref: ${referenceNumberFor(booking.bookingId)}`)
     .newline()
@@ -772,15 +769,13 @@ export function buildExtensionReceiptBytes(
   room: Room,
   extras: ExtensionReceiptExtras
 ): Uint8Array {
-  const width = state.paperWidth;
+  const width = layoutWidth(state.paperWidth);
   const encoder = createEncoder(width);
 
   encoder
     .initialize()
     .align("center")
-    .size(2, 2)
     .line("Marimar Inn")
-    .size(1, 2)
     .line("Extension Receipt")
     .line(`Ref: ${referenceNumberFor(booking.bookingId)}`)
     .newline()
@@ -873,16 +868,14 @@ export interface DailySalesReceiptData {
  * rather than the same table shrunk down.
  */
 export function buildDailySalesReceiptBytes(data: DailySalesReceiptData): Uint8Array {
-  const width = state.paperWidth;
+  const width = layoutWidth(state.paperWidth);
   const rule = "-".repeat(width);
   const encoder = createEncoder(width);
 
   encoder
     .initialize()
     .align("center")
-    .size(2, 2)
     .line("Marimar Inn")
-    .size(1, 2)
     .line("Daily Sales Report")
     .line(clampLine(data.dateLabel, width));
 
@@ -957,9 +950,7 @@ export async function printTestPage() {
   encoder
     .initialize()
     .align("center")
-    .size(2, 2)
     .line("Marimar Inn")
-    .size(1, 2)
     .line("Printer test")
     .newline()
     .align("left")
