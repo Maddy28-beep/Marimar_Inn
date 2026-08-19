@@ -23,7 +23,7 @@ import {
 import { type Booking, type Room } from "@/lib/types";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
-import { printThermalReceipt, printerErrorMessage, referenceNumberFor, shouldOpenDrawer } from "@/lib/receipt-printer";
+import { printThermalReceipt, printerErrorMessage, referenceNumberFor, shouldOpenDrawer, openCashDrawer } from "@/lib/receipt-printer";
 import {
   cashCollectedNow,
   collectedAmount,
@@ -63,6 +63,7 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
   const [submitting, setSubmitting] = useState(false);
   const [checkOutTime, setCheckOutTime] = useState<Date | null>(null);
   const [settledBooking, setSettledBooking] = useState<Booking | null>(null);
+  const [printReceipt, setPrintReceipt] = useState(false);
 
   const hoursUsed = hoursElapsed(booking.checkInTime, now);
   const packageHours = booking.originalPackageHours ?? booking.hoursBooked;
@@ -164,18 +165,24 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
       setCheckOutTime(new Date());
       setPhase("receipt");
 
-      if (printer.connected) {
+      const cashNow =
+        amountCollectedNow > 0 ? cashCollectedNow(payment, balanceBefore) : 0;
+      if (printReceipt && printer.connected) {
         try {
           await printThermalReceipt(finalBooking, room, {
             staffName,
             finalAmountPaid,
             change,
-            kickDrawer: shouldOpenDrawer(
-              amountCollectedNow > 0 ? cashCollectedNow(payment, balanceBefore) : 0
-            ),
+            kickDrawer: shouldOpenDrawer(cashNow),
           });
         } catch (error) {
           toast.error(`Checked out, but the printer said: ${printerErrorMessage(error)}`);
+        }
+      } else if (shouldOpenDrawer(cashNow)) {
+        try {
+          await openCashDrawer();
+        } catch (error) {
+          toast.error(`Checked out, but the drawer said: ${printerErrorMessage(error)}`);
         }
       }
     } catch (error) {
@@ -266,6 +273,27 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
                   Collect ₱{balanceBefore.toFixed(2)} before checking out.
                 </p>
               )}
+
+              <div className="flex items-start justify-between gap-3 rounded-lg border p-3">
+                <div className="min-w-0">
+                  <span className="text-sm font-medium">Checkout receipt</span>
+                  <p className="text-xs text-muted-foreground">
+                    {balanceBefore <= 0
+                      ? "Already paid at check-in. Leave this off unless the guest wants another copy."
+                      : "Print a thermal receipt for this checkout."}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={printReceipt ? "default" : "outline"}
+                  className="shrink-0"
+                  disabled={submitting || !printer.connected}
+                  onClick={() => setPrintReceipt((value) => !value)}
+                >
+                  {printReceipt ? "Print" : "Don't print"}
+                </Button>
+              </div>
             </div>
 
             <DialogFooter>
@@ -362,7 +390,7 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
               {printer.connected && (
                 <Button variant="outline" onClick={printThermalCopy}>
                   <PrinterIcon className="size-4" />
-                  Reprint (thermal)
+                  Print (thermal)
                 </Button>
               )}
               <Button onClick={() => window.print()}>
