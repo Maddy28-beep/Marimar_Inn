@@ -17,30 +17,42 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
-import { BluetoothIcon, CableIcon, PrinterIcon } from "lucide-react";
+import { BluetoothIcon, CableIcon, PrinterIcon, SmartphoneIcon } from "lucide-react";
+
+const KIND_LABELS: Record<string, string> = {
+  bluetooth: "Bluetooth",
+  serial: "USB/Serial",
+  rawbt: "via RawBT app",
+};
 
 export function PrinterStatus() {
   const printer = useReceiptPrinter();
   const [connecting, setConnecting] = useState(false);
 
-  async function handleConnect(via: "bluetooth" | "serial") {
+  async function handleConnect(via: "bluetooth" | "serial" | "rawbt") {
     setConnecting(true);
     try {
       if (via === "bluetooth") {
         await printer.connectBluetooth();
-      } else {
+      } else if (via === "serial") {
         await printer.connectSerial();
+      } else {
+        await printer.connectRawBt();
       }
-      toast.success("Thermal printer connected.");
+      toast.success(
+        via === "rawbt" ? "Set to print via the RawBT app." : "Thermal printer connected."
+      );
     } catch (error) {
       if (error instanceof Error && error.name === "NotFoundError") {
         // User closed the device picker without selecting anything — not an error.
-      } else {
+      } else if (via === "bluetooth") {
         toast.error(
-          via === "bluetooth"
-            ? "Couldn't connect — if the printer doesn't show up, it may only support Bluetooth Classic, which browsers can't use directly. Try connecting via USB/Serial instead."
-            : "Couldn't connect to the printer over USB/Serial — please try again."
+          "Couldn't connect — if the printer doesn't show up, it may only support Bluetooth Classic, which browsers can't use directly. Try USB/Serial, or RawBT if the printer only supports classic Bluetooth."
         );
+      } else if (via === "serial") {
+        toast.error("Couldn't connect to the printer over USB/Serial — please try again.");
+      } else {
+        toast.error("Couldn't switch to RawBT — please try again.");
       }
     } finally {
       setConnecting(false);
@@ -77,7 +89,7 @@ export function PrinterStatus() {
 
           {printer.connected ? (
             <p className="text-sm text-muted-foreground">
-              {printer.name} · {printer.kind === "bluetooth" ? "Bluetooth" : "USB/Serial"}
+              {printer.name} · {printer.kind ? KIND_LABELS[printer.kind] : ""}
             </p>
           ) : (
             <div className="flex flex-col gap-1.5">
@@ -99,10 +111,21 @@ export function PrinterStatus() {
                 <CableIcon className="size-3.5" />
                 Connect via USB/Serial
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={connecting}
+                onClick={() => handleConnect("rawbt")}
+              >
+                <SmartphoneIcon className="size-3.5" />
+                Print via RawBT app
+              </Button>
               <p className="text-xs text-muted-foreground">
                 Only Chrome and Edge can talk to printers directly. If Bluetooth
-                doesn&apos;t find your printer, pair it in Windows Bluetooth
-                settings first, then use USB/Serial here.
+                doesn&apos;t find your printer, it may only support classic
+                Bluetooth, which browsers can&apos;t reach — install the free
+                RawBT app, pair the printer inside it, then choose &quot;Print
+                via RawBT app&quot; here.
               </p>
             </div>
           )}

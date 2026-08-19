@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   connectBluetoothPrinter,
+  connectRawBtPrinter,
   connectSerialPrinter,
   getPrinterState,
   setPaperWidth,
@@ -29,5 +30,6 @@ export function useReceiptPrinter() {
     setPaperWidth,
     connectBluetooth: connectBluetoothPrinter,
     connectSerial: connectSerialPrinter,
+    connectRawBt: connectRawBtPrinter,
   };
 }

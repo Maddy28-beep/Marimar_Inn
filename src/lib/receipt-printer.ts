@@ -9,7 +9,7 @@ import {
   type Room,
 } from "@/lib/types";
 
-type PrinterKind = "bluetooth" | "serial";
+type PrinterKind = "bluetooth" | "serial" | "rawbt";
 
 interface PrinterState {
   kind: PrinterKind | null;
@@ -222,6 +222,24 @@ export async function connectSerialPrinter(): Promise<void> {
 }
 
 /**
+ * "Connecting" via RawBT isn't a real connection at all — RawBT (a small
+ * Android app whose only job is bridging web pages to classic-Bluetooth
+ * printers, see sendViaRawBt() below) does its own pairing/connection to
+ * the printer entirely outside this page. There's nothing to negotiate
+ * here beyond remembering that this is the print path to use.
+ */
+export async function connectRawBtPrinter(): Promise<void> {
+  state.kind = "rawbt";
+  state.name = "RawBT app";
+  emit();
+
+  const existing = loadStoredDevice();
+  const paperWidth = existing?.paperWidth ?? state.paperWidth;
+  state.paperWidth = paperWidth;
+  saveStoredDevice({ kind: "rawbt", paperWidth });
+}
+
+/**
  * Attempts a silent reconnect to whichever printer was last used, without
  * prompting the device picker. Browser support for permission persistence
  * varies, so this can quietly no-op — the UI should still offer a manual
@@ -257,6 +275,11 @@ export async function tryReconnectPrinter(): Promise<void> {
         vendorId: stored.serialVendorId,
         productId: stored.serialProductId,
       });
+    } else if (stored.kind === "rawbt") {
+      // Nothing to reconnect — see connectRawBtPrinter().
+      state.kind = "rawbt";
+      state.name = "RawBT app";
+      emit();
     }
   } catch {
     // No previously-authorized device found (or permission wasn't retained) — stays disconnected.
@@ -309,7 +332,38 @@ async function writeBleData(printer: ConnectedBlePrinter, data: Uint8Array): Pro
   }
 }
 
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+const RAWBT_PACKAGE = "ru.a402d.rawbtprinter";
+
+/**
+ * RawBT (rawbt.ru) is a small Android app that does its own classic-
+ * Bluetooth (SPP) pairing and connection to the printer — something no
+ * browser can do — and registers a "rawbt:" intent scheme any page can
+ * open to hand it a raw print job. Opening this link is fire-and-forget:
+ * unlike the direct Bluetooth/Serial paths above, this page has no way to
+ * find out whether RawBT actually received the job or the printer actually
+ * printed it, only that Android was asked to open the link. Opened in a
+ * new window rather than navigating the current tab so a missing-app
+ * fallback (Play Store) doesn't blow away whatever's on screen mid-checkout.
+ */
+function sendViaRawBt(data: Uint8Array): void {
+  const base64 = uint8ArrayToBase64(data);
+  const fallback = encodeURIComponent(`https://play.google.com/store/apps/details?id=${RAWBT_PACKAGE}`);
+  const intentUrl = `intent:base64,${base64}#Intent;scheme=rawbt;package=${RAWBT_PACKAGE};S.browser_fallback_url=${fallback};end`;
+  window.open(intentUrl, "_blank");
+}
+
 async function send(data: Uint8Array): Promise<void> {
+  if (state.kind === "rawbt") {
+    sendViaRawBt(data);
+    return;
+  }
+
   let printPromise: Promise<unknown>;
   if (state.kind === "bluetooth" && blePrinter) {
     printPromise = writeBleData(blePrinter, data);
