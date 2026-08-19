@@ -38,7 +38,7 @@ declare module "@point-of-sale/webbluetooth-receipt-printer" {
   export default class WebBluetoothReceiptPrinter {
     connect(): Promise<void>;
     reconnect(lastUsedDevice: { id: string }): Promise<void>;
-    print(data: Uint8Array): void;
+    print(data: Uint8Array): Promise<void>;
     addEventListener(type: "connected", listener: (device: ConnectedPrinterInfo) => void): void;
     addEventListener(type: "disconnected", listener: () => void): void;
     addEventListener(type: string, listener: (payload: unknown) => void): void;
@@ -70,7 +70,7 @@ declare module "@point-of-sale/webserial-receipt-printer" {
     constructor(options?: WebSerialReceiptPrinterOptions);
     connect(): Promise<void>;
     reconnect(lastUsedDevice: { vendorId?: number; productId?: number }): Promise<void>;
-    print(data: Uint8Array): void;
+    print(data: Uint8Array): Promise<void>;
     addEventListener(type: "connected", listener: (device: ConnectedPrinterInfo) => void): void;
     addEventListener(type: "disconnected", listener: () => void): void;
     addEventListener(type: string, listener: (payload: unknown) => void): void;

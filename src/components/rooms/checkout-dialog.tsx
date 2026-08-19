@@ -85,10 +85,10 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
   const canComplete =
     Math.round(paymentInput * 100) >= Math.round(balanceBefore * 100);
 
-  function printThermalCopy() {
+  async function printThermalCopy() {
     if (!printer.connected || !settledBooking) return;
     try {
-      printThermalReceipt(settledBooking, room, { staffName, finalAmountPaid, change });
+      await printThermalReceipt(settledBooking, room, { staffName, finalAmountPaid, change });
     } catch {
       toast.error("Couldn't print to the thermal printer.");
     }
@@ -131,9 +131,9 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
       if (printer.connected) {
         try {
           if (shouldOpenDrawer(booking.paymentMethod, amountCollectedNow)) {
-            openCashDrawer();
+            await openCashDrawer();
           }
-          printThermalReceipt(finalBooking, room, { staffName, finalAmountPaid, change });
+          await printThermalReceipt(finalBooking, room, { staffName, finalAmountPaid, change });
         } catch {
           toast.error("Checked out, but the thermal printer didn't respond.");
         }

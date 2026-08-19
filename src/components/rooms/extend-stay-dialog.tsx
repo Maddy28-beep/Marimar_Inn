@@ -121,13 +121,13 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
       if (printer.connected) {
         if (shouldOpenDrawer(paymentMethod, cashPortion)) {
           try {
-            openCashDrawer();
+            await openCashDrawer();
           } catch {
             toast.error("Extended, but couldn't open the cash drawer.");
           }
         }
         try {
-          printExtensionReceipt(booking, room, {
+          await printExtensionReceipt(booking, room, {
             staffName,
             hours: 1,
             amountCharged: additionalCost,
@@ -160,10 +160,10 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
     }
   }
 
-  function printThermalCopy() {
+  async function printThermalCopy() {
     if (!printer.connected || !receipt) return;
     try {
-      printExtensionReceipt(booking, room, {
+      await printExtensionReceipt(booking, room, {
         staffName,
         hours: 1,
         amountCharged: receipt.amountCharged,

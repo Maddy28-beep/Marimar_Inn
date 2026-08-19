@@ -321,10 +321,10 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
     ]);
   }
 
-  function handlePrintThermal() {
+  async function handlePrintThermal() {
     if (!salesReport || !printer.connected) return;
     try {
-      printDailySalesReceipt({
+      await printDailySalesReceipt({
         // A short format ("Aug 16, 2026") on purpose — the full weekday
         // format used elsewhere can run to 30 characters, right at the edge
         // of 58mm (32-char) paper.

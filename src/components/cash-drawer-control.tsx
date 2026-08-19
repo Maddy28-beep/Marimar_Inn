@@ -53,7 +53,7 @@ export function CashDrawerControl() {
     }
 
     try {
-      openCashDrawer();
+      await openCashDrawer();
       toast.success("Cash drawer opened.");
       setPin("");
     } catch {

@@ -201,13 +201,13 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
       if (printer.connected) {
         if (shouldOpenDrawer(paymentMethod, cashPortion)) {
           try {
-            openCashDrawer();
+            await openCashDrawer();
           } catch {
             toast.error("Checked in, but couldn't open the cash drawer.");
           }
         }
         try {
-          printThermalReceipt(receiptBooking, room, {
+          await printThermalReceipt(receiptBooking, room, {
             staffName,
             finalAmountPaid: amountCollected,
             change,
@@ -231,10 +231,10 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
     }
   }
 
-  function printThermalCopy() {
+  async function printThermalCopy() {
     if (!printer.connected || !receipt || !room) return;
     try {
-      printThermalReceipt(receipt.booking, room, {
+      await printThermalReceipt(receipt.booking, room, {
         staffName,
         finalAmountPaid: receipt.finalAmountPaid,
         change: receipt.change,

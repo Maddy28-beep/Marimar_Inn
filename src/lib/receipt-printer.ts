@@ -124,6 +124,18 @@ export async function connectSerialPrinter(): Promise<void> {
  * "Connect printer" action as a fallback.
  */
 export async function tryReconnectPrinter(): Promise<void> {
+  // Every component that calls useReceiptPrinter() (PrinterStatus, plus
+  // every dialog that can print) fires this on its own mount. Without this
+  // guard, opening a dialog while already connected would build a brand new
+  // WebBluetoothReceiptPrinter and re-run reconnect() on top of a
+  // perfectly working connection — clobbering the working instance's print
+  // characteristic with a fresh one if the redundant reconnect is slower,
+  // fails partway through, or races the original. The UI would keep
+  // showing "Connected" (state.kind is untouched unless a fresh attempt
+  // actually succeeds or the device fires its own disconnect event) while
+  // prints silently go nowhere.
+  if (state.kind !== null) return;
+
   const stored = loadStoredDevice();
   if (!stored) return;
   state.paperWidth = stored.paperWidth;
@@ -163,14 +175,30 @@ export function setPaperWidth(width: 32 | 48) {
   emit();
 }
 
-function send(data: Uint8Array) {
+// The underlying print() promise can hang indefinitely instead of rejecting
+// if a single write partway through its internal queue fails — the library
+// has no reject path for that case, only a resolve once every queued write
+// has gone through. Racing it against a timeout turns a dead/stuck BLE
+// connection into a normal, catchable error instead of freezing whichever
+// flow (check-in, checkout, extend) is waiting on the print to finish.
+const PRINT_TIMEOUT_MS = 8000;
+
+async function send(data: Uint8Array): Promise<void> {
+  let printPromise: Promise<unknown>;
   if (state.kind === "bluetooth" && bluetoothPrinter) {
-    bluetoothPrinter.print(data);
+    printPromise = bluetoothPrinter.print(data);
   } else if (state.kind === "serial" && serialPrinter) {
-    serialPrinter.print(data);
+    printPromise = serialPrinter.print(data);
   } else {
     throw new Error("No thermal printer connected.");
   }
+
+  await Promise.race([
+    printPromise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Printer didn't respond in time.")), PRINT_TIMEOUT_MS)
+    ),
+  ]);
 }
 
 function money(amount: number): string {
@@ -300,8 +328,8 @@ export function buildReceiptBytes(booking: Booking, room: Room, extras: ReceiptE
   return encoder.encode();
 }
 
-export function printThermalReceipt(booking: Booking, room: Room, extras: ReceiptExtras) {
-  send(buildReceiptBytes(booking, room, extras));
+export async function printThermalReceipt(booking: Booking, room: Room, extras: ReceiptExtras) {
+  await send(buildReceiptBytes(booking, room, extras));
 }
 
 export interface ExtensionReceiptExtras {
@@ -384,8 +412,8 @@ export function buildExtensionReceiptBytes(
   return encoder.encode();
 }
 
-export function printExtensionReceipt(booking: Booking, room: Room, extras: ExtensionReceiptExtras) {
-  send(buildExtensionReceiptBytes(booking, room, extras));
+export async function printExtensionReceipt(booking: Booking, room: Room, extras: ExtensionReceiptExtras) {
+  await send(buildExtensionReceiptBytes(booking, room, extras));
 }
 
 export interface DailySalesReceiptRow {
@@ -503,17 +531,17 @@ export function buildDailySalesReceiptBytes(data: DailySalesReceiptData): Uint8A
   return encoder.encode();
 }
 
-export function printDailySalesReceipt(data: DailySalesReceiptData) {
-  send(buildDailySalesReceiptBytes(data));
+export async function printDailySalesReceipt(data: DailySalesReceiptData) {
+  await send(buildDailySalesReceiptBytes(data));
 }
 
 /** Sends the drawer-kick pulse — the drawer must be cabled into the printer's RJ11 port. */
-export function openCashDrawer() {
+export async function openCashDrawer() {
   const encoder = new ReceiptPrinterEncoder({
     language: printerLanguage,
     codepageMapping: printerCodepageMapping,
   });
-  send(encoder.pulse().encode());
+  await send(encoder.pulse().encode());
 }
 
 /**
