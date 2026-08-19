@@ -27,11 +27,28 @@ interface BleLePrinterProfile {
   codepageMapping: string;
 }
 
-// Trimmed down from the device-matching table that used to ship inside
-// @point-of-sale/webbluetooth-receipt-printer (ESC/POS-only — the only
-// language this app's printers use) and reimplemented locally so we can
-// choose the write mode ourselves — see connectBleCharacteristic() below.
+// Reimplemented locally (from the device-matching table that used to ship
+// inside @point-of-sale/webbluetooth-receipt-printer) so we can choose the
+// write mode ourselves — see connectBleCharacteristic() below. Genuine BLE
+// printers (Epson TM-P series, Star Micronics) are listed first since
+// they're the ones this profile table actually matters for — the RPP02N
+// this app started with turned out to be classic-Bluetooth-only underneath
+// and unreachable from any browser regardless of this table.
 const BLE_PRINTER_PROFILES: BleLePrinterProfile[] = [
+  {
+    filters: [{ namePrefix: "TM-P" }],
+    serviceUuid: "49535343-fe7d-4ae5-8fa9-9fafd205e455",
+    characteristicUuid: "49535343-8841-43f4-a8d4-ecbe34729bb3",
+    language: "esc-pos",
+    codepageMapping: "epson",
+  },
+  {
+    filters: [{ namePrefix: "STAR L" }],
+    serviceUuid: "49535343-fe7d-4ae5-8fa9-9fafd205e455",
+    characteristicUuid: "49535343-8841-43f4-a8d4-ecbe34729bb3",
+    language: "star-prnt",
+    codepageMapping: "star",
+  },
   {
     filters: [{ name: "BlueTooth Printer", services: ["000018f0-0000-1000-8000-00805f9b34fb"] }],
     serviceUuid: "000018f0-0000-1000-8000-00805f9b34fb",
@@ -265,13 +282,29 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function writeBleData(printer: ConnectedBlePrinter, data: Uint8Array): Promise<void> {
+  // The split writeValueWithResponse()/writeValueWithoutResponse() methods
+  // are relatively recent (~2020) — an older Chrome build (common on
+  // budget/older Android tablets that don't auto-update) may not have them
+  // at all, only the original writeValue(), which predates the
+  // with/without-response distinction and just uses whichever mode the
+  // characteristic supports under the hood. Feature-detect and fall back
+  // rather than assuming the newer methods exist.
+  const characteristic = printer.characteristic;
+  const hasWithoutResponse = typeof characteristic.writeValueWithoutResponse === "function";
+  const hasWithResponse = typeof characteristic.writeValueWithResponse === "function";
+
   for (let offset = 0; offset < data.length; offset += BLE_CHUNK_SIZE) {
     const chunk = data.subarray(offset, offset + BLE_CHUNK_SIZE);
-    if (printer.writeWithoutResponse) {
-      await printer.characteristic.writeValueWithoutResponse(chunk);
+    if (printer.writeWithoutResponse && hasWithoutResponse) {
+      await characteristic.writeValueWithoutResponse(chunk);
+      await sleep(BLE_CHUNK_DELAY_MS);
+    } else if (!printer.writeWithoutResponse && hasWithResponse) {
+      await characteristic.writeValueWithResponse(chunk);
+    } else if (characteristic.writeValue) {
+      await characteristic.writeValue(chunk);
       await sleep(BLE_CHUNK_DELAY_MS);
     } else {
-      await printer.characteristic.writeValueWithResponse(chunk);
+      throw new Error("This browser's Bluetooth support is too old to print.");
     }
   }
 }

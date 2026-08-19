@@ -12,6 +12,11 @@ interface BluetoothRemoteGATTCharacteristic {
   readonly properties: BluetoothCharacteristicProperties;
   writeValueWithResponse(value: Uint8Array): Promise<void>;
   writeValueWithoutResponse(value: Uint8Array): Promise<void>;
+  // Older browsers only ever had this original method, predating the split
+  // with/without-response methods above — optional since modern Chrome
+  // still exposes it too, but code should prefer the split methods when
+  // they're available.
+  writeValue?(value: Uint8Array): Promise<void>;
 }
 
 interface BluetoothRemoteGATTService {
