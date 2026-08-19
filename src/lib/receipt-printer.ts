@@ -7,6 +7,7 @@ import {
   type PaymentMethod,
   type Room,
 } from "@/lib/types";
+import { paymentPortionLines } from "@/lib/bookings";
 
 type PrinterKind = "bluetooth" | "serial" | "rawbt" | "native";
 
@@ -17,6 +18,7 @@ interface PrinterState {
 }
 
 const STORAGE_KEY = "marimar-inn:thermal-printer";
+const DRAWER_KEY = "marimar-inn:cash-drawer-enabled";
 
 interface BleLePrinterProfile {
   filters: BluetoothLEScanFilter[];
@@ -263,6 +265,20 @@ function loadStoredDevice(): StoredDevice | null {
 function saveStoredDevice(device: StoredDevice) {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(device));
+}
+
+export function isDrawerEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(DRAWER_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setDrawerEnabled(enabled: boolean) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(DRAWER_KEY, enabled ? "1" : "0");
 }
 
 function onSerialConnected(info: SerialPrinterInfo) {
@@ -675,17 +691,15 @@ export function buildReceiptBytes(booking: Booking, room: Room, extras: ReceiptE
     .line(twoColumn("Total", money(booking.totalAmount), width))
     .bold(false);
 
-  // splitCashAmount/splitGcashAmount track the running total across every
-  // transaction on the booking, so this is accurate even at checkout after
-  // check-in and an extension used different methods — a single "Paid
-  // (method)" line would misattribute the whole cumulative amount to
-  // whichever method happened to be used most recently.
-  const cashPaid = booking.splitCashAmount ?? 0;
-  const gcashPaid = booking.splitGcashAmount ?? 0;
-  if (cashPaid > 0 && gcashPaid > 0) {
-    encoder
-      .line(twoColumn("Paid (Cash)", money(cashPaid), width))
-      .line(twoColumn("Paid (GCash)", money(gcashPaid), width));
+  const portions = paymentPortionLines({
+    cash: booking.splitCashAmount ?? 0,
+    gcash: booking.splitGcashAmount ?? 0,
+    qrph: booking.splitQrphAmount ?? 0,
+  });
+  if (portions.length > 1) {
+    for (const line of portions) {
+      encoder.line(twoColumn(`Paid (${line.label})`, money(line.amount), width));
+    }
   } else {
     encoder.line(
       twoColumn(`Paid (${PAYMENT_METHOD_LABELS[booking.paymentMethod]})`, money(extras.finalAmountPaid), width)
@@ -694,6 +708,9 @@ export function buildReceiptBytes(booking: Booking, room: Room, extras: ReceiptE
 
   if (booking.gcashReference) {
     encoder.line(`GCash Ref: ${booking.gcashReference}`);
+  }
+  if (booking.qrphReference) {
+    encoder.line(`QRPh Ref: ${booking.qrphReference}`);
   }
 
   if (extras.change > 0) {
@@ -724,8 +741,10 @@ export interface ExtensionReceiptExtras {
   change: number;
   paymentMethod: PaymentMethod;
   gcashReference?: string;
+  qrphReference?: string;
   splitCashAmount?: number;
   splitGcashAmount?: number;
+  splitQrphAmount?: number;
   kickDrawer?: boolean;
 }
 
@@ -763,18 +782,26 @@ export function buildExtensionReceiptBytes(
     .line(twoColumn("Total", money(extras.amountCharged), width))
     .bold(false);
 
-  if (extras.paymentMethod === "split") {
-    encoder
-      .line(twoColumn("Paid (Cash)", money(extras.splitCashAmount ?? 0), width))
-      .line(twoColumn("Paid (GCash)", money(extras.splitGcashAmount ?? 0), width));
+  const portions = paymentPortionLines({
+    cash: extras.splitCashAmount ?? (extras.paymentMethod === "cash" ? extras.amountPaid : 0),
+    gcash: extras.splitGcashAmount ?? (extras.paymentMethod === "gcash" ? extras.amountPaid : 0),
+    qrph: extras.splitQrphAmount ?? (extras.paymentMethod === "qrph" ? extras.amountPaid : 0),
+  });
+  if (portions.length > 1) {
+    for (const line of portions) {
+      encoder.line(twoColumn(`Paid (${line.label})`, money(line.amount), width));
+    }
   } else {
     encoder.line(
       twoColumn(`Paid (${PAYMENT_METHOD_LABELS[extras.paymentMethod]})`, money(extras.amountPaid), width)
     );
   }
 
-  if ((extras.paymentMethod === "gcash" || extras.paymentMethod === "split") && extras.gcashReference) {
+  if (extras.gcashReference) {
     encoder.line(`GCash Ref: ${extras.gcashReference}`);
+  }
+  if (extras.qrphReference) {
+    encoder.line(`QRPh Ref: ${extras.qrphReference}`);
   }
 
   if (extras.change > 0) {
@@ -808,6 +835,7 @@ export interface DailySalesReceiptRow {
   totalPaid: number;
   paymentMethodLabel: string;
   gcashReference?: string;
+  qrphReference?: string;
 }
 
 export interface DailySalesReceiptTotals {
@@ -816,6 +844,7 @@ export interface DailySalesReceiptTotals {
   totalPaid: number;
   cashCollected: number;
   gcashCollected: number;
+  qrphCollected: number;
 }
 
 export interface DailySalesReceiptData {
@@ -874,7 +903,10 @@ export function buildDailySalesReceiptBytes(data: DailySalesReceiptData): Uint8A
       // reference number can't be safely clipped, since a shortened one is
       // useless for the Owner to verify against GCash later.
       if (row.gcashReference) {
-        encoder.line(clampLine(`  Ref: ${row.gcashReference}`, width));
+        encoder.line(clampLine(`  GCash: ${row.gcashReference}`, width));
+      }
+      if (row.qrphReference) {
+        encoder.line(clampLine(`  QRPh: ${row.qrphReference}`, width));
       }
       encoder.line(rule);
     }
@@ -888,6 +920,7 @@ export function buildDailySalesReceiptBytes(data: DailySalesReceiptData): Uint8A
     .newline()
     .line(twoColumn("Cash collected", money(data.totals.cashCollected), width))
     .line(twoColumn("GCash collected", money(data.totals.gcashCollected), width))
+    .line(twoColumn("QRPh collected", money(data.totals.qrphCollected), width))
     .line(twoColumn("Total collected", money(data.totals.totalPaid), width))
     .newline()
     .bold(true)
@@ -944,10 +977,10 @@ export async function openCashDrawer() {
 }
 
 /**
- * `amount` should be the cash portion specifically — for a split payment,
- * that's the cash half only, not the combined total, since the drawer only
- * needs to open when actual cash is changing hands.
+ * Opens the drawer only when this payment actually includes cash — GCash
+ * and QRPh stay closed. Also stays closed until the header "Drawer" switch
+ * is turned on (no hardware yet).
  */
-export function shouldOpenDrawer(paymentMethod: PaymentMethod, amount: number): boolean {
-  return (paymentMethod === "cash" || paymentMethod === "split") && amount > 0;
+export function shouldOpenDrawer(cashCollectedNow: number): boolean {
+  return isDrawerEnabled() && cashCollectedNow > 0;
 }

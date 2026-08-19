@@ -21,10 +21,19 @@ import {
   settleOpenTimeCharge,
   hoursElapsed,
 } from "@/lib/bookings";
-import { PAYMENT_METHOD_LABELS, type Booking, type Room } from "@/lib/types";
+import { type Booking, type Room } from "@/lib/types";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
-import { printThermalReceipt, printerErrorMessage, referenceNumberFor } from "@/lib/receipt-printer";
+import { printThermalReceipt, printerErrorMessage, referenceNumberFor, shouldOpenDrawer } from "@/lib/receipt-printer";
+import {
+  cashCollectedNow,
+  collectedAmount,
+  emptyPaymentDraft,
+  PaymentBreakdownDisplay,
+  PaymentFields,
+  paymentPayload,
+  type PaymentDraft,
+} from "@/components/payments/payment-fields";
 import { Loader2Icon, PrinterIcon } from "lucide-react";
 
 interface CheckoutDialogProps {
@@ -38,7 +47,7 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
   const now = useNowTick(1000);
   const printer = useReceiptPrinter();
   const [phase, setPhase] = useState<"confirm" | "receipt">("confirm");
-  const [finalPayment, setFinalPayment] = useState("");
+  const [payment, setPayment] = useState<PaymentDraft>(emptyPaymentDraft);
   // The original package (e.g. 3h/₱200) is a floor, not something open time
   // replaces — converting to open time only changes what happens *after*
   // that package's hours run out. Checking out before then still owes the
@@ -76,14 +85,13 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
   // (matters for open-time stays, where the room charge is only locked in
   // at this point) rather than the stale pre-checkout booking prop.
   const receiptData = settledBooking ?? booking;
-  const { cash: receiptCashPaid, gcash: receiptGcashPaid } = paymentBreakdown(receiptData);
+  const receiptPortions = paymentBreakdown(receiptData);
 
   const balanceBefore = Math.max(effectiveTotalAmount - booking.amountPaid, 0);
-  const paymentInput = Number(finalPayment) || 0;
-  const change = paymentInput > balanceBefore ? paymentInput - balanceBefore : 0;
-  const finalAmountPaid = booking.amountPaid + Math.min(paymentInput, balanceBefore);
-  const canComplete =
-    Math.round(paymentInput * 100) >= Math.round(balanceBefore * 100);
+  const paid = balanceBefore > 0 ? collectedAmount(payment, balanceBefore) : 0;
+  const change = paid > balanceBefore ? paid - balanceBefore : 0;
+  const finalAmountPaid = booking.amountPaid + Math.min(paid, balanceBefore);
+  const canComplete = Math.round(paid * 100) >= Math.round(balanceBefore * 100);
 
   async function printThermalCopy() {
     if (!printer.connected || !settledBooking) return;
@@ -104,26 +112,44 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
       return;
     }
     setSubmitting(true);
-    const amountCollectedNow = Math.min(paymentInput, balanceBefore);
-    // Checkout doesn't ask which method covered the top-up — same fallback
-    // recordCheckout() applies server-side — so the receipt's cash/GCash
-    // breakdown (which now includes this payment) stays accurate too.
+    const amountCollectedNow = Math.min(paid, balanceBefore);
+    const payload = amountCollectedNow > 0 ? paymentPayload(payment, balanceBefore) : undefined;
     const priorSplit = paymentBreakdown(effectiveBooking);
-    const thisSplit = methodContribution(
-      booking.paymentMethod === "split" ? "cash" : booking.paymentMethod,
-      amountCollectedNow
-    );
+    const thisSplit = payload
+      ? methodContribution(payload.paymentMethod, amountCollectedNow, {
+          cash: payload.splitCashAmount,
+          gcash: payload.splitGcashAmount,
+          qrph: payload.splitQrphAmount,
+        })
+      : { cash: 0, gcash: 0, qrph: 0 };
     const finalBooking: Booking = {
       ...effectiveBooking,
       amountPaid: finalAmountPaid,
+      paymentMethod: payload?.paymentMethod ?? effectiveBooking.paymentMethod,
+      gcashReference: payload?.gcashReference ?? effectiveBooking.gcashReference,
+      qrphReference: payload?.qrphReference ?? effectiveBooking.qrphReference,
       splitCashAmount: priorSplit.cash + thisSplit.cash,
       splitGcashAmount: priorSplit.gcash + thisSplit.gcash,
+      splitQrphAmount: priorSplit.qrph + thisSplit.qrph,
     };
     try {
       if (booking.openEnded) {
         await settleOpenTimeCharge(booking, effectiveRoomCharge, Math.round(hoursUsed * 10) / 10);
       }
-      await recordCheckout(effectiveBooking, amountCollectedNow);
+      await recordCheckout(
+        effectiveBooking,
+        amountCollectedNow,
+        payload
+          ? {
+              paymentMethod: payload.paymentMethod,
+              gcashReference: payload.gcashReference,
+              qrphReference: payload.qrphReference,
+              splitCashAmount: payload.splitCashAmount,
+              splitGcashAmount: payload.splitGcashAmount,
+              splitQrphAmount: payload.splitQrphAmount,
+            }
+          : undefined
+      );
       setSettledBooking(finalBooking);
       setCheckOutTime(new Date());
       setPhase("receipt");
@@ -134,6 +160,9 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
             staffName,
             finalAmountPaid,
             change,
+            kickDrawer: shouldOpenDrawer(
+              amountCollectedNow > 0 ? cashCollectedNow(payment, balanceBefore) : 0
+            ),
           });
         } catch (error) {
           toast.error(`Checked out, but the printer said: ${printerErrorMessage(error)}`);
@@ -209,26 +238,13 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
               </div>
 
               {balanceBefore > 0 && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="finalPayment">Final payment</Label>
-                    <Input
-                      id="finalPayment"
-                      type="number"
-                      min={balanceBefore}
-                      step="0.01"
-                      value={finalPayment}
-                      onChange={(e) => setFinalPayment(e.target.value)}
-                      disabled={submitting}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label>Change</Label>
-                    <div className="flex h-8 items-center text-sm font-medium">
-                      ₱{change.toFixed(2)}
-                    </div>
-                  </div>
-                </div>
+                <PaymentFields
+                  draft={payment}
+                  onChange={setPayment}
+                  due={balanceBefore}
+                  disabled={submitting}
+                  idPrefix="checkout"
+                />
               )}
               {balanceBefore > 0 && !canComplete && (
                 <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
@@ -309,36 +325,14 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
                 <span>Total</span>
                 <span>₱{receiptData.totalAmount.toFixed(2)}</span>
               </div>
-              {receiptCashPaid > 0 && receiptGcashPaid > 0 ? (
-                <>
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>Paid via Cash</span>
-                    <span>₱{receiptCashPaid.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>Paid via GCash</span>
-                    <span>₱{receiptGcashPaid.toFixed(2)}</span>
-                  </div>
-                </>
-              ) : (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Paid via {PAYMENT_METHOD_LABELS[booking.paymentMethod]}</span>
-                  <span>₱{finalAmountPaid.toFixed(2)}</span>
-                </div>
-              )}
-              {(booking.paymentMethod === "gcash" || booking.paymentMethod === "split") &&
-                booking.gcashReference && (
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>GCash Ref</span>
-                    <span>{booking.gcashReference}</span>
-                  </div>
-                )}
-              {change > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Change</span>
-                  <span>₱{change.toFixed(2)}</span>
-                </div>
-              )}
+              <PaymentBreakdownDisplay
+                portions={receiptPortions}
+                method={receiptData.paymentMethod}
+                amountPaid={finalAmountPaid}
+                gcashReference={receiptData.gcashReference}
+                qrphReference={receiptData.qrphReference}
+                change={change}
+              />
               <div className="my-1 border-t" />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Staff</span>

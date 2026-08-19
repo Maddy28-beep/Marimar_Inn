@@ -57,8 +57,10 @@ export interface CheckInInput {
   paymentMethod: PaymentMethod;
   amountPaid: number;
   gcashReference?: string;
+  qrphReference?: string;
   splitCashAmount?: number;
   splitGcashAmount?: number;
+  splitQrphAmount?: number;
   specialRequests?: string;
   cashierId: string;
   cartItems?: CheckInCartLine[];
@@ -69,33 +71,68 @@ function paymentStatusFor(amountPaid: number, totalAmount: number): PaymentStatu
   return amountPaid >= totalAmount ? "paid" : "partial";
 }
 
+export interface PaymentPortions {
+  cash: number;
+  gcash: number;
+  qrph: number;
+}
+
 /**
  * A booking can be paid across several transactions (check-in, extend,
- * checkout) that each pick their own method — splitCashAmount/
- * splitGcashAmount track the running cash-vs-GCash total across all of
- * them, not just the latest one. Falls back to inferring the breakdown
- * from paymentMethod + amountPaid for bookings written before these
- * fields existed.
+ * checkout) that each pick their own method — split*Amount fields track
+ * the running cash / GCash / QRPh total across all of them. Falls back to
+ * inferring the breakdown from paymentMethod + amountPaid for bookings
+ * written before these fields existed.
  */
 export function paymentBreakdown(
-  booking: Pick<Booking, "paymentMethod" | "amountPaid" | "splitCashAmount" | "splitGcashAmount">
-): { cash: number; gcash: number } {
-  if (booking.splitCashAmount !== undefined || booking.splitGcashAmount !== undefined) {
-    return { cash: booking.splitCashAmount ?? 0, gcash: booking.splitGcashAmount ?? 0 };
+  booking: Pick<
+    Booking,
+    | "paymentMethod"
+    | "amountPaid"
+    | "splitCashAmount"
+    | "splitGcashAmount"
+    | "splitQrphAmount"
+  >
+): PaymentPortions {
+  if (
+    booking.splitCashAmount !== undefined ||
+    booking.splitGcashAmount !== undefined ||
+    booking.splitQrphAmount !== undefined
+  ) {
+    return {
+      cash: booking.splitCashAmount ?? 0,
+      gcash: booking.splitGcashAmount ?? 0,
+      qrph: booking.splitQrphAmount ?? 0,
+    };
   }
-  if (booking.paymentMethod === "gcash") return { cash: 0, gcash: booking.amountPaid };
-  return { cash: booking.amountPaid, gcash: 0 };
+  if (booking.paymentMethod === "gcash") return { cash: 0, gcash: booking.amountPaid, qrph: 0 };
+  if (booking.paymentMethod === "qrph") return { cash: 0, gcash: 0, qrph: booking.amountPaid };
+  return { cash: booking.amountPaid, gcash: 0, qrph: 0 };
 }
 
 export function methodContribution(
   method: PaymentMethod,
   amount: number,
-  splitCash?: number,
-  splitGcash?: number
-): { cash: number; gcash: number } {
-  if (method === "gcash") return { cash: 0, gcash: amount };
-  if (method === "split") return { cash: splitCash ?? 0, gcash: splitGcash ?? 0 };
-  return { cash: amount, gcash: 0 };
+  split?: Partial<PaymentPortions>
+): PaymentPortions {
+  if (method === "gcash") return { cash: 0, gcash: amount, qrph: 0 };
+  if (method === "qrph") return { cash: 0, gcash: 0, qrph: amount };
+  if (method === "split") {
+    return {
+      cash: split?.cash ?? 0,
+      gcash: split?.gcash ?? 0,
+      qrph: split?.qrph ?? 0,
+    };
+  }
+  return { cash: amount, gcash: 0, qrph: 0 };
+}
+
+export function paymentPortionLines(portions: PaymentPortions): { label: string; amount: number }[] {
+  const lines: { label: string; amount: number }[] = [];
+  if (portions.cash > 0) lines.push({ label: "Cash", amount: portions.cash });
+  if (portions.gcash > 0) lines.push({ label: "GCash", amount: portions.gcash });
+  if (portions.qrph > 0) lines.push({ label: "QRPh", amount: portions.qrph });
+  return lines;
 }
 
 /** Open-time rate: ₱100/hour, billed in 30-minute blocks rounded up. */
@@ -141,12 +178,11 @@ export async function checkIn(input: CheckInInput) {
 
     const totalFbCharge = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
     const totalAmount = totalRoomCharge + totalFbCharge;
-    const initialSplit = methodContribution(
-      input.paymentMethod,
-      input.amountPaid,
-      input.splitCashAmount,
-      input.splitGcashAmount
-    );
+    const initialSplit = methodContribution(input.paymentMethod, input.amountPaid, {
+      cash: input.splitCashAmount,
+      gcash: input.splitGcashAmount,
+      qrph: input.splitQrphAmount,
+    });
 
     const booking: Omit<Booking, "checkInTime" | "updatedAt"> & {
       checkInTime: ReturnType<typeof serverTimestamp>;
@@ -170,6 +206,7 @@ export async function checkIn(input: CheckInInput) {
       // running total to accumulate onto — see paymentBreakdown().
       splitCashAmount: initialSplit.cash,
       splitGcashAmount: initialSplit.gcash,
+      splitQrphAmount: initialSplit.qrph,
       paymentStatus: paymentStatusFor(input.amountPaid, totalAmount),
       status: "active",
       items: orderItems,
@@ -181,6 +218,7 @@ export async function checkIn(input: CheckInInput) {
       ...(input.guestCount !== undefined ? { guestCount: input.guestCount } : {}),
       ...(input.specialRequests ? { specialRequests: input.specialRequests } : {}),
       ...(input.gcashReference ? { gcashReference: input.gcashReference } : {}),
+      ...(input.qrphReference ? { qrphReference: input.qrphReference } : {}),
       ...(input.openEnded ? { openEnded: true } : {}),
     };
 
@@ -196,21 +234,23 @@ export async function checkIn(input: CheckInInput) {
 
 export async function recordCheckout(
   booking: Booking,
-  additionalPayment: number
+  additionalPayment: number,
+  payment?: ExtendStayPayment
 ) {
   const firestore = requireDb();
   const newAmountPaid = booking.amountPaid + additionalPayment;
   if (Math.round(newAmountPaid * 100) < Math.round(booking.totalAmount * 100)) {
     throw new Error("Cannot check out until the full amount is paid.");
   }
-  // Checkout doesn't ask which method settled the balance — attribute it to
-  // the booking's current method, falling back to cash for "split" since
-  // there's no ratio to split a single top-up payment by here.
   const priorSplit = paymentBreakdown(booking);
-  const thisSplit = methodContribution(
-    booking.paymentMethod === "split" ? "cash" : booking.paymentMethod,
-    additionalPayment
-  );
+  const thisSplit =
+    additionalPayment > 0
+      ? methodContribution(payment?.paymentMethod ?? "cash", additionalPayment, {
+          cash: payment?.splitCashAmount,
+          gcash: payment?.splitGcashAmount,
+          qrph: payment?.splitQrphAmount,
+        })
+      : { cash: 0, gcash: 0, qrph: 0 };
 
   const batch = writeBatch(firestore);
   batch.update(doc(firestore, "bookings", booking.bookingId), {
@@ -219,8 +259,14 @@ export async function recordCheckout(
     amountPaid: newAmountPaid,
     splitCashAmount: priorSplit.cash + thisSplit.cash,
     splitGcashAmount: priorSplit.gcash + thisSplit.gcash,
+    splitQrphAmount: priorSplit.qrph + thisSplit.qrph,
     paymentStatus: paymentStatusFor(newAmountPaid, booking.totalAmount),
     updatedAt: serverTimestamp(),
+    ...(additionalPayment > 0 && payment?.paymentMethod
+      ? { paymentMethod: payment.paymentMethod }
+      : {}),
+    ...(payment?.gcashReference ? { gcashReference: payment.gcashReference } : {}),
+    ...(payment?.qrphReference ? { qrphReference: payment.qrphReference } : {}),
   });
   batch.update(doc(firestore, "rooms", booking.roomId), {
     status: "cleaning",
@@ -253,8 +299,10 @@ export async function deleteBooking(bookingId: string) {
 export interface ExtendStayPayment {
   paymentMethod: PaymentMethod;
   gcashReference?: string;
+  qrphReference?: string;
   splitCashAmount?: number;
   splitGcashAmount?: number;
+  splitQrphAmount?: number;
 }
 
 export async function extendStay(
@@ -270,12 +318,11 @@ export async function extendStay(
   const newTotalAmount = newTotalRoomCharge + booking.totalFbCharge;
   const newAmountPaid = booking.amountPaid + additionalPayment;
   const priorSplit = paymentBreakdown(booking);
-  const thisSplit = methodContribution(
-    payment.paymentMethod,
-    additionalPayment,
-    payment.splitCashAmount,
-    payment.splitGcashAmount
-  );
+  const thisSplit = methodContribution(payment.paymentMethod, additionalPayment, {
+    cash: payment.splitCashAmount,
+    gcash: payment.splitGcashAmount,
+    qrph: payment.splitQrphAmount,
+  });
 
   await updateDoc(doc(firestore, "bookings", booking.bookingId), {
     hoursBooked: newHoursBooked,
@@ -283,14 +330,16 @@ export async function extendStay(
     totalAmount: newTotalAmount,
     amountPaid: newAmountPaid,
     // paymentMethod reflects how the guest most recently settled up — the
-    // running cash/GCash totals below are what stay accurate across mixed
+    // running cash/GCash/QRPh totals below are what stay accurate across mixed
     // methods, not this field alone.
     paymentMethod: payment.paymentMethod,
     splitCashAmount: priorSplit.cash + thisSplit.cash,
     splitGcashAmount: priorSplit.gcash + thisSplit.gcash,
+    splitQrphAmount: priorSplit.qrph + thisSplit.qrph,
     paymentStatus: paymentStatusFor(newAmountPaid, newTotalAmount),
     updatedAt: serverTimestamp(),
     ...(payment.gcashReference ? { gcashReference: payment.gcashReference } : {}),
+    ...(payment.qrphReference ? { qrphReference: payment.qrphReference } : {}),
   });
   // Extending pushes the checkout deadline back out — clear any 30-min-
   // warning/overdue reminder (and its repeating alarm) raised before the

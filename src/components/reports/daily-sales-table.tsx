@@ -16,7 +16,12 @@ function peso(amount: number): string {
 function paymentLabel(row: DailySalesRow): string {
   const cash = row.splitCashAmount ?? 0;
   const gcash = row.splitGcashAmount ?? 0;
-  if (cash > 0 && gcash > 0) return `Cash ${peso(cash)} + GCash ${peso(gcash)}`;
+  const qrph = row.splitQrphAmount ?? 0;
+  const parts: string[] = [];
+  if (cash > 0) parts.push(`Cash ${peso(cash)}`);
+  if (gcash > 0) parts.push(`GCash ${peso(gcash)}`);
+  if (qrph > 0) parts.push(`QRPh ${peso(qrph)}`);
+  if (parts.length > 1) return parts.join(" + ");
   return PAYMENT_METHOD_LABELS[row.paymentMethod];
 }
 
@@ -95,7 +100,8 @@ export function DailySalesTable({ report }: { report: DailySalesReport }) {
                   <td className="border p-1 text-right whitespace-nowrap">{peso(row.totalPaid)}</td>
                   <td className="border p-1 whitespace-nowrap">
                     {paymentLabel(row)}
-                    {row.gcashReference ? ` (${row.gcashReference})` : ""}
+                    {row.gcashReference ? ` (GCash ${row.gcashReference})` : ""}
+                    {row.qrphReference ? ` (QRPh ${row.qrphReference})` : ""}
                   </td>
                   <td className="border p-1" />
                   <td className="border p-1" />
@@ -131,6 +137,10 @@ export function DailySalesTable({ report }: { report: DailySalesReport }) {
         <div>
           <span className="text-muted-foreground">GCash collected</span>{" "}
           <span className="font-medium">{peso(totals.gcashCollected)}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">QRPh collected</span>{" "}
+          <span className="font-medium">{peso(totals.qrphCollected)}</span>
         </div>
         <div>
           <span className="text-muted-foreground">Total collected</span>{" "}

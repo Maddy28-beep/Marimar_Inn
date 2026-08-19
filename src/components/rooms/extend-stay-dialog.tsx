@@ -14,19 +14,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   convertToOpenTime,
   extendStay,
   hoursElapsed,
   OPEN_TIME_RATE_PER_HOUR,
 } from "@/lib/bookings";
-import { PAYMENT_METHOD_LABELS, type Booking, type PaymentMethod, type Room } from "@/lib/types";
 import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
@@ -35,7 +27,18 @@ import {
   printExtensionReceipt,
   printerErrorMessage,
   referenceNumberFor,
+  shouldOpenDrawer,
 } from "@/lib/receipt-printer";
+import {
+  cashCollectedNow,
+  collectedAmount,
+  emptyPaymentDraft,
+  PaymentBreakdownDisplay,
+  PaymentFields,
+  paymentPayload,
+  type PaymentDraft,
+} from "@/components/payments/payment-fields";
+import { type Booking, type PaymentMethod, type Room } from "@/lib/types";
 import { Loader2Icon, PrinterIcon } from "lucide-react";
 
 interface ExtendStayDialogProps {
@@ -62,11 +65,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
   const staffName = appUser?.displayName ?? appUser?.email ?? "Staff";
   const [mode, setMode] = useState<ExtendMode>("hour");
   const [hourPrice, setHourPrice] = useState(String(OPEN_TIME_RATE_PER_HOUR));
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
-  const [gcashReference, setGcashReference] = useState("");
-  const [amountPaid, setAmountPaid] = useState("");
-  const [splitCash, setSplitCash] = useState("");
-  const [splitGcash, setSplitGcash] = useState("");
+  const [payment, setPayment] = useState<PaymentDraft>(emptyPaymentDraft);
   const [submitting, setSubmitting] = useState(false);
   const [phase, setPhase] = useState<"form" | "receipt">("form");
   const [receipt, setReceipt] = useState<{
@@ -75,8 +74,10 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
     change: number;
     paymentMethod: PaymentMethod;
     gcashReference?: string;
+    qrphReference?: string;
     splitCashAmount?: number;
     splitGcashAmount?: number;
+    splitQrphAmount?: number;
   } | null>(null);
 
   const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, now);
@@ -85,14 +86,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
   const packageHours = booking.originalPackageHours ?? booking.hoursBooked;
   const packagePrice = booking.originalPackagePrice ?? booking.totalRoomCharge;
   const additionalCost = Number(hourPrice) || 0;
-  const splitCashValue = Number(splitCash) || 0;
-  const splitGcashValue = Number(splitGcash) || 0;
-  const paid =
-    paymentMethod === "gcash"
-      ? additionalCost
-      : paymentMethod === "split"
-        ? splitCashValue + splitGcashValue
-        : Number(amountPaid) || 0;
+  const paid = collectedAmount(payment, additionalCost);
   const change = paid > additionalCost ? paid - additionalCost : 0;
 
   async function handleExtendByHour() {
@@ -106,14 +100,15 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
     }
     setSubmitting(true);
     const amountCollected = Math.min(paid, additionalCost);
-    const usesGcashRef = paymentMethod === "gcash" || paymentMethod === "split";
-    const gcashPortion = paymentMethod === "split" ? splitGcashValue : undefined;
+    const payload = paymentPayload(payment, additionalCost);
     try {
       await extendStay(booking, 1, additionalCost, amountCollected, {
-        paymentMethod,
-        gcashReference: usesGcashRef ? gcashReference.trim() || undefined : undefined,
-        splitCashAmount: paymentMethod === "split" ? splitCashValue : undefined,
-        splitGcashAmount: gcashPortion,
+        paymentMethod: payload.paymentMethod,
+        gcashReference: payload.gcashReference,
+        qrphReference: payload.qrphReference,
+        splitCashAmount: payload.splitCashAmount,
+        splitGcashAmount: payload.splitGcashAmount,
+        splitQrphAmount: payload.splitQrphAmount,
       });
       toast.success(`Room ${room.roomNumber} extended by 1h.`);
       if (printer.connected) {
@@ -124,10 +119,13 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
             amountCharged: additionalCost,
             amountPaid: amountCollected,
             change,
-            paymentMethod,
-            gcashReference: usesGcashRef ? gcashReference.trim() || undefined : undefined,
-            splitCashAmount: paymentMethod === "split" ? splitCashValue : undefined,
-            splitGcashAmount: gcashPortion,
+            paymentMethod: payload.paymentMethod,
+            gcashReference: payload.gcashReference,
+            qrphReference: payload.qrphReference,
+            splitCashAmount: payload.splitCashAmount,
+            splitGcashAmount: payload.splitGcashAmount,
+            splitQrphAmount: payload.splitQrphAmount,
+            kickDrawer: shouldOpenDrawer(cashCollectedNow(payment, additionalCost)),
           });
         } catch (error) {
           toast.error(`Extended, but the printer said: ${printerErrorMessage(error)}`);
@@ -137,10 +135,12 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
         amountCharged: additionalCost,
         amountPaid: amountCollected,
         change,
-        paymentMethod,
-        gcashReference: usesGcashRef ? gcashReference.trim() || undefined : undefined,
-        splitCashAmount: paymentMethod === "split" ? splitCashValue : undefined,
-        splitGcashAmount: gcashPortion,
+        paymentMethod: payload.paymentMethod,
+        gcashReference: payload.gcashReference,
+        qrphReference: payload.qrphReference,
+        splitCashAmount: payload.splitCashAmount,
+        splitGcashAmount: payload.splitGcashAmount,
+        splitQrphAmount: payload.splitQrphAmount,
       });
       setPhase("receipt");
     } catch (error) {
@@ -162,8 +162,10 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
         change: receipt.change,
         paymentMethod: receipt.paymentMethod,
         gcashReference: receipt.gcashReference,
+        qrphReference: receipt.qrphReference,
         splitCashAmount: receipt.splitCashAmount,
         splitGcashAmount: receipt.splitGcashAmount,
+        splitQrphAmount: receipt.splitQrphAmount,
       });
     } catch (error) {
       toast.error(printerErrorMessage(error));
@@ -243,36 +245,18 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
               <span>+1h extension</span>
               <span>₱{receipt.amountCharged.toFixed(2)}</span>
             </div>
-            {receipt.paymentMethod === "split" ? (
-              <>
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Paid via Cash</span>
-                  <span>₱{(receipt.splitCashAmount ?? 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Paid via GCash</span>
-                  <span>₱{(receipt.splitGcashAmount ?? 0).toFixed(2)}</span>
-                </div>
-              </>
-            ) : (
-              <div className="flex justify-between text-muted-foreground">
-                <span>Paid via {PAYMENT_METHOD_LABELS[receipt.paymentMethod]}</span>
-                <span>₱{receipt.amountPaid.toFixed(2)}</span>
-              </div>
-            )}
-            {(receipt.paymentMethod === "gcash" || receipt.paymentMethod === "split") &&
-              receipt.gcashReference && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>GCash Ref</span>
-                  <span>{receipt.gcashReference}</span>
-                </div>
-              )}
-            {receipt.change > 0 && (
-              <div className="flex justify-between text-muted-foreground">
-                <span>Change</span>
-                <span>₱{receipt.change.toFixed(2)}</span>
-              </div>
-            )}
+            <PaymentBreakdownDisplay
+              portions={{
+                cash: receipt.splitCashAmount ?? 0,
+                gcash: receipt.splitGcashAmount ?? 0,
+                qrph: receipt.splitQrphAmount ?? 0,
+              }}
+              method={receipt.paymentMethod}
+              amountPaid={receipt.amountPaid}
+              gcashReference={receipt.gcashReference}
+              qrphReference={receipt.qrphReference}
+              change={receipt.change}
+            />
             <div className="my-1 border-t" />
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>Staff</span>
@@ -357,89 +341,13 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
                 />
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <Label>Payment method</Label>
-                <Select
-                  value={paymentMethod}
-                  onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}
-                  disabled={submitting}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue>{PAYMENT_METHOD_LABELS[paymentMethod]}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {(paymentMethod === "gcash" || paymentMethod === "split") && (
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="extGcashReference">GCash reference number</Label>
-                  <Input
-                    id="extGcashReference"
-                    value={gcashReference}
-                    onChange={(e) => setGcashReference(e.target.value)}
-                    placeholder="e.g. 1234 567 890123"
-                    disabled={submitting}
-                  />
-                </div>
-              )}
-
-              {paymentMethod === "gcash" ? (
-                <div className="flex flex-col gap-1.5">
-                  <Label>Amount paid</Label>
-                  <div className="flex h-9 items-center rounded-md border bg-muted px-3 text-sm text-muted-foreground">
-                    Full amount — ₱{additionalCost.toFixed(2)} via GCash
-                  </div>
-                </div>
-              ) : paymentMethod === "split" ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="extSplitCash">Cash amount</Label>
-                    <Input
-                      id="extSplitCash"
-                      type="number"
-                      min={0}
-                      value={splitCash}
-                      onChange={(e) => setSplitCash(e.target.value)}
-                      disabled={submitting}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="extSplitGcash">GCash amount</Label>
-                    <Input
-                      id="extSplitGcash"
-                      type="number"
-                      min={0}
-                      value={splitGcash}
-                      onChange={(e) => setSplitGcash(e.target.value)}
-                      disabled={submitting}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="amountPaid">Amount paid</Label>
-                  <Input
-                    id="amountPaid"
-                    type="number"
-                    min={0}
-                    value={amountPaid}
-                    onChange={(e) => setAmountPaid(e.target.value)}
-                    disabled={submitting}
-                  />
-                </div>
-              )}
-
-              <div className="flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-sm">
-                <span className="text-muted-foreground">Change</span>
-                <span className="font-medium">₱{change.toFixed(2)}</span>
-              </div>
+              <PaymentFields
+                draft={payment}
+                onChange={setPayment}
+                due={additionalCost}
+                disabled={submitting}
+                idPrefix="extend"
+              />
             </>
           ) : (
             <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">

@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { checkIn, OPEN_TIME_RATE_PER_HOUR } from "@/lib/bookings";
+import { checkIn, methodContribution, OPEN_TIME_RATE_PER_HOUR } from "@/lib/bookings";
 import { subscribeToRatePackages, updateRoomStatus } from "@/lib/rooms";
 import { subscribeToInventory } from "@/lib/inventory";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
@@ -31,13 +31,21 @@ import {
   printThermalReceipt,
   printerErrorMessage,
   referenceNumberFor,
+  shouldOpenDrawer,
 } from "@/lib/receipt-printer";
 import {
-  PAYMENT_METHOD_LABELS,
+  cashCollectedNow,
+  collectedAmount,
+  emptyPaymentDraft,
+  PaymentBreakdownDisplay,
+  PaymentFields,
+  paymentPayload,
+  type PaymentDraft,
+} from "@/components/payments/payment-fields";
+import {
   ROOM_TYPE_LABELS,
   type Booking,
   type InventoryItem,
-  type PaymentMethod,
   type RatePackage,
   type Room,
 } from "@/lib/types";
@@ -59,11 +67,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
   const [ratePackages, setRatePackages] = useState<RatePackage[] | null>(null);
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
   const [openTimeMode, setOpenTimeMode] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
-  const [gcashReference, setGcashReference] = useState("");
-  const [amountPaid, setAmountPaid] = useState("");
-  const [splitCash, setSplitCash] = useState("");
-  const [splitGcash, setSplitGcash] = useState("");
+  const [payment, setPayment] = useState<PaymentDraft>(emptyPaymentDraft);
   const [specialRequests, setSpecialRequests] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [inventory, setInventory] = useState<InventoryItem[] | null>(null);
@@ -115,18 +119,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
     : (ratePackages?.find((p) => p.packageId === selectedPackageId) ?? ratePackages?.[0] ?? null);
   const roomTotal = selectedPackage?.price ?? 0;
   const total = roomTotal + fbTotal;
-  // GCash payments are exact digital transfers — no manual entry, no chance
-  // of miscounting change like there is with physical cash — so the amount
-  // is always the full total. A split payment's total is whatever the two
-  // portions add up to; only pure cash keeps the free-form amount field.
-  const splitCashValue = Number(splitCash) || 0;
-  const splitGcashValue = Number(splitGcash) || 0;
-  const paid =
-    paymentMethod === "gcash"
-      ? total
-      : paymentMethod === "split"
-        ? splitCashValue + splitGcashValue
-        : Number(amountPaid) || 0;
+  const paid = collectedAmount(payment, total);
   const change = paid > total ? paid - total : 0;
   // Guests aren't allowed into the room without paying in full at the desk
   // — check-in itself is the payment moment, so it's blocked until covered.
@@ -137,11 +130,12 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
 
     const finalGuestName = guestName.trim() || "Guest";
     const amountCollected = Math.min(paid, total);
-    const usesGcashRef = paymentMethod === "gcash" || paymentMethod === "split";
-    // A split payment's two portions are entered independently and aren't
-    // scaled down if the guest overpays — only the combined total is capped
-    // at what's actually due for amountPaid/paymentStatus purposes.
-    const gcashPortion = paymentMethod === "split" ? splitGcashValue : undefined;
+    const payload = paymentPayload(payment, total);
+    const thisSplit = methodContribution(payload.paymentMethod, amountCollected, {
+      cash: payload.splitCashAmount,
+      gcash: payload.splitGcashAmount,
+      qrph: payload.splitQrphAmount,
+    });
 
     setSubmitting(true);
     try {
@@ -154,11 +148,13 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
         packageHours: selectedPackage.hours,
         packagePrice: selectedPackage.price,
         openEnded: openTimeMode || undefined,
-        paymentMethod,
+        paymentMethod: payload.paymentMethod,
         amountPaid: amountCollected,
-        gcashReference: usesGcashRef ? gcashReference.trim() || undefined : undefined,
-        splitCashAmount: paymentMethod === "split" ? splitCashValue : undefined,
-        splitGcashAmount: gcashPortion,
+        gcashReference: payload.gcashReference,
+        qrphReference: payload.qrphReference,
+        splitCashAmount: payload.splitCashAmount,
+        splitGcashAmount: payload.splitGcashAmount,
+        splitQrphAmount: payload.splitQrphAmount,
         specialRequests: specialRequests.trim() || undefined,
         cashierId,
         cartItems: cartLines.map((line) => ({ itemId: line.item.itemId, quantity: line.qty })),
@@ -179,10 +175,12 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
         totalFbCharge: fbTotal,
         totalAmount: total,
         amountPaid: amountCollected,
-        paymentMethod,
-        gcashReference: usesGcashRef ? gcashReference.trim() || undefined : undefined,
-        splitCashAmount: paymentMethod === "split" ? splitCashValue : undefined,
-        splitGcashAmount: gcashPortion,
+        paymentMethod: payload.paymentMethod,
+        gcashReference: payload.gcashReference,
+        qrphReference: payload.qrphReference,
+        splitCashAmount: thisSplit.cash,
+        splitGcashAmount: thisSplit.gcash,
+        splitQrphAmount: thisSplit.qrph,
         paymentStatus: amountCollected >= total ? "paid" : amountCollected > 0 ? "partial" : "unpaid",
         status: "active",
         items: cartLines.map((line) => ({
@@ -202,6 +200,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
             staffName,
             finalAmountPaid: amountCollected,
             change,
+            kickDrawer: shouldOpenDrawer(cashCollectedNow(payment, total)),
           });
         } catch (error) {
           toast.error(`Checked in, but the printer said: ${printerErrorMessage(error)}`);
@@ -317,36 +316,18 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
                 <span>Total</span>
                 <span>₱{receipt.booking.totalAmount.toFixed(2)}</span>
               </div>
-              {receipt.booking.paymentMethod === "split" ? (
-                <>
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>Paid via Cash</span>
-                    <span>₱{(receipt.booking.splitCashAmount ?? 0).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>Paid via GCash</span>
-                    <span>₱{(receipt.booking.splitGcashAmount ?? 0).toFixed(2)}</span>
-                  </div>
-                </>
-              ) : (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Paid via {PAYMENT_METHOD_LABELS[receipt.booking.paymentMethod]}</span>
-                  <span>₱{receipt.finalAmountPaid.toFixed(2)}</span>
-                </div>
-              )}
-              {(receipt.booking.paymentMethod === "gcash" || receipt.booking.paymentMethod === "split") &&
-                receipt.booking.gcashReference && (
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>GCash Ref</span>
-                    <span>{receipt.booking.gcashReference}</span>
-                  </div>
-                )}
-              {receipt.change > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Change</span>
-                  <span>₱{receipt.change.toFixed(2)}</span>
-                </div>
-              )}
+              <PaymentBreakdownDisplay
+                portions={{
+                  cash: receipt.booking.splitCashAmount ?? 0,
+                  gcash: receipt.booking.splitGcashAmount ?? 0,
+                  qrph: receipt.booking.splitQrphAmount ?? 0,
+                }}
+                method={receipt.booking.paymentMethod}
+                amountPaid={receipt.finalAmountPaid}
+                gcashReference={receipt.booking.gcashReference}
+                qrphReference={receipt.booking.qrphReference}
+                change={receipt.change}
+              />
               <div className="my-1 border-t" />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Staff</span>
@@ -527,101 +508,13 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
             </div>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label>Payment method</Label>
-            <Select
-              value={paymentMethod}
-              onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}
-              disabled={submitting}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue>{PAYMENT_METHOD_LABELS[paymentMethod]}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {(paymentMethod === "gcash" || paymentMethod === "split") && (
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="gcashReference">GCash reference number</Label>
-              <Input
-                id="gcashReference"
-                value={gcashReference}
-                onChange={(e) => setGcashReference(e.target.value)}
-                placeholder="e.g. 1234 567 890123"
-                disabled={submitting}
-              />
-            </div>
-          )}
-
-          {paymentMethod === "gcash" ? (
-            <div className="flex flex-col gap-1.5">
-              <Label>Amount paid</Label>
-              <div className="flex h-9 items-center rounded-md border bg-muted px-3 text-sm text-muted-foreground">
-                Full amount — ₱{total.toFixed(2)} via GCash
-              </div>
-            </div>
-          ) : paymentMethod === "split" ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="splitCash">Cash amount</Label>
-                <Input
-                  id="splitCash"
-                  type="number"
-                  min={0}
-                  value={splitCash}
-                  onChange={(e) => setSplitCash(e.target.value)}
-                  disabled={submitting}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="splitGcash">GCash amount</Label>
-                <Input
-                  id="splitGcash"
-                  type="number"
-                  min={0}
-                  value={splitGcash}
-                  onChange={(e) => setSplitGcash(e.target.value)}
-                  disabled={submitting}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="amountPaid">Amount paid</Label>
-                <Input
-                  id="amountPaid"
-                  type="number"
-                  min={0}
-                  value={amountPaid}
-                  onChange={(e) => setAmountPaid(e.target.value)}
-                  disabled={submitting}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>Change</Label>
-                <div className="flex h-8 items-center text-sm font-medium">
-                  ₱{change.toFixed(2)}
-                </div>
-              </div>
-            </div>
-          )}
-          {paymentMethod === "split" && (
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>Combined</span>
-              <span>
-                ₱{paid.toFixed(2)} of ₱{total.toFixed(2)}
-                {change > 0 ? ` · ₱${change.toFixed(2)} change` : ""}
-              </span>
-            </div>
-          )}
+          <PaymentFields
+            draft={payment}
+            onChange={setPayment}
+            due={total}
+            disabled={submitting}
+            idPrefix="checkin"
+          />
           {!canCheckIn && (
             <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
               Collect ₱{(total - paid).toFixed(2)} before checking in — guests aren&apos;t let

@@ -11,7 +11,7 @@ export interface AppUser {
 
 export type RoomStatus = "available" | "occupied" | "cleaning" | "maintenance";
 export type RoomType = "standard" | "deluxe" | "suite";
-export type PaymentMethod = "cash" | "gcash" | "split";
+export type PaymentMethod = "cash" | "gcash" | "qrph" | "split";
 export type PaymentStatus = "unpaid" | "partial" | "paid";
 export type BookingStatus = "active" | "checked_out" | "voided";
 
@@ -77,14 +77,15 @@ export interface Booking {
   totalAmount: number;
   amountPaid: number;
   paymentMethod: PaymentMethod;
-  // GCash transaction reference number, so the Owner can cross-check the
-  // payment later. Collected when paymentMethod is "gcash" or "split".
+  // Digital-wallet transaction references so the Owner can cross-check later.
   gcashReference?: string;
-  // Only set when paymentMethod is "split" — the cash/GCash breakdown of
-  // amountPaid, so reports can attribute each portion to the right total
-  // instead of guessing from a single lump sum.
+  qrphReference?: string;
+  // Running cash / GCash / QRPh totals across check-in, extend, and checkout
+  // — reports attribute each peso to the right method instead of guessing
+  // from the latest paymentMethod label.
   splitCashAmount?: number;
   splitGcashAmount?: number;
+  splitQrphAmount?: number;
   paymentStatus: PaymentStatus;
   status: BookingStatus;
   items: OrderItem[];
@@ -134,5 +135,6 @@ export const ROOM_TYPE_LABELS: Record<RoomType, string> = {
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   cash: "Cash",
   gcash: "GCash",
+  qrph: "QRPh",
   split: "Split",
 };

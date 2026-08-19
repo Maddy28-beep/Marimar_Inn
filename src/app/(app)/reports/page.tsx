@@ -223,17 +223,20 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                 storeTotal: row.totalStoreAmount,
                 paid: row.totalPaid,
                 payment: (() => {
-                  // A booking can mix methods across check-in/extend/
-                  // checkout, so show the real breakdown whenever both
-                  // portions are actually nonzero rather than trusting the
-                  // final paymentMethod label alone.
                   const cashPortion = row.splitCashAmount ?? 0;
                   const gcashPortion = row.splitGcashAmount ?? 0;
+                  const qrphPortion = row.splitQrphAmount ?? 0;
+                  const parts: string[] = [];
+                  if (cashPortion > 0) parts.push(`Cash ${peso(cashPortion)}`);
+                  if (gcashPortion > 0) parts.push(`GCash ${peso(gcashPortion)}`);
+                  if (qrphPortion > 0) parts.push(`QRPh ${peso(qrphPortion)}`);
                   const base =
-                    cashPortion > 0 && gcashPortion > 0
-                      ? `Cash ${peso(cashPortion)} + GCash ${peso(gcashPortion)}`
-                      : PAYMENT_METHOD_LABELS[row.paymentMethod];
-                  return row.gcashReference ? `${base} (${row.gcashReference})` : base;
+                    parts.length > 1 ? parts.join(" + ") : PAYMENT_METHOD_LABELS[row.paymentMethod];
+                  const refs = [
+                    row.gcashReference ? `GCash ${row.gcashReference}` : "",
+                    row.qrphReference ? `QRPh ${row.qrphReference}` : "",
+                  ].filter(Boolean);
+                  return refs.length ? `${base} (${refs.join(", ")})` : base;
                 })(),
               })),
               ...(salesReport && salesReport.rows.length > 0
@@ -270,6 +273,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                     rows: [
                       { metric: "Cash collected", value: salesReport.totals.cashCollected },
                       { metric: "GCash collected", value: salesReport.totals.gcashCollected },
+                      { metric: "QRPh collected", value: salesReport.totals.qrphCollected },
                       { metric: "Total collected", value: salesReport.totals.totalPaid },
                       {
                         metric: "Overall Sale",
@@ -348,6 +352,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
           totalPaid: row.totalPaid,
           paymentMethodLabel: PAYMENT_METHOD_LABELS[row.paymentMethod],
           gcashReference: row.gcashReference,
+          qrphReference: row.qrphReference,
         })),
         totals: salesReport.totals,
       });

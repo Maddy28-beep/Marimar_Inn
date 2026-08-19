@@ -145,8 +145,10 @@ export interface DailySalesRow {
   totalPaid: number;
   paymentMethod: PaymentMethod;
   gcashReference?: string;
+  qrphReference?: string;
   splitCashAmount?: number;
   splitGcashAmount?: number;
+  splitQrphAmount?: number;
 }
 
 export interface DailySalesTotals {
@@ -157,6 +159,7 @@ export interface DailySalesTotals {
   totalPaid: number;
   cashCollected: number;
   gcashCollected: number;
+  qrphCollected: number;
 }
 
 export interface DailySalesReport {
@@ -195,8 +198,10 @@ export function computeDailySalesReport(bookings: Booking[]): DailySalesReport {
         totalPaid: booking.amountPaid ?? 0,
         paymentMethod: booking.paymentMethod,
         gcashReference: booking.gcashReference,
+        qrphReference: booking.qrphReference,
         splitCashAmount: booking.splitCashAmount,
         splitGcashAmount: booking.splitGcashAmount,
+        splitQrphAmount: booking.splitQrphAmount,
       };
     });
 
@@ -213,11 +218,18 @@ export function computeDailySalesReport(bookings: Booking[]): DailySalesReport {
       // booking can end up with a non-"split" final paymentMethod even
       // after mixing methods across transactions. Only bookings from
       // before this tracking existed fall back to the single-method guess.
-      if (row.splitCashAmount !== undefined || row.splitGcashAmount !== undefined) {
+      if (
+        row.splitCashAmount !== undefined ||
+        row.splitGcashAmount !== undefined ||
+        row.splitQrphAmount !== undefined
+      ) {
         acc.cashCollected += row.splitCashAmount ?? 0;
         acc.gcashCollected += row.splitGcashAmount ?? 0;
+        acc.qrphCollected += row.splitQrphAmount ?? 0;
       } else if (row.paymentMethod === "cash") {
         acc.cashCollected += row.totalPaid;
+      } else if (row.paymentMethod === "qrph") {
+        acc.qrphCollected += row.totalPaid;
       } else {
         acc.gcashCollected += row.totalPaid;
       }
@@ -231,6 +243,7 @@ export function computeDailySalesReport(bookings: Booking[]): DailySalesReport {
       totalPaid: 0,
       cashCollected: 0,
       gcashCollected: 0,
+      qrphCollected: 0,
     }
   );
 

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/context/auth-context";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
-import { openCashDrawer } from "@/lib/receipt-printer";
+import { openCashDrawer, isDrawerEnabled, setDrawerEnabled } from "@/lib/receipt-printer";
 import { setDrawerPin, subscribeToDrawerPinConfigured, verifyDrawerPin } from "@/lib/settings";
 import { BanknoteIcon, Loader2Icon } from "lucide-react";
 
@@ -21,8 +21,21 @@ export function CashDrawerControl() {
   const [newPin, setNewPin] = useState("");
   const [opening, setOpening] = useState(false);
   const [savingPin, setSavingPin] = useState(false);
+  const [drawerOn, setDrawerOn] = useState(false);
 
   useEffect(() => subscribeToDrawerPinConfigured(setConfigured), []);
+  useEffect(() => setDrawerOn(isDrawerEnabled()), []);
+
+  function handleToggle() {
+    const next = !drawerOn;
+    setDrawerEnabled(next);
+    setDrawerOn(next);
+    toast.success(
+      next
+        ? "Cash drawer on — it will open when a guest pays cash."
+        : "Cash drawer off — receipts print without opening it."
+    );
+  }
 
   if (!appUser) return null;
 
@@ -82,13 +95,30 @@ export function CashDrawerControl() {
 
   return (
     <Popover>
-      <PopoverTrigger render={<Button variant="ghost" size="icon" />}>
+      <PopoverTrigger render={<Button variant="ghost" size="icon" className="relative" />}>
         <BanknoteIcon className="size-5" />
+        <span
+          className={
+            drawerOn
+              ? "absolute top-1 right-1 size-2 rounded-full bg-emerald-500"
+              : "absolute top-1 right-1 size-2 rounded-full bg-muted-foreground/40"
+          }
+        />
         <span className="sr-only">Cash drawer</span>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-3">
         <div className="flex flex-col gap-3">
-          <span className="text-sm font-medium">Cash drawer</span>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">Cash drawer</span>
+            <Button size="sm" variant={drawerOn ? "outline" : "default"} onClick={handleToggle}>
+              {drawerOn ? "Turn off" : "Turn on"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {drawerOn
+              ? "Opens only when cash is collected (check-in, extension, or unpaid checkout). GCash and QRPh leave it closed."
+              : "Off until a drawer is plugged into the printer. Receipts still print."}
+          </p>
 
           {!printer.connected && (
             <p className="text-xs text-muted-foreground">
@@ -96,7 +126,7 @@ export function CashDrawerControl() {
             </p>
           )}
 
-          {isOwner ? (
+          {drawerOn && (isOwner ? (
             <>
               <Button size="sm" onClick={handleOpen} disabled={!printer.connected || opening}>
                 {opening && <Loader2Icon className="size-4 animate-spin" />}
@@ -152,7 +182,7 @@ export function CashDrawerControl() {
             <p className="text-xs text-muted-foreground">
               No drawer PIN set yet — ask the Owner to set one.
             </p>
-          )}
+          ))}
         </div>
       </PopoverContent>
     </Popover>
