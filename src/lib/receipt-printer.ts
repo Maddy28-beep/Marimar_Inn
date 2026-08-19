@@ -108,7 +108,31 @@ class EscPosBuilder {
   }
 
   initialize() {
-    return this.push(0x1b, 0x40);
+    // ESC @ resets to factory heat/speed, so quality settings must follow it.
+    this.push(0x1b, 0x40);
+    this.applyPrintQuality();
+    return this;
+  }
+
+  /**
+   * Darker, slower thermal output. Cheap 58mm heads (RPP02N and similar)
+   * default to a light, fast pass that comes out grey and hard to read.
+   * Unknown commands are ignored by printers that don't support them.
+   */
+  private applyPrintQuality() {
+    // Font A (12×24) — larger than Font B on clones that boot into B.
+    this.push(0x1b, 0x4d, 0x00);
+    // ESC 7 n1 n2 n3 — Xprinter / Zjiang / Gprinter / RPP heat cycle:
+    // n1 max dots, n2 heating time (higher = darker), n3 interval (higher = slower).
+    this.push(0x1b, 0x37, 9, 160, 16);
+    // Epson GS ( K: print density ~130%, print speed slow.
+    this.push(0x1d, 0x28, 0x4b, 0x02, 0x00, 0x31, 12);
+    this.push(0x1d, 0x28, 0x4b, 0x02, 0x00, 0x32, 0x01);
+    // Double-strike: each line is printed twice so text is much darker.
+    this.push(0x1b, 0x47, 0x01);
+    // A bit more line spacing so heated dots don't smear into the next row.
+    this.push(0x1b, 0x33, 30);
+    return this;
   }
 
   align(value: "left" | "center" | "right") {

@@ -128,8 +128,18 @@ class PrinterBridge {
 
     @JavascriptInterface
     fun printTest(): String {
+        val quality = byteArrayOf(
+            0x1B, 0x40,
+            0x1B, 0x4D, 0x00,
+            0x1B, 0x37, 9, 160.toByte(), 16,
+            0x1D, 0x28, 0x4B, 0x02, 0x00, 0x31, 12,
+            0x1D, 0x28, 0x4B, 0x02, 0x00, 0x32, 0x01,
+            0x1B, 0x47, 0x01,
+            0x1B, 0x33, 30,
+            0x1B, 0x61, 0x01,
+        )
         val body = "Marimar Inn\nPrinter test\n\n"
-        val bytes = byteArrayOf(0x1B, 0x40, 0x1B, 0x61, 0x01) +
+        val bytes = quality +
             body.toByteArray(Charsets.US_ASCII) +
             byteArrayOf(0x0A, 0x0A, 0x1D, 0x56, 0x41, 0x03)
         return writeBase64(Base64.encodeToString(bytes, Base64.NO_WRAP))
@@ -141,7 +151,10 @@ class PrinterBridge {
         if (bytes.isEmpty()) return "Nothing to print."
         stream.write(bytes)
         stream.flush()
-        Thread.sleep(300)
+        // Let the head finish a slow, dark pass before we return — disconnecting
+        // while it's still heating made the last lines look washed out.
+        val waitMs = (800 + bytes.size * 6).coerceIn(1200, 8000)
+        Thread.sleep(waitMs.toLong())
         return "ok"
     }
 
@@ -176,7 +189,7 @@ class PrinterBridge {
             }
         }
         return try {
-            future.get(25, TimeUnit.SECONDS)
+            future.get(40, TimeUnit.SECONDS)
         } catch (_: Exception) {
             "Printer didn't respond in time."
         }
