@@ -135,7 +135,9 @@ class EscPosBuilder {
   }
 
   cut() {
-    return this.push(0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x41, 0x03);
+    // One line of feed so the last text clears the blade — extra LFs here
+    // were wasting a strip of blank paper after every receipt.
+    return this.push(0x0a, 0x1d, 0x56, 0x42, 0x00);
   }
 
   pulse() {
@@ -722,8 +724,7 @@ export function buildReceiptBytes(booking: Booking, room: Room, extras: ReceiptE
     .align("center")
     .line(`Staff: ${extras.staffName}`)
     .newline()
-    .newline()
-    .newline()
+    .line("Thank you for staying!")
     .cut();
 
   return encoder.encode();
@@ -813,8 +814,7 @@ export function buildExtensionReceiptBytes(
     .align("center")
     .line(`Staff: ${extras.staffName}`)
     .newline()
-    .newline()
-    .newline()
+    .line("Thank you for staying!")
     .cut();
 
   return encoder.encode();
@@ -933,9 +933,6 @@ export function buildDailySalesReceiptBytes(data: DailySalesReceiptData): Uint8A
     .line("Checked by:  __________")
     .newline()
     .line("Noted by:    __________")
-    .newline()
-    .newline()
-    .newline()
     .cut();
 
   return encoder.encode();
@@ -964,8 +961,6 @@ export async function printTestPage() {
     .newline()
     .align("left")
     .line(new Date().toLocaleString("en-PH"))
-    .newline()
-    .newline()
     .cut();
   await send(encoder.encode());
 }
