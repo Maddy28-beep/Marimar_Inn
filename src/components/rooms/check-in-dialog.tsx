@@ -49,7 +49,7 @@ import {
   type RatePackage,
   type Room,
 } from "@/lib/types";
-import { Loader2Icon, MinusIcon, PlusIcon, PrinterIcon } from "lucide-react";
+import { Loader2Icon, MinusIcon, PlusIcon, PrinterIcon, SparklesIcon, WrenchIcon } from "lucide-react";
 
 interface CheckInDialogProps {
   room: Room | null;
@@ -533,24 +533,24 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
           </div>
         </div>
 
-        <DialogFooter className="flex-col gap-3 sm:flex-row sm:justify-between">
-          <div className="flex flex-wrap gap-1">
+        <DialogFooter className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-2">
             <Button
-              variant="ghost"
-              size="sm"
+              variant="outline"
               onClick={handleMarkCleaning}
               disabled={submitting}
-              className="text-muted-foreground"
+              className="border-amber-400/70 bg-amber-50 text-amber-950 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-950/70"
             >
+              <SparklesIcon className="size-4" />
               Mark for cleaning
             </Button>
             <Button
-              variant="ghost"
-              size="sm"
+              variant="outline"
               onClick={handleMarkMaintenance}
               disabled={submitting}
-              className="text-muted-foreground"
+              className="border-orange-400/70 bg-orange-50 text-orange-950 hover:bg-orange-100 dark:bg-orange-950/40 dark:text-orange-100 dark:hover:bg-orange-950/70"
             >
+              <WrenchIcon className="size-4" />
               Mark maintenance
             </Button>
           </div>

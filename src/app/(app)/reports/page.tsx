@@ -65,7 +65,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RevenueChart, SalesExpensesChart } from "@/components/reports/revenue-chart";
-import { DownloadIcon, PrinterIcon } from "lucide-react";
+import { CalendarRangeIcon, DownloadIcon, PrinterIcon } from "lucide-react";
 
 function todayInputValue(): string {
   const d = new Date();
@@ -1545,12 +1545,23 @@ function ReportsContent() {
 
       {isOwner ? (
         <Tabs defaultValue="daily">
-          <TabsList>
-            <TabsTrigger value="daily">Daily</TabsTrigger>
-            <TabsTrigger value="range">Custom range</TabsTrigger>
-            <TabsTrigger value="monthly">Monthly</TabsTrigger>
-            <TabsTrigger value="overdue">Overdue</TabsTrigger>
-            <TabsTrigger value="inventory">Inventory</TabsTrigger>
+          <TabsList className="h-auto min-h-10 flex-wrap gap-1 p-1">
+            <TabsTrigger value="daily" className="px-3 py-1.5 text-foreground">
+              Daily
+            </TabsTrigger>
+            <TabsTrigger value="range" className="px-3 py-1.5 font-semibold text-foreground">
+              <CalendarRangeIcon className="size-4" />
+              Custom range
+            </TabsTrigger>
+            <TabsTrigger value="monthly" className="px-3 py-1.5 text-foreground">
+              Monthly
+            </TabsTrigger>
+            <TabsTrigger value="overdue" className="px-3 py-1.5 text-foreground">
+              Overdue
+            </TabsTrigger>
+            <TabsTrigger value="inventory" className="px-3 py-1.5 text-foreground">
+              Inventory
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="daily">
             <DailyReportTab rooms={rooms} />
