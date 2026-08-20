@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { voidBooking, hoursElapsed, paymentBreakdown, isTooOverdueToExtend } from "@/lib/bookings";
+import { voidBooking, hoursElapsed, paymentBreakdown, isTooOverdueToExtend, canVoidBooking } from "@/lib/bookings";
 import { removeOrderItem } from "@/lib/orders";
 import type { Booking, Room } from "@/lib/types";
 import { formatHours } from "@/lib/time";
@@ -44,6 +44,7 @@ export function RoomDetailDialog({
   const elapsed = hoursElapsed(booking.checkInTime, now);
   const remaining = booking.hoursBooked - elapsed;
   const tooOverdueToExtend = isTooOverdueToExtend(booking, now);
+  const canCancel = canVoidBooking(booking, now);
   const isOverdue = !booking.openEnded && remaining <= 0;
   const isRunningLow = !booking.openEnded && !isOverdue && remaining <= 0.5;
   const balance = Math.max(booking.totalAmount - booking.amountPaid, 0);
@@ -52,6 +53,10 @@ export function RoomDetailDialog({
   const canRemoveOrderItems = isOwner;
 
   async function handleVoid() {
+    if (!canCancel) {
+      toast.error("Cancel is only allowed in the first 5 minutes. Check out instead.");
+      return;
+    }
     if (!window.confirm(`Cancel this booking for Room ${room.roomNumber}? This frees up the room without checking out.`)) {
       return;
     }
@@ -60,8 +65,8 @@ export function RoomDetailDialog({
       await voidBooking(booking);
       toast.success(`Booking for Room ${room.roomNumber} cancelled.`);
       onClose();
-    } catch {
-      toast.error("Couldn't cancel the booking — please try again.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't cancel the booking — please try again.");
     } finally {
       setVoiding(false);
     }
@@ -226,8 +231,13 @@ export function RoomDetailDialog({
               variant="ghost"
               size="sm"
               onClick={handleVoid}
-              disabled={voiding}
+              disabled={voiding || !canCancel}
               className="text-muted-foreground"
+              title={
+                canCancel
+                  ? undefined
+                  : "More than 5 minutes in the room — check out instead"
+              }
             >
               {voiding && <Loader2Icon className="size-4 animate-spin" />}
               Cancel booking
