@@ -12,7 +12,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { PrinterIcon } from "lucide-react";
-import { RECEIPT_ICON_PNG_DATA_URL } from "@/lib/receipt-icon";
 import type { ReceiptPreviewLine } from "@/lib/receipt-printer";
 
 export function ReceiptPreviewStrip({
@@ -39,34 +38,20 @@ export function ReceiptPreviewStrip({
             fontFamily: 'ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace',
           }}
         >
-          {lines.map((line, index) =>
-            line.logo ? (
-              <div key={index} className="mb-1 flex justify-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={RECEIPT_ICON_PNG_DATA_URL}
-                  alt=""
-                  width={96}
-                  height={80}
-                  className="h-10 w-auto"
-                  style={{ imageRendering: "pixelated" }}
-                />
-              </div>
-            ) : (
-              <div
-                key={index}
-                className={
-                  line.align === "center"
-                    ? "text-center whitespace-pre"
-                    : line.align === "right"
-                      ? "text-right whitespace-pre"
-                      : "text-left whitespace-pre"
-                }
-              >
-                {line.text || "\u00a0"}
-              </div>
-            )
-          )}
+          {lines.map((line, index) => (
+            <div
+              key={index}
+              className={
+                line.align === "center"
+                  ? "text-center whitespace-pre"
+                  : line.align === "right"
+                    ? "text-right whitespace-pre"
+                    : "text-left whitespace-pre"
+              }
+            >
+              {line.text || "\u00a0"}
+            </div>
+          ))}
         </div>
       </div>
     </div>

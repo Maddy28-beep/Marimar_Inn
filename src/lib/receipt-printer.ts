@@ -8,11 +8,6 @@ import {
   type Room,
 } from "@/lib/types";
 import { paymentPortionLines } from "@/lib/bookings";
-import {
-  RECEIPT_ICON_BASE64,
-  RECEIPT_ICON_HEIGHT,
-  RECEIPT_ICON_WIDTH,
-} from "@/lib/receipt-icon";
 
 type PrinterKind = "bluetooth" | "serial" | "rawbt" | "native";
 
@@ -31,7 +26,6 @@ const SIDE_MARGIN = 3;
 export interface ReceiptPreviewLine {
   align: "left" | "center" | "right";
   text: string;
-  logo?: boolean;
 }
 
 interface BleLePrinterProfile {
@@ -182,41 +176,17 @@ class EscPosBuilder {
 
   pulse() {
     // ESC p m t1 t2. m=0 is drawer pin 2, m=1 is pin 5 — cheap 58mm
-    // clones (and many 12V kits) wire the RJ11 the opposite of Epson, so
-    // the old pin-2-only kick is silent on a new printer. t1=0x3C is
-    // 120ms on (was 50ms); 12V solenoids often need that longer shove.
-    return this.push(
-      0x1b, 0x70, 0x00, 0x3c, 0xfa,
-      0x1b, 0x70, 0x01, 0x3c, 0xfa
-    );
-  }
-
-  /**
-   * ESC * m=0 (8-dot single density), then ESC J 8 to print that band.
-   * ESC J 0 on this clone does not fire the head — that is why earlier
-   * logos never appeared. A chunky 48x40 stencil stays well inside 58mm.
-   */
-  logo() {
-    this.preview.push({ align: "center", text: "", logo: true });
-    const data = decodeReceiptIcon();
-    const widthBytes = RECEIPT_ICON_WIDTH / 8;
-    this.push(0x1b, 0x33, 0);
-    for (let y = 0; y < RECEIPT_ICON_HEIGHT; y += 8) {
-      this.push(0x1b, 0x2a, 0, RECEIPT_ICON_WIDTH & 0xff, (RECEIPT_ICON_WIDTH >> 8) & 0xff);
-      for (let x = 0; x < RECEIPT_ICON_WIDTH; x++) {
-        let column = 0;
-        for (let row = 0; row < 8; row++) {
-          const yy = y + row;
-          if (yy >= RECEIPT_ICON_HEIGHT) break;
-          const src = data[yy * widthBytes + (x >> 3)];
-          if (src & (0x80 >> (x & 7))) column |= 0x80 >> row;
-        }
-        this.push(column);
-      }
-      this.push(0x1b, 0x4a, 8);
-    }
-    this.push(0x1b, 0x32);
-    return this;
+    // clones wire the RJ11 differently between printer models, so kicking
+    // both pins covers either wiring regardless of which one a given unit
+    // actually uses. t1=0x64 is 200ms on (was 120ms, before that 50ms) —
+    // each printer this has been tested against needed a longer pulse
+    // than the last. Firing the whole pair twice gives a marginal
+    // connection or a stiffer latch a second chance at no real cost.
+    const kick = [
+      0x1b, 0x70, 0x00, 0x64, 0xfa,
+      0x1b, 0x70, 0x01, 0x64, 0xfa,
+    ];
+    return this.push(...kick, ...kick);
   }
 
   finish() {
@@ -251,13 +221,6 @@ function toPrinterAscii(value: string): string {
 
 function createEncoder(_width?: number) {
   return new EscPosBuilder(SIDE_MARGIN);
-}
-
-function decodeReceiptIcon(): Uint8Array {
-  const bin = atob(RECEIPT_ICON_BASE64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
 }
 
 const state: PrinterState = { kind: null, name: null, paperWidth: 32 };
@@ -855,7 +818,6 @@ function guestReceiptEncoder(booking: Booking, room: Room, extras: ReceiptExtras
   encoder
     .initialize()
     .align("center")
-    .logo()
     .line("Marimar Inn")
     .line("This is not an official receipt")
     .line(`Ref: ${referenceNumberFor(booking.bookingId)}`)
@@ -966,7 +928,6 @@ function extensionReceiptEncoder(
   encoder
     .initialize()
     .align("center")
-    .logo()
     .line("Marimar Inn")
     .line("Extension Receipt")
     .line(`Ref: ${referenceNumberFor(booking.bookingId)}`)
@@ -1092,7 +1053,6 @@ function dailySalesReceiptEncoder(data: DailySalesReceiptData) {
   encoder
     .initialize()
     .align("center")
-    .logo()
     .line("Marimar Inn")
     .line("Daily Sales Report");
 
@@ -1205,7 +1165,6 @@ function testPageEncoder() {
   encoder
     .initialize()
     .align("center")
-    .logo()
     .line("Marimar Inn")
     .line("Printer test")
     .newline()
