@@ -8,11 +8,6 @@ import {
   type Room,
 } from "@/lib/types";
 import { paymentPortionLines } from "@/lib/bookings";
-import {
-  RECEIPT_ICON_BASE64,
-  RECEIPT_ICON_HEIGHT,
-  RECEIPT_ICON_WIDTH,
-} from "@/lib/receipt-icon";
 
 type PrinterKind = "bluetooth" | "serial" | "rawbt" | "native";
 
@@ -192,19 +187,12 @@ class EscPosBuilder {
   }
 
   /**
-   * GS v 0 at the icon's real width (128 dots). Padding it to 384 made this
-   * clone skip the graphic; ESC * then ESC J still fed ~22mm of blank paper,
-   * which is the empty band above "Marimar Inn".
+   * On-screen preview only. GS v 0 / ESC * on this 58mm clone either ate the
+   * rest of the job (print test printed nothing) or fed a blank band. Do not
+   * send raster until we have a command this head actually burns.
    */
   logo() {
     this.preview.push({ align: "center", text: "", logo: true });
-    const data = decodeReceiptIcon();
-    const widthBytes = RECEIPT_ICON_WIDTH / 8;
-    const height = RECEIPT_ICON_HEIGHT;
-    this.push(0x1d, 0x76, 0x30, 0x00);
-    this.push(widthBytes & 0xff, (widthBytes >> 8) & 0xff);
-    this.push(height & 0xff, (height >> 8) & 0xff);
-    for (let i = 0; i < data.length; i++) this.push(data[i]);
     return this;
   }
 
@@ -236,13 +224,6 @@ function toPrinterAscii(value: string): string {
 
 function createEncoder(_width?: number) {
   return new EscPosBuilder(SIDE_MARGIN);
-}
-
-function decodeReceiptIcon(): Uint8Array {
-  const bin = atob(RECEIPT_ICON_BASE64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
 }
 
 const state: PrinterState = { kind: null, name: null, paperWidth: 32 };
