@@ -8,6 +8,11 @@ import {
   type Room,
 } from "@/lib/types";
 import { paymentPortionLines } from "@/lib/bookings";
+import {
+  RECEIPT_ICON_BASE64,
+  RECEIPT_ICON_HEIGHT,
+  RECEIPT_ICON_WIDTH,
+} from "@/lib/receipt-icon";
 
 type PrinterKind = "bluetooth" | "serial" | "rawbt" | "native";
 
@@ -187,13 +192,36 @@ class EscPosBuilder {
   }
 
   /**
-   * On-screen preview only. GS v 0 / ESC * on this 58mm clone either ate the
-   * rest of the job (print test printed nothing) or fed a blank band. Do not
-   * send raster until we have a command this head actually burns.
+   * ESC * 0 (8-dot single density). This head accepted ESC * (it did not
+   * dump binary as text) but GS v 0 either hid the mark or swallowed the
+   * rest of the job. m=0 stays inside the 58mm column limit. Line spacing
+   * is 0 so a skipped graphic does not feed a blank band before the title.
    */
   logo() {
     this.preview.push({ align: "center", text: "", logo: true });
+    const data = decodeReceiptIcon();
+    const widthBytes = RECEIPT_ICON_WIDTH / 8;
+    this.push(0x1b, 0x33, 0);
+    for (let y = 0; y < RECEIPT_ICON_HEIGHT; y += 8) {
+      this.push(0x1b, 0x2a, 0, RECEIPT_ICON_WIDTH & 0xff, (RECEIPT_ICON_WIDTH >> 8) & 0xff);
+      for (let x = 0; x < RECEIPT_ICON_WIDTH; x++) {
+        let column = 0;
+        for (let row = 0; row < 8; row++) {
+          const yy = y + row;
+          if (yy >= RECEIPT_ICON_HEIGHT) break;
+          const src = data[yy * widthBytes + (x >> 3)];
+          if (src & (0x80 >> (x & 7))) column |= 0x80 >> row;
+        }
+        this.push(column);
+      }
+      this.push(0x1b, 0x4a, 0);
+    }
+    this.push(0x1b, 0x32);
     return this;
+  }
+
+  finish() {
+    return this.newline().newline().newline().cut();
   }
 
   getPreview(): ReceiptPreviewLine[] {
@@ -224,6 +252,13 @@ function toPrinterAscii(value: string): string {
 
 function createEncoder(_width?: number) {
   return new EscPosBuilder(SIDE_MARGIN);
+}
+
+function decodeReceiptIcon(): Uint8Array {
+  const bin = atob(RECEIPT_ICON_BASE64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
 }
 
 const state: PrinterState = { kind: null, name: null, paperWidth: 32 };
@@ -879,7 +914,7 @@ function guestReceiptEncoder(booking: Booking, room: Room, extras: ReceiptExtras
     .line(`Staff: ${extras.staffName}`)
     .newline()
     .line("Thank you for staying!")
-    .cut();
+    .finish();
 
   return encoder;
 }
@@ -978,7 +1013,7 @@ function extensionReceiptEncoder(
     .line(`Staff: ${extras.staffName}`)
     .newline()
     .line("Thank you for staying!")
-    .cut();
+    .finish();
 
   return encoder;
 }

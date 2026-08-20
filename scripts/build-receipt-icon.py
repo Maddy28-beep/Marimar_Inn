@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "public" / "logo" / "icon.png"
 OUT = ROOT / "src" / "lib" / "receipt-icon.ts"
 
-WIDTH = 128
+WIDTH = 96
 
 
 def is_mark_pixel(r: int, g: int, b: int, a: int) -> bool:
