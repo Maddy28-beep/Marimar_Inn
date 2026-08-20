@@ -80,9 +80,7 @@ export default function LoginPage() {
         <div className="pointer-events-none absolute top-1/2 left-1/2 size-[26rem] -translate-x-[38%] -translate-y-[30%] rounded-full bg-[#1a6b6d]/30 blur-[100px]" />
 
         <div className="relative flex flex-col items-center px-10 text-center">
-          <div className="rounded-lg bg-[#0f3d3e] p-2 shadow-[0_20px_45px_-15px_rgba(0,0,0,0.55)] ring-1 ring-white/10">
-            <BrandLogo className="h-40 w-auto rounded-[3px]" priority />
-          </div>
+          <BrandLogo className="h-40 w-auto drop-shadow-[0_0_18px_rgba(255,255,255,0.2)]" priority />
           <div className="mt-7 flex items-center gap-3 text-teal-100/70">
             <span className="h-px w-8 bg-teal-100/30" />
             <p className="text-xs tracking-[0.28em] uppercase">Front desk</p>

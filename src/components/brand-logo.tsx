@@ -10,12 +10,12 @@ export function BrandLogo({
 }) {
   return (
     <Image
-      src="/logo/logo.jpg"
+      src="/logo/logo.png"
       alt="Marimar Inn"
-      width={1422}
-      height={818}
+      width={1274}
+      height={652}
       priority={priority}
-      className={cn("h-auto w-auto max-w-none object-contain", className)}
+      className={cn("h-auto w-auto max-w-none bg-transparent object-contain", className)}
     />
   );
 }

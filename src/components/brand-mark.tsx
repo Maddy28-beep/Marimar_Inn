@@ -21,10 +21,10 @@ export function BrandMark({
       <Image
         src="/logo/icon.png"
         alt=""
-        width={504}
-        height={425}
+        width={426}
+        height={410}
         priority
-        className={cn("h-8 w-auto shrink-0 rounded-[3px]", iconClassName)}
+        className={cn("h-8 w-auto shrink-0 bg-transparent", iconClassName)}
       />
       <span
         className={cn(
