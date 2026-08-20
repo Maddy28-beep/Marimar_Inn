@@ -201,6 +201,33 @@ service cloud.firestore {
     }
 
     // ============================================
+    // SHIFT EXPENSES (cash taken from the drawer)
+    // ============================================
+    match /shiftExpenses/{expenseId} {
+      allow read: if isAuthenticated();
+
+      // Staff can add an expense for themselves only — amount and a short
+      // description, stamped with server time so it lands on the right shift.
+      allow create: if isStaff() &&
+        request.resource.data.keys().hasOnly([
+          'expenseId', 'amount', 'description', 'recordedAt', 'cashierId', 'cashierName'
+        ]) &&
+        request.resource.data.expenseId == expenseId &&
+        request.resource.data.amount is number &&
+        request.resource.data.amount > 0 &&
+        request.resource.data.description is string &&
+        request.resource.data.description.size() > 0 &&
+        request.resource.data.description.size() <= 120 &&
+        request.resource.data.cashierId == request.auth.uid &&
+        request.resource.data.cashierName is string;
+
+      // Cashiers can't edit or erase a logged expense; only the owner can
+      // remove a mistaken entry so the daily report stays an audit trail.
+      allow update: if false;
+      allow delete: if isOwnerOrAdmin();
+    }
+
+    // ============================================
     // SETTINGS COLLECTION (System Settings)
     // ============================================
     match /settings/{settingId} {

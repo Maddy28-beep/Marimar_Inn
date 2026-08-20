@@ -1,6 +1,7 @@
 "use client";
 
-import { PAYMENT_METHOD_LABELS } from "@/lib/types";
+import { PAYMENT_METHOD_LABELS, type ShiftExpense } from "@/lib/types";
+import { shiftLabelForTime, totalExpenses } from "@/lib/expenses";
 import type { DailySalesReport, DailySalesRow } from "@/lib/reports";
 
 function peso(amount: number): string {
@@ -48,8 +49,23 @@ const HEADERS = [
   "Remarks",
 ];
 
-export function DailySalesTable({ report }: { report: DailySalesReport }) {
+export function DailySalesTable({
+  report,
+  expenses = [],
+  canRemoveExpenses = false,
+  onRemoveExpense,
+}: {
+  report: DailySalesReport;
+  expenses?: ShiftExpense[];
+  canRemoveExpenses?: boolean;
+  onRemoveExpense?: (expenseId: string) => void;
+}) {
   const { rows, totals } = report;
+  const expenseTotal = totalExpenses(expenses);
+  const overallSale = totals.totalRoomAmount + totals.totalStoreAmount;
+  const netCash = totals.cashCollected - expenseTotal;
+  const netCollected = totals.totalPaid - expenseTotal;
+  const netSales = overallSale - expenseTotal;
 
   return (
     <div className="flex flex-col gap-3">
@@ -129,10 +145,74 @@ export function DailySalesTable({ report }: { report: DailySalesReport }) {
         </table>
       </div>
 
+      {expenses.length > 0 && (
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="w-full border-collapse text-[11px] print:text-[8px]">
+            <thead>
+              <tr className="bg-muted">
+                <th className="border p-1 text-left font-medium" colSpan={canRemoveExpenses ? 6 : 5}>
+                  Expenses
+                </th>
+              </tr>
+              <tr className="bg-muted">
+                <th className="border p-1 text-left font-medium">Time</th>
+                <th className="border p-1 text-left font-medium">Shift</th>
+                <th className="border p-1 text-left font-medium">What for</th>
+                <th className="border p-1 text-left font-medium">Staff</th>
+                <th className="border p-1 text-right font-medium">Amount</th>
+                {canRemoveExpenses && <th className="border p-1 print:hidden" />}
+              </tr>
+            </thead>
+            <tbody>
+              {expenses.map((expense) => {
+                const when = expense.recordedAt?.toDate?.() ?? null;
+                return (
+                  <tr key={expense.expenseId}>
+                    <td className="border p-1 whitespace-nowrap">{time(when)}</td>
+                    <td className="border p-1 whitespace-nowrap">{when ? shiftLabelForTime(when) : "—"}</td>
+                    <td className="border p-1">{expense.description}</td>
+                    <td className="border p-1 whitespace-nowrap">{expense.cashierName}</td>
+                    <td className="border p-1 text-right whitespace-nowrap">{peso(expense.amount)}</td>
+                    {canRemoveExpenses && (
+                      <td className="border p-1 print:hidden">
+                        <button
+                          type="button"
+                          className="text-xs text-destructive underline"
+                          onClick={() => onRemoveExpense?.(expense.expenseId)}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="bg-muted font-medium">
+                <td className="border p-1" colSpan={4}>
+                  Total expenses
+                </td>
+                <td className="border p-1 text-right whitespace-nowrap">{peso(expenseTotal)}</td>
+                {canRemoveExpenses && <td className="border p-1 print:hidden" />}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-lg border bg-muted/50 p-3 text-sm">
         <div>
           <span className="text-muted-foreground">Cash collected</span>{" "}
           <span className="font-medium">{peso(totals.cashCollected)}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Expenses</span>{" "}
+          <span className="font-medium">{peso(expenseTotal)}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Net cash</span>{" "}
+          <span className="font-medium">{peso(netCash)}</span>
         </div>
         <div>
           <span className="text-muted-foreground">GCash collected</span>{" "}
@@ -146,13 +226,27 @@ export function DailySalesTable({ report }: { report: DailySalesReport }) {
           <span className="text-muted-foreground">Total collected</span>{" "}
           <span className="font-medium">{peso(totals.totalPaid)}</span>
         </div>
+        <div>
+          <span className="text-muted-foreground">Net after expenses</span>{" "}
+          <span className="font-medium">{peso(netCollected)}</span>
+        </div>
       </div>
 
       <div className="flex items-center justify-between rounded-lg border-2 border-foreground/20 bg-muted p-4">
-        <span className="text-base font-semibold">Overall Sale</span>
-        <span className="text-2xl font-bold">
-          {peso(totals.totalRoomAmount + totals.totalStoreAmount)}
-        </span>
+        <div>
+          <div className="text-base font-semibold">Overall Sale</div>
+          {expenseTotal > 0 && (
+            <div className="text-xs text-muted-foreground">
+              Expenses {peso(expenseTotal)} deducted
+            </div>
+          )}
+        </div>
+        <div className="text-right">
+          {expenseTotal > 0 && (
+            <div className="text-sm text-muted-foreground line-through">{peso(overallSale)}</div>
+          )}
+          <span className="text-2xl font-bold">{peso(netSales)}</span>
+        </div>
       </div>
 
       <div className="mt-6 grid grid-cols-3 gap-8 text-xs">

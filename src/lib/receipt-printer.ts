@@ -852,6 +852,14 @@ export interface DailySalesReceiptTotals {
   qrphCollected: number;
 }
 
+export interface DailySalesReceiptExpense {
+  timeLabel: string;
+  shiftLabel: string;
+  description: string;
+  cashierName: string;
+  amount: number;
+}
+
 export interface DailySalesReceiptData {
   dateLabel: string;
   frontDesk?: string;
@@ -859,6 +867,7 @@ export interface DailySalesReceiptData {
   dutyTime?: string;
   rows: DailySalesReceiptRow[];
   totals: DailySalesReceiptTotals;
+  expenses?: DailySalesReceiptExpense[];
 }
 
 /**
@@ -918,19 +927,45 @@ export function buildDailySalesReceiptBytes(data: DailySalesReceiptData): Uint8A
     }
   }
 
+  const expenseTotal = (data.expenses ?? []).reduce((sum, expense) => sum + expense.amount, 0);
+  const overallSale = data.totals.totalRoomAmount + data.totals.totalStoreAmount;
+
   encoder
     .bold(true)
     .line(twoColumn("Room total", money(data.totals.totalRoomAmount), width))
     .line(twoColumn("Store total", money(data.totals.totalStoreAmount), width))
     .bold(false)
     .newline()
-    .line(twoColumn("Cash collected", money(data.totals.cashCollected), width))
+    .line(twoColumn("Cash collected", money(data.totals.cashCollected), width));
+
+  if (data.expenses && data.expenses.length > 0) {
+    encoder.newline().line("Expenses");
+    for (const expense of data.expenses) {
+      encoder.line(clampLine(`${expense.timeLabel} ${expense.shiftLabel} ${expense.cashierName}`, width));
+      encoder.line(twoColumn(`  ${expense.description}`, money(expense.amount), width));
+    }
+    encoder
+      .line(twoColumn("Expenses total", money(expenseTotal), width))
+      .line(twoColumn("Net cash", money(data.totals.cashCollected - expenseTotal), width));
+  }
+
+  encoder
     .line(twoColumn("GCash collected", money(data.totals.gcashCollected), width))
     .line(twoColumn("QRPh collected", money(data.totals.qrphCollected), width))
-    .line(twoColumn("Total collected", money(data.totals.totalPaid), width))
+    .line(twoColumn("Total collected", money(data.totals.totalPaid), width));
+
+  if (expenseTotal > 0) {
+    encoder.line(twoColumn("Net after expenses", money(data.totals.totalPaid - expenseTotal), width));
+  }
+
+  encoder
     .newline()
     .bold(true)
-    .line(twoColumn("OVERALL SALE", money(data.totals.totalRoomAmount + data.totals.totalStoreAmount), width))
+    .line(twoColumn("OVERALL SALE", money(overallSale), width));
+  if (expenseTotal > 0) {
+    encoder.line(twoColumn("NET SALES", money(overallSale - expenseTotal), width));
+  }
+  encoder
     .bold(false)
     .newline()
     .newline()

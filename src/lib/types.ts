@@ -138,3 +138,14 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   qrph: "QRPh",
   split: "Split",
 };
+
+// Cash taken out of the drawer during a shift (supplies, fare, etc.).
+// Timestamped so daily/shift reports can deduct it from that period's cash.
+export interface ShiftExpense {
+  expenseId: string;
+  amount: number;
+  description: string;
+  recordedAt: Timestamp;
+  cashierId: string;
+  cashierName: string;
+};

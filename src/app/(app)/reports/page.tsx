@@ -24,11 +24,19 @@ import { DailySalesTable } from "@/components/reports/daily-sales-table";
 import { OpenDrawerForm } from "@/components/cash-drawer-open";
 import { exportToExcel, formatReportDate, formatReportMonth } from "@/lib/export";
 import {
+  deleteShiftExpense,
+  fetchExpensesInRange,
+  recordShiftExpense,
+  shiftLabelForTime,
+  totalExpenses,
+} from "@/lib/expenses";
+import {
   PAYMENT_METHOD_LABELS,
   ROOM_TYPE_LABELS,
   type Booking,
   type InventoryItem,
   type Room,
+  type ShiftExpense,
 } from "@/lib/types";
 import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
@@ -137,12 +145,17 @@ function StatCard({ label, value }: { label: string; value: string }) {
 
 function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   const printer = useReceiptPrinter();
+  const { appUser } = useAuth();
   const [dateValue, setDateValue] = useState(todayInputValue());
   const [shift, setShift] = useState<ShiftFilter>("fullDay");
   const [report, setReport] = useState<DailyReport | null>(null);
   const [salesReport, setSalesReport] = useState<DailySalesReport | null>(null);
+  const [expenses, setExpenses] = useState<ShiftExpense[]>([]);
   const [frontDesk, setFrontDesk] = useState("");
   const [housekeeping, setHousekeeping] = useState("");
+  const [expenseAmount, setExpenseAmount] = useState("");
+  const [expenseDescription, setExpenseDescription] = useState("");
+  const [savingExpense, setSavingExpense] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -151,13 +164,15 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
       setLoading(true);
       const [start, end] = shiftRange(dateValue, shift);
       try {
-        const [checkedIn, checkedOut] = await Promise.all([
+        const [checkedIn, checkedOut, shiftExpenses] = await Promise.all([
           fetchBookingsInRange("checkInTime", start, end),
           fetchBookingsInRange("checkOutTime", start, end),
+          fetchExpensesInRange(start, end),
         ]);
         if (!cancelled) {
           setReport(computeDailyReport(checkedIn, checkedOut.length));
           setSalesReport(computeDailySalesReport(checkedIn));
+          setExpenses(shiftExpenses);
         }
       } catch {
         if (!cancelled) toast.error("Couldn't load the daily report.");
@@ -178,6 +193,14 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
     shift === "fullDay" ? `${reportDate} — FULL DAY` : `${reportDate} — ${SHIFT_LABELS[shift]}`;
   const reportTitle = shift === "fullDay" ? "Daily Sales Report — FULL DAY" : "Daily Sales Report";
   const timeLabel = shiftTimeLabel(shift);
+  const expenseTotal = totalExpenses(expenses);
+  const overallSale = salesReport
+    ? salesReport.totals.totalRoomAmount + salesReport.totals.totalStoreAmount
+    : 0;
+  const netCash = (salesReport?.totals.cashCollected ?? 0) - expenseTotal;
+  const netCollected = (salesReport?.totals.totalPaid ?? 0) - expenseTotal;
+  const netSales = overallSale - expenseTotal;
+  const isOwner = appUser?.role === "owner";
 
   async function handleExport() {
     if (!report) return;
@@ -268,6 +291,42 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             ],
             emphasizeLastRow: (salesReport?.rows.length ?? 0) > 0,
           },
+          ...(expenses.length > 0
+            ? [
+                {
+                  heading: "Expenses",
+                  columns: [
+                    { header: "Time", key: "time", width: 12 },
+                    { header: "Shift", key: "shift", width: 10 },
+                    { header: "What for", key: "description", width: 28 },
+                    { header: "Staff", key: "staff", width: 18 },
+                    { header: "Amount", key: "amount", width: 14, format: "currency" as const },
+                  ],
+                  rows: [
+                    ...expenses.map((expense) => {
+                      const when = expense.recordedAt?.toDate?.() ?? null;
+                      return {
+                        time: when
+                          ? when.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })
+                          : "",
+                        shift: when ? shiftLabelForTime(when) : "",
+                        description: expense.description,
+                        staff: expense.cashierName,
+                        amount: expense.amount,
+                      };
+                    }),
+                    {
+                      time: "Total",
+                      shift: "",
+                      description: "",
+                      staff: "",
+                      amount: expenseTotal,
+                    },
+                  ],
+                  emphasizeLastRow: true,
+                },
+              ]
+            : []),
           ...(salesReport
             ? [
                 [
@@ -279,13 +338,14 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                     ],
                     rows: [
                       { metric: "Cash collected", value: salesReport.totals.cashCollected },
+                      { metric: "Expenses", value: expenseTotal },
+                      { metric: "Net cash", value: netCash },
                       { metric: "GCash collected", value: salesReport.totals.gcashCollected },
                       { metric: "QRPh collected", value: salesReport.totals.qrphCollected },
                       { metric: "Total collected", value: salesReport.totals.totalPaid },
-                      {
-                        metric: "Overall Sale",
-                        value: salesReport.totals.totalRoomAmount + salesReport.totals.totalStoreAmount,
-                      },
+                      { metric: "Net after expenses", value: netCollected },
+                      { metric: "Overall Sale", value: overallSale },
+                      { metric: "Net sales", value: netSales },
                     ],
                     emphasizeLastRow: true,
                   },
@@ -308,6 +368,8 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                       { metric: "Room revenue", value: report.roomRevenue },
                       { metric: "Store items revenue", value: report.fbRevenue },
                       { metric: "Total revenue", value: report.totalRevenue },
+                      { metric: "Expenses", value: expenseTotal },
+                      { metric: "Net sales", value: report.totalRevenue - expenseTotal },
                     ],
                     emphasizeLastRow: true,
                   },
@@ -362,9 +424,58 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
           qrphReference: row.qrphReference,
         })),
         totals: salesReport.totals,
+        expenses: expenses.map((expense) => {
+          const when = expense.recordedAt?.toDate?.() ?? null;
+          return {
+            timeLabel: when
+              ? when.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })
+              : "",
+            shiftLabel: when ? shiftLabelForTime(when) : "",
+            description: expense.description,
+            cashierName: expense.cashierName,
+            amount: expense.amount,
+          };
+        }),
       });
     } catch (error) {
       toast.error(printerErrorMessage(error));
+    }
+  }
+
+  async function handleAddExpense() {
+    if (!appUser) return;
+    setSavingExpense(true);
+    try {
+      await recordShiftExpense({
+        amount: Number(expenseAmount),
+        description: expenseDescription,
+        cashierId: appUser.uid,
+        cashierName: appUser.displayName || appUser.email || "Staff",
+      });
+      setExpenseAmount("");
+      setExpenseDescription("");
+      const [start, end] = shiftRange(dateValue, shift);
+      const refreshed = await fetchExpensesInRange(start, end);
+      setExpenses(refreshed);
+      if (refreshed.length === expenses.length) {
+        toast.success("Expense recorded for the current time. Open today's matching shift to see it.");
+      } else {
+        toast.success("Expense recorded.");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't save the expense.");
+    } finally {
+      setSavingExpense(false);
+    }
+  }
+
+  async function handleRemoveExpense(expenseId: string) {
+    try {
+      await deleteShiftExpense(expenseId);
+      setExpenses((current) => current.filter((expense) => expense.expenseId !== expenseId));
+      toast.success("Expense removed.");
+    } catch {
+      toast.error("Couldn't remove that expense.");
     }
   }
 
@@ -465,7 +576,51 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             </div>
           </div>
 
-          {salesReport && <DailySalesTable report={salesReport} />}
+          {salesReport && (
+            <DailySalesTable
+              report={salesReport}
+              expenses={expenses}
+              canRemoveExpenses={isOwner}
+              onRemoveExpense={handleRemoveExpense}
+            />
+          )}
+
+          {salesReport && (
+            <Card className="print:hidden">
+              <CardHeader>
+                <CardTitle>Expenses</CardTitle>
+                <CardDescription>
+                  Cash taken from the drawer. It is deducted from this shift&apos;s
+                  cash and net sales, and the owner can see it on this report.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <Input
+                  placeholder="What for (e.g. water, fare)"
+                  value={expenseDescription}
+                  onChange={(e) => setExpenseDescription(e.target.value)}
+                  maxLength={120}
+                  className="sm:flex-1"
+                />
+                <Input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  placeholder="Amount"
+                  value={expenseAmount}
+                  onChange={(e) => setExpenseAmount(e.target.value)}
+                  className="w-32"
+                />
+                <Button
+                  size="sm"
+                  onClick={handleAddExpense}
+                  disabled={savingExpense || !expenseAmount || !expenseDescription.trim()}
+                >
+                  Add expense
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
           {salesReport && (
             <Card className="print:hidden">
@@ -477,10 +632,18 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Cash to count</span>
-                  <div className="text-xl font-semibold">
-                    {peso(salesReport.totals.cashCollected)}
+                <div className="flex flex-wrap gap-6 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Cash collected</span>
+                    <div className="font-medium">{peso(salesReport.totals.cashCollected)}</div>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Expenses</span>
+                    <div className="font-medium">{peso(expenseTotal)}</div>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Cash to count</span>
+                    <div className="text-xl font-semibold">{peso(netCash)}</div>
                   </div>
                 </div>
                 <OpenDrawerForm />
@@ -488,18 +651,23 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             </Card>
           )}
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
             <StatCard label="Check-ins" value={String(report.checkIns)} />
             <StatCard label="Check-outs" value={String(report.checkOuts)} />
             <StatCard label="Room revenue" value={peso(report.roomRevenue)} />
             <StatCard label="Store items" value={peso(report.fbRevenue)} />
+            <StatCard label="Expenses" value={peso(expenseTotal)} />
+            <StatCard label="Net sales" value={peso(report.totalRevenue - expenseTotal)} />
             <StatCard label="Current occupancy" value={`${occupied}/${totalRooms}`} />
           </div>
 
           <Card>
             <CardHeader>
               <CardTitle>Total revenue</CardTitle>
-              <CardDescription>{peso(report.totalRevenue)}</CardDescription>
+              <CardDescription>
+                {peso(report.totalRevenue)}
+                {expenseTotal > 0 ? `  ·  Net ${peso(report.totalRevenue - expenseTotal)} after expenses` : ""}
+              </CardDescription>
             </CardHeader>
           </Card>
 
@@ -541,6 +709,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
 function MonthlyReportTab({ rooms }: { rooms: Room[] | null }) {
   const [monthValue, setMonthValue] = useState(thisMonthInputValue());
   const [report, setReport] = useState<MonthlyReport | null>(null);
+  const [expenseTotal, setExpenseTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -551,12 +720,14 @@ function MonthlyReportTab({ rooms }: { rooms: Room[] | null }) {
       const [year, month] = monthValue.split("-").map(Number);
       const monthDate = new Date(year, month - 1, 1);
       try {
-        const bookings = await fetchBookingsInRange(
-          "checkInTime",
-          startOfMonth(monthDate),
-          endOfMonth(monthDate)
-        );
-        if (!cancelled) setReport(computeMonthlyReport(bookings, rooms ?? [], monthDate));
+        const [bookings, monthExpenses] = await Promise.all([
+          fetchBookingsInRange("checkInTime", startOfMonth(monthDate), endOfMonth(monthDate)),
+          fetchExpensesInRange(startOfMonth(monthDate), endOfMonth(monthDate)),
+        ]);
+        if (!cancelled) {
+          setReport(computeMonthlyReport(bookings, rooms ?? [], monthDate));
+          setExpenseTotal(totalExpenses(monthExpenses));
+        }
       } catch {
         if (!cancelled) toast.error("Couldn't load the monthly report.");
       } finally {
@@ -590,6 +761,8 @@ function MonthlyReportTab({ rooms }: { rooms: Room[] | null }) {
               { metric: "Room revenue", value: report.roomRevenue },
               { metric: "Store items revenue", value: report.fbRevenue },
               { metric: "Total revenue", value: report.totalRevenue },
+              { metric: "Expenses", value: expenseTotal },
+              { metric: "Net sales", value: report.totalRevenue - expenseTotal },
             ],
             emphasizeLastRow: true,
           },
@@ -699,10 +872,12 @@ function MonthlyReportTab({ rooms }: { rooms: Room[] | null }) {
             <div className="text-sm text-muted-foreground">Monthly Report — {monthValue}</div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <StatCard label="Total revenue" value={peso(report.totalRevenue)} />
             <StatCard label="Room revenue" value={peso(report.roomRevenue)} />
             <StatCard label="Store items" value={peso(report.fbRevenue)} />
+            <StatCard label="Expenses" value={peso(expenseTotal)} />
+            <StatCard label="Net sales" value={peso(report.totalRevenue - expenseTotal)} />
             <StatCard label="Occupancy" value={`${report.occupancyPercent.toFixed(1)}%`} />
           </div>
 
