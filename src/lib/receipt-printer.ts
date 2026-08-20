@@ -192,36 +192,20 @@ class EscPosBuilder {
   }
 
   /**
-   * ESC * 1 — 8-dot double-density column image. GS v 0 at full 384-dot
-   * width is silently dropped by this 58mm clone (the rest of the receipt
-   * still prints). 192 columns is within the head's ESC * limit, so the
-   * mark actually burns in. Center with ESC a beforehand; this command
-   * itself is left-to-right from the print position.
+   * GS v 0 at the icon's real width (128 dots). Padding it to 384 made this
+   * clone skip the graphic; ESC * then ESC J still fed ~22mm of blank paper,
+   * which is the empty band above "Marimar Inn".
    */
-  bitImage(widthPx: number, heightPx: number, data: Uint8Array) {
-    const widthBytes = widthPx / 8;
-    this.push(0x1b, 0x33, 0); // no extra line spacing; ESC J feeds the band
-    for (let y = 0; y < heightPx; y += 8) {
-      this.push(0x1b, 0x2a, 1, widthPx & 0xff, (widthPx >> 8) & 0xff);
-      for (let x = 0; x < widthPx; x++) {
-        let column = 0;
-        for (let row = 0; row < 8; row++) {
-          const yy = y + row;
-          if (yy >= heightPx) break;
-          const src = data[yy * widthBytes + (x >> 3)];
-          if (src & (0x80 >> (x & 7))) column |= 0x80 >> row;
-        }
-        this.push(column);
-      }
-      this.push(0x1b, 0x4a, Math.min(8, heightPx - y));
-    }
-    this.push(0x1b, 0x32); // default line spacing
-    return this;
-  }
-
   logo() {
     this.preview.push({ align: "center", text: "", logo: true });
-    return this.bitImage(RECEIPT_ICON_WIDTH, RECEIPT_ICON_HEIGHT, decodeReceiptIcon()).feed();
+    const data = decodeReceiptIcon();
+    const widthBytes = RECEIPT_ICON_WIDTH / 8;
+    const height = RECEIPT_ICON_HEIGHT;
+    this.push(0x1d, 0x76, 0x30, 0x00);
+    this.push(widthBytes & 0xff, (widthBytes >> 8) & 0xff);
+    this.push(height & 0xff, (height >> 8) & 0xff);
+    for (let i = 0; i < data.length; i++) this.push(data[i]);
+    return this;
   }
 
   getPreview(): ReceiptPreviewLine[] {

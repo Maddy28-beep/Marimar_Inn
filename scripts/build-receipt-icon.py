@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "public" / "logo" / "icon.png"
 OUT = ROOT / "src" / "lib" / "receipt-icon.ts"
 
-WIDTH = 192
+WIDTH = 128
 
 
 def is_mark_pixel(r: int, g: int, b: int, a: int) -> bool:
@@ -32,8 +32,8 @@ def chunk_b64(value: str, size: int = 100) -> str:
 def main() -> None:
     im = Image.open(SRC).convert("RGBA")
     height = round(im.height * WIDTH / im.width)
-    if height % 2:
-        height += 1
+    if height % 8:
+        height += 8 - (height % 8)
     im = im.resize((WIDTH, height), Image.Resampling.LANCZOS)
     px = im.load()
     packed = bytearray()
