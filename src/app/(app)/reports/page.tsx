@@ -21,12 +21,12 @@ import {
   type OverdueRecord,
 } from "@/lib/reports";
 import { DailySalesTable } from "@/components/reports/daily-sales-table";
+import { AddExpenseForm } from "@/components/expenses/add-expense-form";
 import { OpenDrawerForm } from "@/components/cash-drawer-open";
 import { exportToExcel, formatReportDate, formatReportMonth } from "@/lib/export";
 import {
   deleteShiftExpense,
   fetchExpensesInRange,
-  recordShiftExpense,
   shiftLabelForTime,
   totalExpenses,
 } from "@/lib/expenses";
@@ -153,9 +153,6 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   const [expenses, setExpenses] = useState<ShiftExpense[]>([]);
   const [frontDesk, setFrontDesk] = useState("");
   const [housekeeping, setHousekeeping] = useState("");
-  const [expenseAmount, setExpenseAmount] = useState("");
-  const [expenseDescription, setExpenseDescription] = useState("");
-  const [savingExpense, setSavingExpense] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -442,31 +439,9 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
     }
   }
 
-  async function handleAddExpense() {
-    if (!appUser) return;
-    setSavingExpense(true);
-    try {
-      await recordShiftExpense({
-        amount: Number(expenseAmount),
-        description: expenseDescription,
-        cashierId: appUser.uid,
-        cashierName: appUser.displayName || appUser.email || "Staff",
-      });
-      setExpenseAmount("");
-      setExpenseDescription("");
-      const [start, end] = shiftRange(dateValue, shift);
-      const refreshed = await fetchExpensesInRange(start, end);
-      setExpenses(refreshed);
-      if (refreshed.length === expenses.length) {
-        toast.success("Expense recorded for the current time. Open today's matching shift to see it.");
-      } else {
-        toast.success("Expense recorded.");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't save the expense.");
-    } finally {
-      setSavingExpense(false);
-    }
+  async function reloadExpenses() {
+    const [start, end] = shiftRange(dateValue, shift);
+    setExpenses(await fetchExpensesInRange(start, end));
   }
 
   async function handleRemoveExpense(expenseId: string) {
@@ -561,6 +536,19 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
         </div>
       </div>
 
+      <Card className="print:hidden">
+        <CardHeader>
+          <CardTitle>Log expense</CardTitle>
+          <CardDescription>
+            Cash taken from the drawer. Type what it was for and the amount.
+            It is deducted from this shift&apos;s cash and net sales.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AddExpenseForm onSaved={() => void reloadExpenses()} />
+        </CardContent>
+      </Card>
+
       {loading || !report ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
@@ -583,43 +571,6 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
               canRemoveExpenses={isOwner}
               onRemoveExpense={handleRemoveExpense}
             />
-          )}
-
-          {salesReport && (
-            <Card className="print:hidden">
-              <CardHeader>
-                <CardTitle>Expenses</CardTitle>
-                <CardDescription>
-                  Cash taken from the drawer. It is deducted from this shift&apos;s
-                  cash and net sales, and the owner can see it on this report.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <Input
-                  placeholder="What for (e.g. water, fare)"
-                  value={expenseDescription}
-                  onChange={(e) => setExpenseDescription(e.target.value)}
-                  maxLength={120}
-                  className="sm:flex-1"
-                />
-                <Input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  placeholder="Amount"
-                  value={expenseAmount}
-                  onChange={(e) => setExpenseAmount(e.target.value)}
-                  className="w-32"
-                />
-                <Button
-                  size="sm"
-                  onClick={handleAddExpense}
-                  disabled={savingExpense || !expenseAmount || !expenseDescription.trim()}
-                >
-                  Add expense
-                </Button>
-              </CardContent>
-            </Card>
           )}
 
           {salesReport && (
