@@ -174,21 +174,6 @@ class EscPosBuilder {
     return this.push(0x0a, 0x1d, 0x56, 0x42, 0x00);
   }
 
-  pulse() {
-    // ESC p m t1 t2. m=0 is drawer pin 2, m=1 is pin 5 — cheap 58mm
-    // clones wire the RJ11 differently between printer models, so kicking
-    // both pins covers either wiring regardless of which one a given unit
-    // actually uses. t1=0x64 is 200ms on (was 120ms, before that 50ms) —
-    // each printer this has been tested against needed a longer pulse
-    // than the last. Firing the whole pair twice gives a marginal
-    // connection or a stiffer latch a second chance at no real cost.
-    const kick = [
-      0x1b, 0x70, 0x00, 0x64, 0xfa,
-      0x1b, 0x70, 0x01, 0x64, 0xfa,
-    ];
-    return this.push(...kick, ...kick);
-  }
-
   finish() {
     return this.newline().newline().newline().cut();
   }
@@ -281,7 +266,7 @@ export function isNativePrinterApp(): boolean {
 }
 
 const PRINTER_NAME_HINT =
-  /printer|print|pos|rpp|mtp|xprinter|xp-|zjiang|thermal|esc\s*pos|gp-|innerprint|58mm|80mm/i;
+  /printer|print|pos|rpp|mtp|xprinter|xp-|zjiang|jingpu|jp58|jp-|thermal|esc\s*pos|gp-|innerprint|58mm|80mm/i;
 
 export function listNativePairedPrinters(): PairedPrinter[] {
   const bridge = getNativePrinterBridge();
@@ -660,13 +645,34 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function withDrawerKick(data: Uint8Array, kick?: boolean): Uint8Array {
-  if (!kick) return data;
-  const pulse = new EscPosBuilder().pulse().encode();
-  const combined = new Uint8Array(data.length + pulse.length);
-  combined.set(data, 0);
-  combined.set(pulse, data.length);
-  return combined;
+/**
+ * JP58H / Jingpu 12V clones (and many 58mm kits) ignore a second drawer
+ * command while a pulse is already running. Pin 2 and pin 5 therefore
+ * cannot share one write — the second pin never fires. They also often
+ * implement BEL and DLE DC4 but not ESC p, or vice versa. Each packet
+ * starts with ESC @ so a Bluetooth reconnect still has a known parser.
+ */
+function drawerKickBytes(pin: 0 | 1): number[] {
+  const mAscii = pin === 0 ? 0x30 : 0x31;
+  return [
+    0x1b, 0x40,
+    0x1b, 0x3d, 0x01,
+    0x07,
+    0x1b, 0x70, pin, 0x3c, 0xff,
+    0x1b, 0x70, mAscii, 0x3c, 0xff,
+    0x10, 0x14, 0x01, pin, 0x02,
+    0x1d, 0x70, pin, 0x3c, 0xff,
+  ];
+}
+
+function drawerKickPacket(pin: 0 | 1): Uint8Array {
+  return Uint8Array.from(drawerKickBytes(pin));
+}
+
+async function sendDrawerKick(): Promise<void> {
+  await send(drawerKickPacket(0));
+  await sleep(600);
+  await send(drawerKickPacket(1));
 }
 
 export function printerErrorMessage(error: unknown): string {
@@ -893,7 +899,8 @@ export function previewGuestReceipt(
 }
 
 export async function printThermalReceipt(booking: Booking, room: Room, extras: ReceiptExtras) {
-  await send(withDrawerKick(buildReceiptBytes(booking, room, extras), extras.kickDrawer));
+  if (extras.kickDrawer) await sendDrawerKick();
+  await send(buildReceiptBytes(booking, room, extras));
 }
 
 export interface ExtensionReceiptExtras {
@@ -995,7 +1002,8 @@ export function previewExtensionReceipt(
 }
 
 export async function printExtensionReceipt(booking: Booking, room: Room, extras: ExtensionReceiptExtras) {
-  await send(withDrawerKick(buildExtensionReceiptBytes(booking, room, extras), extras.kickDrawer));
+  if (extras.kickDrawer) await sendDrawerKick();
+  await send(buildExtensionReceiptBytes(booking, room, extras));
 }
 
 export interface DailySalesReceiptRow {
@@ -1184,8 +1192,7 @@ export async function printTestPage() {
 
 /** Sends the drawer-kick pulse — the drawer must be cabled into the printer's RJ11 port. */
 export async function openCashDrawer() {
-  const encoder = createEncoder();
-  await send(encoder.pulse().encode());
+  await sendDrawerKick();
 }
 
 /**
