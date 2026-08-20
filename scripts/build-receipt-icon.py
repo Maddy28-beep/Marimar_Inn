@@ -1,8 +1,14 @@
-"""Build a chunky 1-bit M the 58mm head can actually burn.
+"""Build a chunky 1-bit version of the real Marimar Inn tulip mark, sized for
+a 58mm ESC/POS head.
 
-The glossy PNG is too detailed for this clone. This draws a thick stencil M
-so most dots are solid black, then writes the packed ESC/POS bytes plus a
-magnified preview PNG.
+Earlier attempts sent the full glossy logo PNG straight to the printer and it
+went completely silent (nothing printed at all, not even the text below it) —
+this clone's raster support chokes on anything with fine detail or gradients.
+The fix that actually got dots on paper was a hand-drawn block "M" at a tiny,
+solid 48x40 stencil. This script keeps that exact same safe envelope (size,
+solid fills, no dithering) but derives the shape from the real logo mark
+(public/logo/icon.png) instead of a generic letterform, so the receipt shows
+an actual (if simplified) silhouette of the brand mark rather than a plain M.
 """
 
 from __future__ import annotations
@@ -11,43 +17,45 @@ import base64
 import io
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[1]
+SOURCE = ROOT / "public" / "logo" / "icon.png"
 OUT = ROOT / "src" / "lib" / "receipt-icon.ts"
 PREVIEW = ROOT / "scripts" / "receipt-icon-preview.png"
 
 WIDTH = 48
 HEIGHT = 40
+THRESHOLD = 110  # out of 255 — tuned so the silhouette stays chunky/solid, not speckled.
 
 
-def draw_m(size: tuple[int, int]) -> Image.Image:
-    im = Image.new("1", size, 1)
-    d = ImageDraw.Draw(im)
+def build_silhouette(size: tuple[int, int]) -> Image.Image:
+    src = Image.open(SOURCE).convert("RGBA")
+    # The mark is opaque color on a transparent background — alpha itself is
+    # the shape. Treat it directly as ink coverage (fully opaque -> black).
+    alpha = src.split()[3]
+    ink = Image.eval(alpha, lambda a: 255 - a)
+
     w, h = size
-    # Inset so the M does not clip the last column of a cheap head.
-    x0, y0, x1, y1 = 2, 2, w - 3, h - 3
-    mid = (x0 + x1) / 2
-    stem = max(6, round((x1 - x0) * 0.22))
-    # Outer M: left leg, left diagonal, right diagonal, right leg.
-    d.polygon(
-        [
-            (x0, y1),
-            (x0, y0),
-            (x0 + stem, y0),
-            (mid, y0 + (y1 - y0) * 0.55),
-            (x1 - stem, y0),
-            (x1, y0),
-            (x1, y1),
-            (x1 - stem, y1),
-            (x1 - stem, y0 + (y1 - y0) * 0.42),
-            (mid, y1 - 2),
-            (x0 + stem, y0 + (y1 - y0) * 0.42),
-            (x0 + stem, y1),
-        ],
-        fill=0,
-    )
-    return im
+    # Downsample in two hops with a small margin so the tulip's pointed tips
+    # survive instead of aliasing away, then a closing pass (dilate, erode)
+    # merges anti-aliasing speckle into solid regions — the same "most dots
+    # are solid black" chunkiness that made the hand-drawn M print reliably.
+    margin = 2
+    inner = (w - margin * 2, h - margin * 2)
+    small = ink.resize(inner, Image.Resampling.LANCZOS)
+    bw = small.point(lambda p: 0 if p < THRESHOLD else 255, mode="L")
+    # Closing (dilate then erode) to fill small anti-aliasing gaps without
+    # shrinking the shape overall — MinFilter dilates the black regions
+    # (picks the darkest neighbor), MaxFilter then eats back the growth
+    # while leaving newly-closed gaps filled. Order matters: doing this
+    # backwards erodes the already-thin blade strokes down to nothing
+    # before there's anything left to close.
+    bw = bw.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MaxFilter(3))
+
+    canvas = Image.new("L", size, 255)
+    canvas.paste(bw, (margin, margin))
+    return canvas.convert("1")
 
 
 def chunk_b64(value: str, size: int = 100) -> str:
@@ -71,7 +79,7 @@ def pack(im: Image.Image) -> bytes:
 
 
 def main() -> None:
-    im = draw_m((WIDTH, HEIGHT))
+    im = build_silhouette((WIDTH, HEIGHT))
     packed = pack(im)
     black = sum(bin(b).count("1") for b in packed)
     print(f"bitmap {WIDTH}x{HEIGHT}, {len(packed)} bytes, black {black}/{len(packed)*8} ({100*black/(len(packed)*8):.0f}%)")
@@ -87,7 +95,7 @@ def main() -> None:
     OUT.write_text(
         "\n".join(
             [
-                "// Chunky 1-bit M for cheap 58mm ESC/POS. Solid black, 48x40.",
+                "// Chunky 1-bit silhouette of the Marimar Inn tulip mark, for cheap 58mm ESC/POS. Solid black, 48x40.",
                 f"export const RECEIPT_ICON_WIDTH = {WIDTH};",
                 f"export const RECEIPT_ICON_HEIGHT = {HEIGHT};",
                 "export const RECEIPT_ICON_BASE64 =",
