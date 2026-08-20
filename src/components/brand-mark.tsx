@@ -21,8 +21,8 @@ export function BrandMark({
       <Image
         src="/logo/icon.png"
         alt=""
-        width={426}
-        height={410}
+        width={1312}
+        height={1199}
         priority
         className={cn("h-8 w-auto shrink-0 bg-transparent", iconClassName)}
       />
