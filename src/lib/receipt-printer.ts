@@ -876,8 +876,11 @@ export function buildDailySalesReceiptBytes(data: DailySalesReceiptData): Uint8A
     .initialize()
     .align("center")
     .line("Marimar Inn")
-    .line("Daily Sales Report")
-    .line(clampLine(data.dateLabel, width));
+    .line("Daily Sales Report");
+
+  if (data.dutyTime === "FULL DAY") encoder.line("FULL DAY");
+
+  encoder.line(clampLine(data.dateLabel, width));
 
   if (data.frontDesk) encoder.line(clampLine(`Front desk: ${data.frontDesk}`, width));
   if (data.housekeeping) encoder.line(clampLine(`Housekeeping: ${data.housekeeping}`, width));

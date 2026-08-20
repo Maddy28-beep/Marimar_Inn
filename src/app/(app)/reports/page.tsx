@@ -119,6 +119,11 @@ function formatDutyTime(value: string): string {
   });
 }
 
+function shiftTimeLabel(shift: ShiftFilter): string {
+  if (shift === "fullDay") return "FULL DAY";
+  return formatDutyTime(SHIFT_START_TIME[shift]);
+}
+
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
     <Card size="sm">
@@ -138,7 +143,6 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   const [salesReport, setSalesReport] = useState<DailySalesReport | null>(null);
   const [frontDesk, setFrontDesk] = useState("");
   const [housekeeping, setHousekeeping] = useState("");
-  const dutyTime = SHIFT_START_TIME[shift];
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -169,9 +173,11 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
 
   const occupied = rooms?.filter((r) => r.status === "occupied").length ?? 0;
   const totalRooms = rooms?.length ?? 0;
-
+  const reportDate = formatReportDate(dateValue);
   const reportLabel =
-    shift === "fullDay" ? formatReportDate(dateValue) : `${formatReportDate(dateValue)} — ${SHIFT_LABELS[shift]}`;
+    shift === "fullDay" ? `${reportDate} — FULL DAY` : `${reportDate} — ${SHIFT_LABELS[shift]}`;
+  const reportTitle = shift === "fullDay" ? "Daily Sales Report — FULL DAY" : "Daily Sales Report";
+  const timeLabel = shiftTimeLabel(shift);
 
   async function handleExport() {
     if (!report) return;
@@ -184,11 +190,11 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
     await exportToExcel(`marimar-inn-daily-${filenameSuffix}`, [
       {
         name: "Daily Sales Report",
-        title: "Daily Sales Report",
+        title: reportTitle,
         subtitle: reportLabel,
         dutyInfo: `Front desk: ${frontDesk.trim() || "____________________________"}        Housekeeping: ${
           housekeeping.trim() || "____________________________"
-        }        Time: ${dutyTime ? formatDutyTime(dutyTime) : "______________"}`,
+        }        Time: ${timeLabel}`,
         tables: [
           {
             columns: [
@@ -295,8 +301,8 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                       { header: "Value", key: "value", width: 55, format: "auto" as const },
                     ],
                     rows: [
-                      { metric: "Date", value: reportLabel },
-                      { metric: "Time", value: dutyTime ? formatDutyTime(dutyTime) : "—" },
+                      { metric: "Date", value: reportDate },
+                      { metric: "Time", value: timeLabel },
                       { metric: "Check-ins", value: report.checkIns },
                       { metric: "Check-outs", value: report.checkOuts },
                       { metric: "Room revenue", value: report.roomRevenue },
@@ -338,10 +344,10 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             year: "numeric",
             month: "short",
             day: "numeric",
-          }) + (shift !== "fullDay" ? ` (${shift === "day" ? "Day" : "Night"})` : ""),
+          }) + (shift === "day" ? " (Day)" : shift === "night" ? " (Night)" : ""),
         frontDesk: frontDesk.trim() || undefined,
         housekeeping: housekeeping.trim() || undefined,
-        dutyTime: dutyTime ? formatDutyTime(dutyTime) : undefined,
+        dutyTime: timeLabel,
         rows: salesReport.rows.map((row) => ({
           roomNumber: row.roomNumber,
           refNumber: row.refNumber,
@@ -394,14 +400,20 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             onChange={(e) => setHousekeeping(e.target.value)}
             className="w-36"
           />
-          {shift !== "fullDay" && (
-            <div
-              className="flex h-9 w-32 items-center rounded-md border bg-muted px-3 text-sm text-muted-foreground"
-              title="Locked to the shift's official start time — not editable, so no early or late clock-ins get written in."
-            >
-              Time: {formatDutyTime(dutyTime)}
-            </div>
-          )}
+          <div
+            className={
+              shift === "fullDay"
+                ? "flex h-9 items-center rounded-md border border-primary/40 bg-primary/10 px-3 text-sm font-semibold tracking-wide"
+                : "flex h-9 w-32 items-center rounded-md border bg-muted px-3 text-sm text-muted-foreground"
+            }
+            title={
+              shift === "fullDay"
+                ? "This report covers the entire calendar day."
+                : "Locked to the shift's official start time — not editable, so no early or late clock-ins get written in."
+            }
+          >
+            Time: {timeLabel}
+          </div>
         </div>
         <div className="flex flex-col items-end gap-1">
           <div className="flex gap-2">
@@ -442,14 +454,14 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
         <div className="print-area flex flex-col gap-4">
-          <div className="hidden text-center print:block">
-            <div className="font-heading text-lg font-semibold">Marimar Inn - Davao</div>
-            <div className="text-sm">Daily Sales Report</div>
-            <div className="mt-1 flex justify-center gap-6 text-xs text-muted-foreground">
-              <span>Date: {reportLabel}</span>
+          <div className="text-center">
+            <div className="hidden font-heading text-lg font-semibold print:block">Marimar Inn - Davao</div>
+            <div className="text-base font-semibold tracking-wide">{reportTitle}</div>
+            <div className="mt-1 flex flex-wrap justify-center gap-x-6 gap-y-1 text-xs text-muted-foreground">
+              <span>Date: {reportDate}</span>
+              <span>Time: {timeLabel}</span>
               {frontDesk && <span>Front desk: {frontDesk}</span>}
               {housekeeping && <span>Housekeeping: {housekeeping}</span>}
-              {dutyTime && <span>Time: {formatDutyTime(dutyTime)}</span>}
             </div>
           </div>
 
