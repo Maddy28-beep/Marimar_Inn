@@ -242,7 +242,7 @@ function decodeReceiptIcon(): Uint8Array {
 }
 
 /**
- * Centers the 160px mark on the full 58mm (~384) or 80mm (~576) raster so
+ * Centers the 192px mark on the full 58mm (~384) or 80mm (~576) raster so
  * left and right paper margins match. Trailing dots stay blank, so the
  * faint right edge of this 58mm head cannot slice the icon.
  */

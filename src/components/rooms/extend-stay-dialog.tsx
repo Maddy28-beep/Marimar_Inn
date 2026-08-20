@@ -25,6 +25,7 @@ import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { useAuth } from "@/context/auth-context";
+import { ReceiptBrandHeader } from "@/components/receipt-brand-header";
 import { ReceiptPreviewStrip } from "@/components/receipt-preview";
 import {
   printExtensionReceipt,
@@ -222,13 +223,10 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
           </DialogHeader>
 
           <div className="print-area flex flex-col gap-2 rounded-lg border p-4 text-sm">
-            <div className="text-center">
-              <div className="font-heading text-base font-semibold">Marimar Inn</div>
-              <div className="text-xs text-muted-foreground">Extension Receipt</div>
-              <div className="text-xs text-muted-foreground">
-                Ref: {referenceNumberFor(booking.bookingId)}
-              </div>
-            </div>
+            <ReceiptBrandHeader
+              subtitle="Extension Receipt"
+              reference={referenceNumberFor(booking.bookingId)}
+            />
             <div className="my-1 border-t" />
             <div className="flex justify-between">
               <span>Room</span>

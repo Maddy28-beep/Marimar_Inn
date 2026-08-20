@@ -587,6 +587,14 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
       ) : (
         <div className="print-area flex flex-col gap-4">
           <div className="text-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo/icon.png"
+              alt=""
+              width={160}
+              height={146}
+              className="mx-auto mb-2 hidden h-14 w-auto object-contain print:block"
+            />
             <div className="hidden font-heading text-lg font-semibold print:block">Marimar Inn - Davao</div>
             <div className="text-base font-semibold tracking-wide">{reportTitle}</div>
             <div className="mt-1 flex flex-wrap justify-center gap-x-6 gap-y-1 text-xs text-muted-foreground">
@@ -860,6 +868,14 @@ function MonthlyReportTab({ rooms }: { rooms: Room[] | null }) {
       ) : (
         <div className="print-area flex flex-col gap-4">
           <div className="hidden text-center print:block">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo/icon.png"
+              alt=""
+              width={160}
+              height={146}
+              className="mx-auto mb-2 h-14 w-auto object-contain"
+            />
             <div className="font-heading text-lg font-semibold">Marimar Inn</div>
             <div className="text-sm text-muted-foreground">Monthly Report — {monthValue}</div>
           </div>
@@ -1149,6 +1165,14 @@ function RangeReportTab() {
       ) : (
         <div className="print-area flex flex-col gap-4">
           <div className="hidden text-center print:block">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo/icon.png"
+              alt=""
+              width={160}
+              height={146}
+              className="mx-auto mb-2 h-14 w-auto object-contain"
+            />
             <div className="font-heading text-lg font-semibold">Marimar Inn - Davao</div>
             <div className="text-sm">Custom range report</div>
             <div className="text-xs text-muted-foreground">{rangeLabel}</div>

@@ -23,6 +23,7 @@ import {
 import { type Booking, type Room } from "@/lib/types";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
+import { ReceiptBrandHeader } from "@/components/receipt-brand-header";
 import { ReceiptPreviewStrip } from "@/components/receipt-preview";
 import { printThermalReceipt, previewGuestReceipt, printerErrorMessage, referenceNumberFor, shouldOpenDrawer, openCashDrawer } from "@/lib/receipt-printer";
 import {
@@ -317,13 +318,10 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
             </DialogHeader>
 
             <div className="print-area flex flex-col gap-2 rounded-lg border p-4 text-sm">
-              <div className="text-center">
-                <div className="font-heading text-base font-semibold">Marimar Inn</div>
-                <div className="text-xs text-muted-foreground">This is not an official receipt</div>
-                <div className="text-xs text-muted-foreground">
-                  Ref: {referenceNumberFor(booking.bookingId)}
-                </div>
-              </div>
+              <ReceiptBrandHeader
+                subtitle="This is not an official receipt"
+                reference={referenceNumberFor(booking.bookingId)}
+              />
               <div className="my-1 border-t" />
               <div className="flex justify-between">
                 <span>Room</span>

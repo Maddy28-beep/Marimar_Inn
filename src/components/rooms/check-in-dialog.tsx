@@ -50,6 +50,7 @@ import {
   type RatePackage,
   type Room,
 } from "@/lib/types";
+import { ReceiptBrandHeader } from "@/components/receipt-brand-header";
 import { ReceiptPreviewStrip } from "@/components/receipt-preview";
 import { Loader2Icon, MinusIcon, PlusIcon, PrinterIcon, SparklesIcon, WrenchIcon } from "lucide-react";
 
@@ -277,13 +278,10 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
             </DialogHeader>
 
             <div className="print-area flex flex-col gap-2 rounded-lg border p-4 text-sm">
-              <div className="text-center">
-                <div className="font-heading text-base font-semibold">Marimar Inn</div>
-                <div className="text-xs text-muted-foreground">This is not an official receipt</div>
-                <div className="text-xs text-muted-foreground">
-                  Ref: {referenceNumberFor(receipt.booking.bookingId)}
-                </div>
-              </div>
+              <ReceiptBrandHeader
+                subtitle="This is not an official receipt"
+                reference={referenceNumberFor(receipt.booking.bookingId)}
+              />
               <div className="my-1 border-t" />
               <div className="flex justify-between">
                 <span>Room</span>

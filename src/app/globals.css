@@ -143,4 +143,10 @@
     left: 0;
     width: 100%;
   }
+  .print-area img {
+    visibility: visible !important;
+    display: block;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
