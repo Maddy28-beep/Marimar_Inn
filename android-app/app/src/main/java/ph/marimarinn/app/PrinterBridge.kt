@@ -166,16 +166,16 @@ class PrinterBridge {
                 stream.write(bytes)
                 stream.flush()
             }
-            // Pin 5 + a printed line first — Jingpu/Gprinter clones discard a
-            // kick-only write, and they wire the solenoid to pin 5.
+            // 100ms pulse like the old 9V printer. 0xFF on this 12V board
+            // can trip overcurrent and never release the latch.
             write(
                 byteArrayOf(0x1B, 0x40, 0x1B, 0x61, 0x01) +
-                    "Drawer\n".toByteArray(Charsets.US_ASCII) +
-                    byteArrayOf(0x07, 0x1B, 0x70, 0x01, 0xFF.toByte(), 0xFF.toByte(), 0x0A)
+                    "OPEN DRAWER\n\n".toByteArray(Charsets.US_ASCII) +
+                    byteArrayOf(0x07, 0x1B, 0x70, 0x01, 0x32, 0xFA.toByte(), 0x0A)
             )
-            Thread.sleep(800)
-            write(byteArrayOf(0x1B, 0x40, 0x07, 0x1B, 0x70, 0x00, 0xFF.toByte(), 0xFF.toByte(), 0x0A))
-            Thread.sleep(600)
+            Thread.sleep(700)
+            write(byteArrayOf(0x1B, 0x40, 0x07, 0x1B, 0x70, 0x00, 0x32, 0xFA.toByte(), 0x0A))
+            Thread.sleep(400)
             "ok"
         }
     }

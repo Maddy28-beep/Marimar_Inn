@@ -658,32 +658,29 @@ function concatBytes(...parts: Array<Uint8Array | number[]>): Uint8Array {
 }
 
 /**
- * JP58H / Jingpu (and Gprinter clones) fire the drawer from pin 5 with
- * ESC p t1=t2=0xFF, and only after real print data — a kick-only Bluetooth
- * write is discarded. Pin 2 is a second job after the first pulse finishes.
- * Extra commands (DLE DC4, GS p, ESC =) are omitted so this firmware cannot
- * desync and skip the kick.
+ * Short ESC p (100ms on / 500ms off), same timing the old 9V heads used.
+ * A 510ms 0xFF pulse on this 12V JP58H can trip the drawer MOSFET and
+ * abort. Kick-only Bluetooth writes are discarded, so a visible line is
+ * printed first. Pin 5 then pin 2, with a gap so the second pulse is not
+ * ignored. No DC2/DLE/GS extras — those desync this clone.
  */
-const DRAWER_KICK_PIN5 = [0x07, 0x1b, 0x70, 0x01, 0xff, 0xff, 0x0a];
-const DRAWER_KICK_PIN2_JOB = [0x1b, 0x40, 0x07, 0x1b, 0x70, 0x00, 0xff, 0xff, 0x0a];
+const DRAWER_SLIP = [
+  0x1b, 0x40, 0x1b, 0x61, 0x01,
+  ..."OPEN DRAWER\n".split("").map((ch) => ch.charCodeAt(0)),
+];
+
+function drawerPulse(pin: 0 | 1): number[] {
+  return [0x07, 0x1b, 0x70, pin, 0x32, 0xfa, 0x0a];
+}
 
 async function sendDrawerKick(withReceipt?: Uint8Array): Promise<void> {
-  const native = getNativePrinterBridge();
-  if (!withReceipt && native && typeof native.kickDrawer === "function") {
-    const result = String(native.kickDrawer() ?? "").trim();
-    if (result !== "ok") throw new Error(result || "The printer didn't kick the drawer.");
-    return;
-  }
-
   if (withReceipt) {
-    await send(concatBytes(withReceipt, DRAWER_KICK_PIN5));
+    await send(concatBytes(withReceipt, drawerPulse(1)));
   } else {
-    const encoder = createEncoder();
-    encoder.initialize().align("center").line("Drawer");
-    await send(concatBytes(encoder.encode(), DRAWER_KICK_PIN5));
+    await send(concatBytes(DRAWER_SLIP, drawerPulse(1), [0x0a, 0x0a]));
   }
-  await sleep(800);
-  await send(Uint8Array.from(DRAWER_KICK_PIN2_JOB));
+  await sleep(700);
+  await send(concatBytes([0x1b, 0x40], drawerPulse(0)));
 }
 
 export function printerErrorMessage(error: unknown): string {
