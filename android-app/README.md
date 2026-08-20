@@ -22,7 +22,8 @@ Each printer-app update is a **new file**, never overwrite:
 - `D:\Downloads\MarimarInn-tablet-v4.apk` — Print test built into the app; always reloads a fresh site
 - `D:\Downloads\MarimarInn-tablet-v5.apk` — check-in receipt sent in one Bluetooth write (not split chunks)
 - `D:\Downloads\MarimarInn-tablet-v6.apk` — darker, slower thermal print
-- Next change will be `v7`, and so on
+- `D:\Downloads\MarimarInn-tablet-v7.apk` — cash drawer kick stays on one Bluetooth connection
+- Next change will be `v8`, and so on
 
 Install the **highest** version number. Allow Nearby devices when Android asks.
 

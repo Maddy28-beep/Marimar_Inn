@@ -57,7 +57,7 @@ export function OpenDrawerForm() {
 
     try {
       await openCashDrawer();
-      toast.success("Cash drawer opened.");
+      toast.success("Kick sent. A short Drawer slip should print.");
       setPin("");
     } catch (error) {
       toast.error(printerErrorMessage(error));

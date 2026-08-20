@@ -242,6 +242,7 @@ interface NativePrinterBridge {
   connect(mac: string): string;
   writeBase64(data: string): string;
   printTest?: () => string;
+  kickDrawer?: () => string;
   disconnect(): string;
 }
 
@@ -645,34 +646,44 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+function concatBytes(...parts: Array<Uint8Array | number[]>): Uint8Array {
+  const chunks = parts.map((part) => (part instanceof Uint8Array ? part : Uint8Array.from(part)));
+  const out = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
+}
+
 /**
- * JP58H / Jingpu 12V clones (and many 58mm kits) ignore a second drawer
- * command while a pulse is already running. Pin 2 and pin 5 therefore
- * cannot share one write — the second pin never fires. They also often
- * implement BEL and DLE DC4 but not ESC p, or vice versa. Each packet
- * starts with ESC @ so a Bluetooth reconnect still has a known parser.
+ * JP58H / Jingpu (and Gprinter clones) fire the drawer from pin 5 with
+ * ESC p t1=t2=0xFF, and only after real print data — a kick-only Bluetooth
+ * write is discarded. Pin 2 is a second job after the first pulse finishes.
+ * Extra commands (DLE DC4, GS p, ESC =) are omitted so this firmware cannot
+ * desync and skip the kick.
  */
-function drawerKickBytes(pin: 0 | 1): number[] {
-  const mAscii = pin === 0 ? 0x30 : 0x31;
-  return [
-    0x1b, 0x40,
-    0x1b, 0x3d, 0x01,
-    0x07,
-    0x1b, 0x70, pin, 0x3c, 0xff,
-    0x1b, 0x70, mAscii, 0x3c, 0xff,
-    0x10, 0x14, 0x01, pin, 0x02,
-    0x1d, 0x70, pin, 0x3c, 0xff,
-  ];
-}
+const DRAWER_KICK_PIN5 = [0x07, 0x1b, 0x70, 0x01, 0xff, 0xff, 0x0a];
+const DRAWER_KICK_PIN2_JOB = [0x1b, 0x40, 0x07, 0x1b, 0x70, 0x00, 0xff, 0xff, 0x0a];
 
-function drawerKickPacket(pin: 0 | 1): Uint8Array {
-  return Uint8Array.from(drawerKickBytes(pin));
-}
+async function sendDrawerKick(withReceipt?: Uint8Array): Promise<void> {
+  const native = getNativePrinterBridge();
+  if (!withReceipt && native && typeof native.kickDrawer === "function") {
+    const result = String(native.kickDrawer() ?? "").trim();
+    if (result !== "ok") throw new Error(result || "The printer didn't kick the drawer.");
+    return;
+  }
 
-async function sendDrawerKick(): Promise<void> {
-  await send(drawerKickPacket(0));
-  await sleep(600);
-  await send(drawerKickPacket(1));
+  if (withReceipt) {
+    await send(concatBytes(withReceipt, DRAWER_KICK_PIN5));
+  } else {
+    const encoder = createEncoder();
+    encoder.initialize().align("center").line("Drawer");
+    await send(concatBytes(encoder.encode(), DRAWER_KICK_PIN5));
+  }
+  await sleep(800);
+  await send(Uint8Array.from(DRAWER_KICK_PIN2_JOB));
 }
 
 export function printerErrorMessage(error: unknown): string {
@@ -899,8 +910,9 @@ export function previewGuestReceipt(
 }
 
 export async function printThermalReceipt(booking: Booking, room: Room, extras: ReceiptExtras) {
-  if (extras.kickDrawer) await sendDrawerKick();
-  await send(buildReceiptBytes(booking, room, extras));
+  const bytes = buildReceiptBytes(booking, room, extras);
+  if (extras.kickDrawer) await sendDrawerKick(bytes);
+  else await send(bytes);
 }
 
 export interface ExtensionReceiptExtras {
@@ -1002,8 +1014,9 @@ export function previewExtensionReceipt(
 }
 
 export async function printExtensionReceipt(booking: Booking, room: Room, extras: ExtensionReceiptExtras) {
-  if (extras.kickDrawer) await sendDrawerKick();
-  await send(buildExtensionReceiptBytes(booking, room, extras));
+  const bytes = buildExtensionReceiptBytes(booking, room, extras);
+  if (extras.kickDrawer) await sendDrawerKick(bytes);
+  else await send(bytes);
 }
 
 export interface DailySalesReceiptRow {

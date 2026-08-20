@@ -156,6 +156,31 @@ class PrinterBridge {
     }
 
     @JavascriptInterface
+    fun kickDrawer(): String {
+        return runOnPrinterThread {
+            val mac = lastMac ?: return@runOnPrinterThread "Printer is not connected. Tap the printer icon and connect again."
+            val reopened = connectLocked(mac)
+            if (reopened != "ok") return@runOnPrinterThread reopened
+            val stream = output ?: return@runOnPrinterThread "Printer is not connected. Tap the printer icon and connect again."
+            fun write(bytes: ByteArray) {
+                stream.write(bytes)
+                stream.flush()
+            }
+            // Pin 5 + a printed line first — Jingpu/Gprinter clones discard a
+            // kick-only write, and they wire the solenoid to pin 5.
+            write(
+                byteArrayOf(0x1B, 0x40, 0x1B, 0x61, 0x01) +
+                    "Drawer\n".toByteArray(Charsets.US_ASCII) +
+                    byteArrayOf(0x07, 0x1B, 0x70, 0x01, 0xFF.toByte(), 0xFF.toByte(), 0x0A)
+            )
+            Thread.sleep(800)
+            write(byteArrayOf(0x1B, 0x40, 0x07, 0x1B, 0x70, 0x00, 0xFF.toByte(), 0xFF.toByte(), 0x0A))
+            Thread.sleep(600)
+            "ok"
+        }
+    }
+
+    @JavascriptInterface
     fun disconnect(): String {
         return runOnPrinterThread {
             lastMac = null
