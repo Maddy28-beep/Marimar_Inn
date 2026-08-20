@@ -41,7 +41,11 @@ function HeaderClock({ className }: { className?: string }) {
     hour: "numeric",
     minute: "2-digit",
   });
-  return <span className={cn("text-sm text-muted-foreground", className)}>{label}</span>;
+  return (
+    <span className={cn("shrink-0 whitespace-nowrap text-sm text-muted-foreground", className)}>
+      {label}
+    </span>
+  );
 }
 
 function useCheckoutReminderScanner() {
@@ -144,23 +148,23 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between gap-2 border-b bg-card px-4 py-3 sm:px-6">
-        <div className="flex min-w-0 items-center gap-4">
+      <header className="flex items-center justify-between gap-2 border-b bg-card px-3 py-2 sm:px-4 xl:px-6 xl:py-3">
+        <div className="flex min-w-0 items-center gap-2 xl:gap-4">
           <Link href="/dashboard" className="shrink-0">
-            <BrandLogo className="h-11 w-auto sm:h-12" />
+            <BrandLogo className="h-9 w-auto sm:h-10 xl:h-12" />
           </Link>
           {appUser && (
             <Badge variant="secondary" className="capitalize">
               {appUser.role}
             </Badge>
           )}
-          <nav className="hidden items-center gap-1 lg:flex">
+          <nav className="hidden items-center gap-1 xl:flex">
             {visibleLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  "flex items-center gap-1 rounded-md px-2.5 py-1 text-sm font-medium text-muted-foreground hover:text-foreground",
+                  "flex items-center gap-1 whitespace-nowrap rounded-md px-2.5 py-1 text-sm font-medium text-muted-foreground hover:text-foreground",
                   pathname === link.href && "bg-muted text-foreground"
                 )}
               >
@@ -171,10 +175,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
 
-        <div className="hidden items-center gap-4 lg:flex">
+        <div className="hidden items-center gap-3 xl:flex">
           <HeaderClock />
           <Separator orientation="vertical" className="h-5" />
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <PrinterStatus />
             <CashDrawerControl />
             <NotificationBell />
@@ -183,7 +187,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
               <span className="sr-only">Refresh</span>
             </Button>
           </div>
-          <span className="text-sm text-muted-foreground">
+          <span className="max-w-28 truncate text-sm text-muted-foreground">
             {appUser?.displayName ?? appUser?.email}
           </span>
           <Separator orientation="vertical" className="h-5" />
@@ -193,7 +197,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
 
-        <div className="flex items-center gap-3 lg:hidden">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2 xl:hidden">
           <PrinterStatus />
           <CashDrawerControl />
           <NotificationBell />
@@ -223,7 +227,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <div className="border-b bg-muted/30 px-4 py-1 text-center lg:hidden">
+      <div className="border-b bg-muted/30 px-4 py-1 text-center xl:hidden">
         <HeaderClock className="text-xs" />
       </div>
 
