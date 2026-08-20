@@ -25,8 +25,10 @@ import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { useAuth } from "@/context/auth-context";
+import { ReceiptPreviewStrip } from "@/components/receipt-preview";
 import {
   printExtensionReceipt,
+  previewExtensionReceipt,
   printerErrorMessage,
   referenceNumberFor,
   shouldOpenDrawer,
@@ -257,6 +259,28 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>Staff</span>
               <span>{staffName}</span>
+            </div>
+          </div>
+
+          <div className="print:hidden flex flex-col gap-2">
+            <p className="text-xs font-medium text-muted-foreground">Thermal printer preview</p>
+            <div className="max-h-72 overflow-y-auto rounded-md bg-muted/40 p-2">
+              <ReceiptPreviewStrip
+                lines={previewExtensionReceipt(booking, room, {
+                  staffName,
+                  hours: 1,
+                  amountCharged: receipt.amountCharged,
+                  amountPaid: receipt.amountPaid,
+                  change: receipt.change,
+                  paymentMethod: receipt.paymentMethod,
+                  gcashReference: receipt.gcashReference,
+                  qrphReference: receipt.qrphReference,
+                  splitCashAmount: receipt.splitCashAmount,
+                  splitGcashAmount: receipt.splitGcashAmount,
+                  splitQrphAmount: receipt.splitQrphAmount,
+                })}
+                paperWidth={printer.paperWidth}
+              />
             </div>
           </div>
 

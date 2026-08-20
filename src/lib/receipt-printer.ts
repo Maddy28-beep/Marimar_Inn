@@ -24,6 +24,13 @@ interface PrinterState {
 
 const STORAGE_KEY = "marimar-inn:thermal-printer";
 const DRAWER_KEY = "marimar-inn:cash-drawer-enabled";
+const SIDE_MARGIN = 3;
+
+export interface ReceiptPreviewLine {
+  align: "left" | "center" | "right";
+  text: string;
+  logo?: boolean;
+}
 
 interface BleLePrinterProfile {
   filters: BluetoothLEScanFilter[];
@@ -106,6 +113,13 @@ let printerCodepageMapping = "epson";
  */
 class EscPosBuilder {
   private readonly chunks: number[] = [];
+  private alignment: "left" | "center" | "right" = "left";
+  private readonly leftMargin: number;
+  private readonly preview: ReceiptPreviewLine[] = [];
+
+  constructor(leftMargin = 0) {
+    this.leftMargin = leftMargin;
+  }
 
   private push(...bytes: number[]) {
     this.chunks.push(...bytes);
@@ -116,6 +130,7 @@ class EscPosBuilder {
     // Cheap 58mm clones ignore Epson density/speed bytes (they printed as
     // garbage) and double-height made every receipt huge. Font A + bold is
     // what this head actually renders.
+    this.alignment = "left";
     this.push(0x1b, 0x40);
     this.push(0x1b, 0x4d, 0x00); // Font A
     this.push(0x12, 0x23, 0x08); // DC2 # 8 — Gprinter/Zjiang density
@@ -124,6 +139,7 @@ class EscPosBuilder {
   }
 
   align(value: "left" | "center" | "right") {
+    this.alignment = value;
     const n = value === "center" ? 1 : value === "right" ? 2 : 0;
     return this.push(0x1b, 0x61, n);
   }
@@ -139,10 +155,20 @@ class EscPosBuilder {
   }
 
   line(value: string) {
-    return this.text(value).newline();
+    const padded =
+      this.alignment === "left" && this.leftMargin > 0
+        ? `${" ".repeat(this.leftMargin)}${value}`
+        : value;
+    this.preview.push({ align: this.alignment, text: padded });
+    return this.text(padded).feed();
   }
 
   newline() {
+    this.preview.push({ align: this.alignment, text: "" });
+    return this.feed();
+  }
+
+  private feed() {
     return this.push(0x0a);
   }
 
@@ -171,8 +197,13 @@ class EscPosBuilder {
   }
 
   logo() {
+    this.preview.push({ align: "center", text: "", logo: true });
     const { width, height, data } = centeredReceiptIcon(state.paperWidth);
-    return this.raster(width, height, data).newline();
+    return this.raster(width, height, data).feed();
+  }
+
+  getPreview(): ReceiptPreviewLine[] {
+    return this.preview;
   }
 
   encode() {
@@ -198,7 +229,7 @@ function toPrinterAscii(value: string): string {
 }
 
 function createEncoder(_width?: number) {
-  return new EscPosBuilder();
+  return new EscPosBuilder(SIDE_MARGIN);
 }
 
 function decodeReceiptIcon(): Uint8Array {
@@ -209,9 +240,9 @@ function decodeReceiptIcon(): Uint8Array {
 }
 
 /**
- * Pads the 160px mark into the printable dot-width of 58mm (~384) or 80mm
- * (~576) paper, with extra room on the right so the grey strip on this
- * 58mm head cannot slice the icon.
+ * Centers the 160px mark on the full 58mm (~384) or 80mm (~576) raster so
+ * left and right paper margins match. Trailing dots stay blank, so the
+ * faint right edge of this 58mm head cannot slice the icon.
  */
 function centeredReceiptIcon(paperChars: 32 | 48): {
   width: number;
@@ -221,14 +252,13 @@ function centeredReceiptIcon(paperChars: 32 | 48): {
   const src = decodeReceiptIcon();
   const srcBytes = RECEIPT_ICON_WIDTH / 8;
   const paperDots = paperChars === 48 ? 576 : 384;
-  const canvas = Math.floor((paperDots - 48) / 8) * 8;
-  const leftBytes = Math.floor((canvas / 8 - srcBytes) / 2);
-  const canvasBytes = canvas / 8;
+  const canvasBytes = paperDots / 8;
+  const leftBytes = Math.floor((canvasBytes - srcBytes) / 2);
   const data = new Uint8Array(canvasBytes * RECEIPT_ICON_HEIGHT);
   for (let y = 0; y < RECEIPT_ICON_HEIGHT; y++) {
     data.set(src.subarray(y * srcBytes, y * srcBytes + srcBytes), y * canvasBytes + leftBytes);
   }
-  return { width: canvas, height: RECEIPT_ICON_HEIGHT, data };
+  return { width: paperDots, height: RECEIPT_ICON_HEIGHT, data };
 }
 
 const state: PrinterState = { kind: null, name: null, paperWidth: 32 };
@@ -668,9 +698,10 @@ async function send(data: Uint8Array): Promise<void> {
 }
 
 function layoutWidth(paperWidth: number) {
-  // 58mm Font A is 32 columns, but the last few sit on the weak edge of the
-  // head — that's why peso amounts on the right printed grey. Keep a margin.
-  return Math.max(20, paperWidth - 3);
+  // Same gap on both sides — the old paperWidth-3 inset only ate the right
+  // edge, so every line looked shoved left. Three columns on the left match
+  // the three weak columns on the right of this 58mm head.
+  return Math.max(20, paperWidth - SIDE_MARGIN * 2);
 }
 
 function money(amount: number): string {
@@ -724,7 +755,7 @@ export function referenceNumberFor(bookingId: string): string {
   return `${tail.slice(0, 4)}-${tail.slice(4)}`;
 }
 
-export function buildReceiptBytes(booking: Booking, room: Room, extras: ReceiptExtras): Uint8Array {
+function guestReceiptEncoder(booking: Booking, room: Room, extras: ReceiptExtras) {
   const width = layoutWidth(state.paperWidth);
   const encoder = createEncoder(width);
 
@@ -791,7 +822,19 @@ export function buildReceiptBytes(booking: Booking, room: Room, extras: ReceiptE
     .line("Thank you for staying!")
     .cut();
 
-  return encoder.encode();
+  return encoder;
+}
+
+export function buildReceiptBytes(booking: Booking, room: Room, extras: ReceiptExtras): Uint8Array {
+  return guestReceiptEncoder(booking, room, extras).encode();
+}
+
+export function previewGuestReceipt(
+  booking: Booking,
+  room: Room,
+  extras: ReceiptExtras
+): ReceiptPreviewLine[] {
+  return guestReceiptEncoder(booking, room, extras).getPreview();
 }
 
 export async function printThermalReceipt(booking: Booking, room: Room, extras: ReceiptExtras) {
@@ -819,11 +862,11 @@ export interface ExtensionReceiptExtras {
  * running total. Re-printing the full total here would look like the guest
  * is being charged for the original package again on top of the extension.
  */
-export function buildExtensionReceiptBytes(
+function extensionReceiptEncoder(
   booking: Booking,
   room: Room,
   extras: ExtensionReceiptExtras
-): Uint8Array {
+) {
   const width = layoutWidth(state.paperWidth);
   const encoder = createEncoder(width);
 
@@ -878,7 +921,23 @@ export function buildExtensionReceiptBytes(
     .line("Thank you for staying!")
     .cut();
 
-  return encoder.encode();
+  return encoder;
+}
+
+export function buildExtensionReceiptBytes(
+  booking: Booking,
+  room: Room,
+  extras: ExtensionReceiptExtras
+): Uint8Array {
+  return extensionReceiptEncoder(booking, room, extras).encode();
+}
+
+export function previewExtensionReceipt(
+  booking: Booking,
+  room: Room,
+  extras: ExtensionReceiptExtras
+): ReceiptPreviewLine[] {
+  return extensionReceiptEncoder(booking, room, extras).getPreview();
 }
 
 export async function printExtensionReceipt(booking: Booking, room: Room, extras: ExtensionReceiptExtras) {
@@ -932,7 +991,7 @@ export interface DailySalesReceiptData {
  * is a genuinely different, compact layout (one short block per booking)
  * rather than the same table shrunk down.
  */
-export function buildDailySalesReceiptBytes(data: DailySalesReceiptData): Uint8Array {
+function dailySalesReceiptEncoder(data: DailySalesReceiptData) {
   const width = layoutWidth(state.paperWidth);
   const rule = "-".repeat(width);
   const encoder = createEncoder(width);
@@ -1033,14 +1092,22 @@ export function buildDailySalesReceiptBytes(data: DailySalesReceiptData): Uint8A
     .line("Noted by:    __________")
     .cut();
 
-  return encoder.encode();
+  return encoder;
+}
+
+export function buildDailySalesReceiptBytes(data: DailySalesReceiptData): Uint8Array {
+  return dailySalesReceiptEncoder(data).encode();
+}
+
+export function previewDailySalesReceipt(data: DailySalesReceiptData): ReceiptPreviewLine[] {
+  return dailySalesReceiptEncoder(data).getPreview();
 }
 
 export async function printDailySalesReceipt(data: DailySalesReceiptData) {
   await send(buildDailySalesReceiptBytes(data));
 }
 
-export async function printTestPage() {
+function testPageEncoder() {
   const encoder = createEncoder();
   encoder
     .initialize()
@@ -1052,7 +1119,15 @@ export async function printTestPage() {
     .align("left")
     .line(new Date().toLocaleString("en-PH"))
     .cut();
-  await send(encoder.encode());
+  return encoder;
+}
+
+export function previewTestPage(): ReceiptPreviewLine[] {
+  return testPageEncoder().getPreview();
+}
+
+export async function printTestPage() {
+  await send(testPageEncoder().encode());
 }
 
 /** Sends the drawer-kick pulse — the drawer must be cabled into the printer's RJ11 port. */

@@ -16,9 +16,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ReceiptPreviewDialog } from "@/components/receipt-preview";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
-import { BluetoothIcon, CableIcon, PrinterIcon, SmartphoneIcon } from "lucide-react";
-import type { PairedPrinter } from "@/lib/receipt-printer";
+import { BluetoothIcon, CableIcon, EyeIcon, PrinterIcon, SmartphoneIcon } from "lucide-react";
+import { previewTestPage, type PairedPrinter } from "@/lib/receipt-printer";
 
 const KIND_LABELS: Record<string, string> = {
   bluetooth: "Bluetooth",
@@ -30,6 +31,7 @@ const KIND_LABELS: Record<string, string> = {
 export function PrinterStatus() {
   const printer = useReceiptPrinter();
   const [connecting, setConnecting] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   async function handleConnect(via: "bluetooth" | "serial" | "rawbt") {
     setConnecting(true);
@@ -83,6 +85,7 @@ export function PrinterStatus() {
   }
 
   return (
+    <>
     <Popover>
       <PopoverTrigger render={<Button variant="ghost" size="icon" className="relative" />}>
         <PrinterIcon className="size-5" />
@@ -116,6 +119,10 @@ export function PrinterStatus() {
                 {printer.name} · {printer.kind ? KIND_LABELS[printer.kind] : ""}
               </p>
               <div className="flex flex-col gap-1.5">
+                <Button variant="outline" size="sm" onClick={() => setPreviewOpen(true)}>
+                  <EyeIcon className="size-3.5" />
+                  Preview receipt
+                </Button>
                 <Button variant="outline" size="sm" onClick={handleTestPrint}>
                   Print test
                 </Button>
@@ -205,9 +212,24 @@ export function PrinterStatus() {
                 <SelectItem value="48">80mm (48 chars)</SelectItem>
               </SelectContent>
             </Select>
+            {!printer.connected ? (
+              <Button variant="outline" size="sm" onClick={() => setPreviewOpen(true)}>
+                <EyeIcon className="size-3.5" />
+                Preview receipt
+              </Button>
+            ) : null}
           </div>
         </div>
       </PopoverContent>
     </Popover>
+    <ReceiptPreviewDialog
+      open={previewOpen}
+      onOpenChange={setPreviewOpen}
+      lines={previewOpen ? previewTestPage() : []}
+      paperWidth={printer.paperWidth}
+      title="Printer test preview"
+      onPrint={printer.connected ? handleTestPrint : undefined}
+    />
+    </>
   );
 }

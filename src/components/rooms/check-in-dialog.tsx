@@ -29,6 +29,7 @@ import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { useAuth } from "@/context/auth-context";
 import {
   printThermalReceipt,
+  previewGuestReceipt,
   printerErrorMessage,
   referenceNumberFor,
   shouldOpenDrawer,
@@ -49,6 +50,7 @@ import {
   type RatePackage,
   type Room,
 } from "@/lib/types";
+import { ReceiptPreviewStrip } from "@/components/receipt-preview";
 import { Loader2Icon, MinusIcon, PlusIcon, PrinterIcon, SparklesIcon, WrenchIcon } from "lucide-react";
 
 interface CheckInDialogProps {
@@ -332,6 +334,20 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Staff</span>
                 <span>{staffName}</span>
+              </div>
+            </div>
+
+            <div className="print:hidden flex flex-col gap-2">
+              <p className="text-xs font-medium text-muted-foreground">Thermal printer preview</p>
+              <div className="max-h-72 overflow-y-auto rounded-md bg-muted/40 p-2">
+                <ReceiptPreviewStrip
+                  lines={previewGuestReceipt(receipt.booking, room, {
+                    staffName,
+                    finalAmountPaid: receipt.finalAmountPaid,
+                    change: receipt.change,
+                  })}
+                  paperWidth={printer.paperWidth}
+                />
               </div>
             </div>
 

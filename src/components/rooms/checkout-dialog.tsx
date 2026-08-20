@@ -23,7 +23,8 @@ import {
 import { type Booking, type Room } from "@/lib/types";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
-import { printThermalReceipt, printerErrorMessage, referenceNumberFor, shouldOpenDrawer, openCashDrawer } from "@/lib/receipt-printer";
+import { ReceiptPreviewStrip } from "@/components/receipt-preview";
+import { printThermalReceipt, previewGuestReceipt, printerErrorMessage, referenceNumberFor, shouldOpenDrawer, openCashDrawer } from "@/lib/receipt-printer";
 import {
   cashCollectedNow,
   collectedAmount,
@@ -382,6 +383,22 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
                 <span>{staffName}</span>
               </div>
             </div>
+
+            {settledBooking ? (
+              <div className="print:hidden flex flex-col gap-2">
+                <p className="text-xs font-medium text-muted-foreground">Thermal printer preview</p>
+                <div className="max-h-72 overflow-y-auto rounded-md bg-muted/40 p-2">
+                  <ReceiptPreviewStrip
+                    lines={previewGuestReceipt(settledBooking, room, {
+                      staffName,
+                      finalAmountPaid,
+                      change,
+                    })}
+                    paperWidth={printer.paperWidth}
+                  />
+                </div>
+              </div>
+            ) : null}
 
             <DialogFooter>
               <Button variant="outline" onClick={onClose}>

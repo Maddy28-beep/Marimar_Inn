@@ -45,7 +45,8 @@ import {
 import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
-import { printDailySalesReceipt, printerErrorMessage } from "@/lib/receipt-printer";
+import { ReceiptPreviewDialog } from "@/components/receipt-preview";
+import { printDailySalesReceipt, previewDailySalesReceipt, printerErrorMessage, type DailySalesReceiptData } from "@/lib/receipt-printer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card,
@@ -65,7 +66,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RevenueChart, SalesExpensesChart } from "@/components/reports/revenue-chart";
-import { CalendarRangeIcon, DownloadIcon, PrinterIcon } from "lucide-react";
+import { CalendarRangeIcon, DownloadIcon, EyeIcon, PrinterIcon } from "lucide-react";
 
 function todayInputValue(): string {
   const d = new Date();
@@ -163,6 +164,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   const [frontDesk, setFrontDesk] = useState("");
   const [housekeeping, setHousekeeping] = useState("");
   const [loading, setLoading] = useState(true);
+  const [thermalPreviewOpen, setThermalPreviewOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -400,49 +402,55 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
     ]);
   }
 
+  function dailySalesThermalData(): DailySalesReceiptData | null {
+    if (!salesReport) return null;
+    return {
+      // A short format ("Aug 16, 2026") on purpose — the full weekday
+      // format used elsewhere can run to 30 characters, right at the edge
+      // of 58mm (32-char) paper.
+      dateLabel:
+        new Date(`${dateValue}T00:00:00`).toLocaleDateString("en-PH", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        }) + (shift === "day" ? " (Day)" : shift === "night" ? " (Night)" : ""),
+      frontDesk: frontDesk.trim() || undefined,
+      housekeeping: housekeeping.trim() || undefined,
+      dutyTime: timeLabel,
+      rows: salesReport.rows.map((row) => ({
+        roomNumber: row.roomNumber,
+        refNumber: row.refNumber,
+        packageHours: row.packageHours,
+        extensionHours: row.extensionHours,
+        extensionAmount: row.extensionAmount,
+        totalRoomAmount: row.totalRoomAmount,
+        totalStoreAmount: row.totalStoreAmount,
+        totalPaid: row.totalPaid,
+        paymentMethodLabel: PAYMENT_METHOD_LABELS[row.paymentMethod],
+        gcashReference: row.gcashReference,
+        qrphReference: row.qrphReference,
+      })),
+      totals: salesReport.totals,
+      expenses: expenses.map((expense) => {
+        const when = expense.recordedAt?.toDate?.() ?? null;
+        return {
+          timeLabel: when
+            ? when.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })
+            : "",
+          shiftLabel: when ? shiftLabelForTime(when) : "",
+          description: expense.description,
+          cashierName: expense.cashierName,
+          amount: expense.amount,
+        };
+      }),
+    };
+  }
+
   async function handlePrintThermal() {
-    if (!salesReport || !printer.connected) return;
+    const data = dailySalesThermalData();
+    if (!data || !printer.connected) return;
     try {
-      await printDailySalesReceipt({
-        // A short format ("Aug 16, 2026") on purpose — the full weekday
-        // format used elsewhere can run to 30 characters, right at the edge
-        // of 58mm (32-char) paper.
-        dateLabel:
-          new Date(`${dateValue}T00:00:00`).toLocaleDateString("en-PH", {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-          }) + (shift === "day" ? " (Day)" : shift === "night" ? " (Night)" : ""),
-        frontDesk: frontDesk.trim() || undefined,
-        housekeeping: housekeeping.trim() || undefined,
-        dutyTime: timeLabel,
-        rows: salesReport.rows.map((row) => ({
-          roomNumber: row.roomNumber,
-          refNumber: row.refNumber,
-          packageHours: row.packageHours,
-          extensionHours: row.extensionHours,
-          extensionAmount: row.extensionAmount,
-          totalRoomAmount: row.totalRoomAmount,
-          totalStoreAmount: row.totalStoreAmount,
-          totalPaid: row.totalPaid,
-          paymentMethodLabel: PAYMENT_METHOD_LABELS[row.paymentMethod],
-          gcashReference: row.gcashReference,
-          qrphReference: row.qrphReference,
-        })),
-        totals: salesReport.totals,
-        expenses: expenses.map((expense) => {
-          const when = expense.recordedAt?.toDate?.() ?? null;
-          return {
-            timeLabel: when
-              ? when.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })
-              : "",
-            shiftLabel: when ? shiftLabelForTime(when) : "",
-            description: expense.description,
-            cashierName: expense.cashierName,
-            amount: expense.amount,
-          };
-        }),
-      });
+      await printDailySalesReceipt(data);
     } catch (error) {
       toast.error(printerErrorMessage(error));
     }
@@ -462,6 +470,13 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
       toast.error("Couldn't remove that expense.");
     }
   }
+
+  const thermalPreviewLines = thermalPreviewOpen
+    ? (() => {
+        const data = dailySalesThermalData();
+        return data ? previewDailySalesReceipt(data) : [];
+      })()
+    : [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -515,6 +530,15 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             <Button variant="outline" size="sm" onClick={handleExport} disabled={!report}>
               <DownloadIcon className="size-3.5" />
               Export Excel
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setThermalPreviewOpen(true)}
+              disabled={!salesReport}
+            >
+              <EyeIcon className="size-3.5" />
+              Preview (thermal)
             </Button>
             <Button
               variant="outline"
@@ -662,6 +686,14 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
           </Card>
         </div>
       )}
+      <ReceiptPreviewDialog
+        open={thermalPreviewOpen}
+        onOpenChange={setThermalPreviewOpen}
+        lines={thermalPreviewLines}
+        paperWidth={printer.paperWidth}
+        title="Daily sales receipt preview"
+        onPrint={printer.connected ? handlePrintThermal : undefined}
+      />
     </div>
   );
 }
