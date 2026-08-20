@@ -181,27 +181,47 @@ class EscPosBuilder {
   }
 
   pulse() {
-    return this.push(0x1b, 0x70, 0x00, 0x19, 0xfa);
+    // ESC p m t1 t2. m=0 is drawer pin 2, m=1 is pin 5 — cheap 58mm
+    // clones (and many 12V kits) wire the RJ11 the opposite of Epson, so
+    // the old pin-2-only kick is silent on a new printer. t1=0x3C is
+    // 120ms on (was 50ms); 12V solenoids often need that longer shove.
+    return this.push(
+      0x1b, 0x70, 0x00, 0x3c, 0xfa,
+      0x1b, 0x70, 0x01, 0x3c, 0xfa
+    );
   }
 
   /**
-   * GS v 0 raster bit image. Width must be a multiple of 8. Cheap 58mm
-   * heads ignore ESC a for graphics and clip the last ~24 dots, so callers
-   * should already have padded the bitmap to sit inside that safe area.
+   * ESC * 1 — 8-dot double-density column image. GS v 0 at full 384-dot
+   * width is silently dropped by this 58mm clone (the rest of the receipt
+   * still prints). 192 columns is within the head's ESC * limit, so the
+   * mark actually burns in. Center with ESC a beforehand; this command
+   * itself is left-to-right from the print position.
    */
-  raster(widthPx: number, heightPx: number, data: Uint8Array) {
+  bitImage(widthPx: number, heightPx: number, data: Uint8Array) {
     const widthBytes = widthPx / 8;
-    this.push(0x1d, 0x76, 0x30, 0x00);
-    this.push(widthBytes & 0xff, (widthBytes >> 8) & 0xff);
-    this.push(heightPx & 0xff, (heightPx >> 8) & 0xff);
-    for (let i = 0; i < data.length; i++) this.chunks.push(data[i]);
+    this.push(0x1b, 0x33, 0); // no extra line spacing; ESC J feeds the band
+    for (let y = 0; y < heightPx; y += 8) {
+      this.push(0x1b, 0x2a, 1, widthPx & 0xff, (widthPx >> 8) & 0xff);
+      for (let x = 0; x < widthPx; x++) {
+        let column = 0;
+        for (let row = 0; row < 8; row++) {
+          const yy = y + row;
+          if (yy >= heightPx) break;
+          const src = data[yy * widthBytes + (x >> 3)];
+          if (src & (0x80 >> (x & 7))) column |= 0x80 >> row;
+        }
+        this.push(column);
+      }
+      this.push(0x1b, 0x4a, Math.min(8, heightPx - y));
+    }
+    this.push(0x1b, 0x32); // default line spacing
     return this;
   }
 
   logo() {
     this.preview.push({ align: "center", text: "", logo: true });
-    const { width, height, data } = centeredReceiptIcon(state.paperWidth);
-    return this.raster(width, height, data).feed();
+    return this.bitImage(RECEIPT_ICON_WIDTH, RECEIPT_ICON_HEIGHT, decodeReceiptIcon()).feed();
   }
 
   getPreview(): ReceiptPreviewLine[] {
@@ -239,28 +259,6 @@ function decodeReceiptIcon(): Uint8Array {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
-}
-
-/**
- * Centers the 192px mark on the full 58mm (~384) or 80mm (~576) raster so
- * left and right paper margins match. Trailing dots stay blank, so the
- * faint right edge of this 58mm head cannot slice the icon.
- */
-function centeredReceiptIcon(paperChars: 32 | 48): {
-  width: number;
-  height: number;
-  data: Uint8Array;
-} {
-  const src = decodeReceiptIcon();
-  const srcBytes = RECEIPT_ICON_WIDTH / 8;
-  const paperDots = paperChars === 48 ? 576 : 384;
-  const canvasBytes = paperDots / 8;
-  const leftBytes = Math.floor((canvasBytes - srcBytes) / 2);
-  const data = new Uint8Array(canvasBytes * RECEIPT_ICON_HEIGHT);
-  for (let y = 0; y < RECEIPT_ICON_HEIGHT; y++) {
-    data.set(src.subarray(y * srcBytes, y * srcBytes + srcBytes), y * canvasBytes + leftBytes);
-  }
-  return { width: paperDots, height: RECEIPT_ICON_HEIGHT, data };
 }
 
 const state: PrinterState = { kind: null, name: null, paperWidth: 32 };
