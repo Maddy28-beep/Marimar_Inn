@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { PrinterIcon } from "lucide-react";
+import { RECEIPT_ICON_PNG_DATA_URL } from "@/lib/receipt-icon";
 import type { ReceiptPreviewLine } from "@/lib/receipt-printer";
 
 export function ReceiptPreviewStrip({
@@ -43,11 +44,12 @@ export function ReceiptPreviewStrip({
               <div key={index} className="mb-1 flex justify-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src="/logo/icon.png"
+                  src={RECEIPT_ICON_PNG_DATA_URL}
                   alt=""
-                  width={160}
-                  height={146}
-                  className="h-14 w-auto brightness-0 contrast-200"
+                  width={96}
+                  height={80}
+                  className="h-10 w-auto"
+                  style={{ imageRendering: "pixelated" }}
                 />
               </div>
             ) : (

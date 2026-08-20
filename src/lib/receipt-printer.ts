@@ -192,10 +192,9 @@ class EscPosBuilder {
   }
 
   /**
-   * ESC * 0 (8-dot single density). This head accepted ESC * (it did not
-   * dump binary as text) but GS v 0 either hid the mark or swallowed the
-   * rest of the job. m=0 stays inside the 58mm column limit. Line spacing
-   * is 0 so a skipped graphic does not feed a blank band before the title.
+   * ESC * m=0 (8-dot single density), then ESC J 8 to print that band.
+   * ESC J 0 on this clone does not fire the head — that is why earlier
+   * logos never appeared. A chunky 48x40 stencil stays well inside 58mm.
    */
   logo() {
     this.preview.push({ align: "center", text: "", logo: true });
@@ -214,7 +213,7 @@ class EscPosBuilder {
         }
         this.push(column);
       }
-      this.push(0x1b, 0x4a, 0);
+      this.push(0x1b, 0x4a, 8);
     }
     this.push(0x1b, 0x32);
     return this;
