@@ -174,6 +174,11 @@ class EscPosBuilder {
     return this.push(0x0a, 0x1d, 0x56, 0x42, 0x00);
   }
 
+  /** Pin 5 pulse inside the receipt job — must come before cut. */
+  kick() {
+    return this.push(...drawerPulse(1));
+  }
+
   finish() {
     return this.newline().newline().newline().cut();
   }
@@ -401,12 +406,18 @@ export async function forgetSavedPrinter(): Promise<void> {
   emit();
 }
 
+const DRAWER_CASH_ON_MIGRATION = "marimar-inn:cash-drawer-on-for-sales";
+
 export function isDrawerEnabled(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return localStorage.getItem(DRAWER_KEY) === "1";
+    if (!localStorage.getItem(DRAWER_CASH_ON_MIGRATION)) {
+      localStorage.setItem(DRAWER_CASH_ON_MIGRATION, "1");
+      localStorage.setItem(DRAWER_KEY, "1");
+    }
+    return localStorage.getItem(DRAWER_KEY) !== "0";
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -646,41 +657,26 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function concatBytes(...parts: Array<Uint8Array | number[]>): Uint8Array {
-  const chunks = parts.map((part) => (part instanceof Uint8Array ? part : Uint8Array.from(part)));
-  const out = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return out;
+/**
+ * Short ESC p (100ms). No printable text — Open drawer must not feed a slip.
+ * On a cash sale the pulse sits inside the receipt, before the cut.
+ */
+function drawerPulse(pin: 0 | 1): number[] {
+  return [0x07, 0x1b, 0x70, pin, 0x32, 0xfa];
 }
 
-/**
- * Short ESC p (100ms on / 500ms off), same timing the old 9V heads used.
- * A 510ms 0xFF pulse on this 12V JP58H can trip the drawer MOSFET and
- * abort. Kick-only Bluetooth writes are discarded, so a visible line is
- * printed first. Pin 5 then pin 2, with a gap so the second pulse is not
- * ignored. No DC2/DLE/GS extras — those desync this clone.
- */
-const DRAWER_SLIP = [
-  0x1b, 0x40, 0x1b, 0x61, 0x01,
-  ..."OPEN DRAWER\n".split("").map((ch) => ch.charCodeAt(0)),
-];
-
-function drawerPulse(pin: 0 | 1): number[] {
-  return [0x07, 0x1b, 0x70, pin, 0x32, 0xfa, 0x0a];
+async function sendPin2Kick(): Promise<void> {
+  await sleep(700);
+  await send(Uint8Array.from([0x1b, 0x40, ...drawerPulse(0)]));
 }
 
 async function sendDrawerKick(withReceipt?: Uint8Array): Promise<void> {
   if (withReceipt) {
-    await send(concatBytes(withReceipt, drawerPulse(1)));
+    await send(withReceipt);
   } else {
-    await send(concatBytes(DRAWER_SLIP, drawerPulse(1), [0x0a, 0x0a]));
+    await send(Uint8Array.from([0x1b, 0x40, ...drawerPulse(1)]));
   }
-  await sleep(700);
-  await send(concatBytes([0x1b, 0x40], drawerPulse(0)));
+  await sendPin2Kick();
 }
 
 export function printerErrorMessage(error: unknown): string {
@@ -888,8 +884,9 @@ function guestReceiptEncoder(booking: Booking, room: Room, extras: ReceiptExtras
     .align("center")
     .line(`Staff: ${extras.staffName}`)
     .newline()
-    .line("Thank you for staying!")
-    .finish();
+    .line("Thank you for staying!");
+  if (extras.kickDrawer) encoder.kick();
+  encoder.finish();
 
   return encoder;
 }
@@ -988,8 +985,9 @@ function extensionReceiptEncoder(
     .align("center")
     .line(`Staff: ${extras.staffName}`)
     .newline()
-    .line("Thank you for staying!")
-    .finish();
+    .line("Thank you for staying!");
+  if (extras.kickDrawer) encoder.kick();
+  encoder.finish();
 
   return encoder;
 }
@@ -1206,9 +1204,8 @@ export async function openCashDrawer() {
 }
 
 /**
- * Opens the drawer only when this payment actually includes cash — GCash
- * and QRPh stay closed. Also stays closed until the header "Drawer" switch
- * is turned on (no hardware yet).
+ * Opens the drawer when this payment includes cash. GCash and QRPh stay
+ * closed. Off only if the header switch was turned off.
  */
 export function shouldOpenDrawer(cashCollectedNow: number): boolean {
   return isDrawerEnabled() && cashCollectedNow > 0;

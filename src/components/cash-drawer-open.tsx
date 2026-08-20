@@ -57,7 +57,7 @@ export function OpenDrawerForm() {
 
     try {
       await openCashDrawer();
-      toast.success("Command sent. Look on the printer for an OPEN DRAWER slip.");
+      toast.success("Drawer command sent.");
       setPin("");
     } catch (error) {
       toast.error(printerErrorMessage(error));
