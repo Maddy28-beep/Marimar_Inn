@@ -84,6 +84,16 @@ export function PrinterStatus() {
     }
   }
 
+  async function handleForgetSaved() {
+    try {
+      await printer.forgetSavedPrinter();
+      printer.refreshPairedPrinters();
+      toast.success("Saved printer forgotten. Tap the printer you want to use.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't forget the saved printer.");
+    }
+  }
+
   return (
     <>
     <Popover>
@@ -218,6 +228,14 @@ export function PrinterStatus() {
                 Preview receipt
               </Button>
             ) : null}
+            <Button variant="ghost" size="sm" onClick={() => void handleForgetSaved()}>
+              Forget saved printer
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Clears the last printer this app remembered so it won&apos;t auto-connect
+              to the wrong one. Extra devices still in the list can be unpaired in
+              Android Settings → Bluetooth.
+            </p>
           </div>
         </div>
       </PopoverContent>

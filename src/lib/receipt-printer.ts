@@ -23,7 +23,9 @@ interface PrinterState {
 }
 
 const STORAGE_KEY = "marimar-inn:thermal-printer";
+const PAPER_KEY = "marimar-inn:thermal-paper-width";
 const DRAWER_KEY = "marimar-inn:cash-drawer-enabled";
+const SAVED_PRINTER_CLEARED_KEY = "marimar-inn:thermal-printer-cleared";
 const SIDE_MARGIN = 3;
 
 export interface ReceiptPreviewLine {
@@ -318,12 +320,17 @@ export function isNativePrinterApp(): boolean {
   return getNativePrinterBridge() !== null;
 }
 
+const PRINTER_NAME_HINT =
+  /printer|print|pos|rpp|mtp|xprinter|xp-|zjiang|thermal|esc\s*pos|gp-|innerprint|58mm|80mm/i;
+
 export function listNativePairedPrinters(): PairedPrinter[] {
   const bridge = getNativePrinterBridge();
   if (!bridge) return [];
   try {
     const parsed = JSON.parse(bridge.listPairedJson()) as PairedPrinter[];
-    return Array.isArray(parsed) ? parsed.filter((item) => item?.id && item?.name) : [];
+    const all = Array.isArray(parsed) ? parsed.filter((item) => item?.id && item?.name) : [];
+    const printers = all.filter((item) => PRINTER_NAME_HINT.test(item.name));
+    return printers.length > 0 ? printers : all;
   } catch {
     return [];
   }
@@ -339,15 +346,59 @@ export async function connectNativePrinter(printer: PairedPrinter): Promise<void
   state.kind = "native";
   state.name = printer.name;
   emit();
-  const existing = loadStoredDevice();
-  const paperWidth = existing?.paperWidth ?? state.paperWidth;
+  const paperWidth = readPaperWidth();
   state.paperWidth = paperWidth;
   saveStoredDevice({ kind: "native", paperWidth, bluetoothId: printer.id, name: printer.name });
+}
+
+function readPaperWidth(): 32 | 48 {
+  if (typeof window === "undefined") return 32;
+  try {
+    const raw = localStorage.getItem(PAPER_KEY);
+    if (raw === "32" || raw === "48") return Number(raw) as 32 | 48;
+    const stored = loadStoredDevice();
+    if (stored?.paperWidth === 32 || stored?.paperWidth === 48) return stored.paperWidth;
+  } catch {
+    // Fall through to the default 58mm width.
+  }
+  return 32;
+}
+
+function persistPaperWidth(width: 32 | 48) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(PAPER_KEY, String(width));
+}
+
+/**
+ * Old Bluetooth IDs were kept in localStorage and silently reconnected on
+ * every load — that fights a newly paired printer. Wipe once, keep paper width.
+ */
+function discardLegacySavedPrinter() {
+  if (typeof window === "undefined") return;
+  try {
+    if (localStorage.getItem(SAVED_PRINTER_CLEARED_KEY) === "1") return;
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      try {
+        const stored = JSON.parse(raw) as StoredDevice;
+        if (stored?.paperWidth === 32 || stored?.paperWidth === 48) {
+          persistPaperWidth(stored.paperWidth);
+        }
+      } catch {
+        // Corrupt JSON — still drop it.
+      }
+    }
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.setItem(SAVED_PRINTER_CLEARED_KEY, "1");
+  } catch {
+    // Private mode / blocked storage — reconnect simply won't have a target.
+  }
 }
 
 function loadStoredDevice(): StoredDevice | null {
   if (typeof window === "undefined") return null;
   try {
+    discardLegacySavedPrinter();
     const raw = localStorage.getItem(STORAGE_KEY);
     return raw ? (JSON.parse(raw) as StoredDevice) : null;
   } catch {
@@ -357,7 +408,51 @@ function loadStoredDevice(): StoredDevice | null {
 
 function saveStoredDevice(device: StoredDevice) {
   if (typeof window === "undefined") return;
+  persistPaperWidth(device.paperWidth);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(device));
+}
+
+export function hasSavedPrinter(): boolean {
+  const stored = loadStoredDevice();
+  return Boolean(stored?.kind);
+}
+
+async function forgetWebBluetoothDevices() {
+  const bluetooth = navigator.bluetooth;
+  if (!bluetooth?.getDevices) return;
+  try {
+    const devices = await bluetooth.getDevices();
+    await Promise.all(
+      devices.map(async (device) => {
+        const forget = (device as BluetoothDevice & { forget?: () => Promise<void> }).forget;
+        if (typeof forget === "function") {
+          try {
+            await forget.call(device);
+          } catch {
+            // Browser kept the grant — localStorage is still cleared.
+          }
+        }
+      })
+    );
+  } catch {
+    // getDevices() is still experimental in some WebViews.
+  }
+}
+
+/** Disconnects and forgets the last saved printer so it cannot auto-reconnect. */
+export async function forgetSavedPrinter(): Promise<void> {
+  disconnectPrinter();
+  await forgetWebBluetoothDevices();
+  if (typeof window === "undefined") return;
+  const width = readPaperWidth();
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Ignore.
+  }
+  persistPaperWidth(width);
+  state.paperWidth = width;
+  emit();
 }
 
 export function isDrawerEnabled(): boolean {
@@ -381,8 +476,7 @@ function onSerialConnected(info: SerialPrinterInfo) {
   state.name = info.productName || "Serial printer";
   emit();
 
-  const existing = loadStoredDevice();
-  const paperWidth = existing?.paperWidth ?? state.paperWidth;
+  const paperWidth = readPaperWidth();
   state.paperWidth = paperWidth;
   saveStoredDevice({ kind: "serial", paperWidth, serialVendorId: info.vendorId, serialProductId: info.productId });
 }
@@ -394,8 +488,7 @@ function onBleConnected(name: string, id: string, profile: BleLePrinterProfile) 
   state.name = name;
   emit();
 
-  const existing = loadStoredDevice();
-  const paperWidth = existing?.paperWidth ?? state.paperWidth;
+  const paperWidth = readPaperWidth();
   state.paperWidth = paperWidth;
   saveStoredDevice({ kind: "bluetooth", paperWidth, bluetoothId: id });
 }
@@ -473,8 +566,7 @@ export async function connectRawBtPrinter(): Promise<void> {
   state.name = "RawBT app";
   emit();
 
-  const existing = loadStoredDevice();
-  const paperWidth = existing?.paperWidth ?? state.paperWidth;
+  const paperWidth = readPaperWidth();
   state.paperWidth = paperWidth;
   saveStoredDevice({ kind: "rawbt", paperWidth });
 }
@@ -498,8 +590,11 @@ export async function tryReconnectPrinter(): Promise<void> {
   if (state.kind !== null) return;
 
   const stored = loadStoredDevice();
-  if (!stored) return;
-  state.paperWidth = stored.paperWidth;
+  state.paperWidth = stored?.paperWidth ?? readPaperWidth();
+  if (!stored) {
+    emit();
+    return;
+  }
 
   try {
     if (stored.kind === "bluetooth" && stored.bluetoothId) {
@@ -554,6 +649,7 @@ export function disconnectPrinter() {
 
 export function setPaperWidth(width: 32 | 48) {
   state.paperWidth = width;
+  persistPaperWidth(width);
   const stored = loadStoredDevice();
   if (stored) saveStoredDevice({ ...stored, paperWidth: width });
   emit();

@@ -7,6 +7,7 @@ import {
   connectRawBtPrinter,
   connectSerialPrinter,
   disconnectPrinter,
+  forgetSavedPrinter,
   getPrinterState,
   isNativePrinterApp,
   listNativePairedPrinters,
@@ -49,6 +50,7 @@ export function useReceiptPrinter() {
     connectRawBt: connectRawBtPrinter,
     connectNative: connectNativePrinter,
     disconnect: disconnectPrinter,
+    forgetSavedPrinter,
     printTest: printTestPage,
   };
 }
