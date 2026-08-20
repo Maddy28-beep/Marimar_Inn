@@ -8,6 +8,11 @@ import {
   type Room,
 } from "@/lib/types";
 import { paymentPortionLines } from "@/lib/bookings";
+import {
+  RECEIPT_ICON_BASE64,
+  RECEIPT_ICON_HEIGHT,
+  RECEIPT_ICON_WIDTH,
+} from "@/lib/receipt-icon";
 
 type PrinterKind = "bluetooth" | "serial" | "rawbt" | "native";
 
@@ -151,6 +156,25 @@ class EscPosBuilder {
     return this.push(0x1b, 0x70, 0x00, 0x19, 0xfa);
   }
 
+  /**
+   * GS v 0 raster bit image. Width must be a multiple of 8. Cheap 58mm
+   * heads ignore ESC a for graphics and clip the last ~24 dots, so callers
+   * should already have padded the bitmap to sit inside that safe area.
+   */
+  raster(widthPx: number, heightPx: number, data: Uint8Array) {
+    const widthBytes = widthPx / 8;
+    this.push(0x1d, 0x76, 0x30, 0x00);
+    this.push(widthBytes & 0xff, (widthBytes >> 8) & 0xff);
+    this.push(heightPx & 0xff, (heightPx >> 8) & 0xff);
+    for (let i = 0; i < data.length; i++) this.chunks.push(data[i]);
+    return this;
+  }
+
+  logo() {
+    const { width, height, data } = centeredReceiptIcon(state.paperWidth);
+    return this.raster(width, height, data).newline();
+  }
+
   encode() {
     return Uint8Array.from(this.chunks);
   }
@@ -175,6 +199,36 @@ function toPrinterAscii(value: string): string {
 
 function createEncoder(_width?: number) {
   return new EscPosBuilder();
+}
+
+function decodeReceiptIcon(): Uint8Array {
+  const bin = atob(RECEIPT_ICON_BASE64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/**
+ * Pads the 160px mark into the printable dot-width of 58mm (~384) or 80mm
+ * (~576) paper, with extra room on the right so the grey strip on this
+ * 58mm head cannot slice the icon.
+ */
+function centeredReceiptIcon(paperChars: 32 | 48): {
+  width: number;
+  height: number;
+  data: Uint8Array;
+} {
+  const src = decodeReceiptIcon();
+  const srcBytes = RECEIPT_ICON_WIDTH / 8;
+  const paperDots = paperChars === 48 ? 576 : 384;
+  const canvas = Math.floor((paperDots - 48) / 8) * 8;
+  const leftBytes = Math.floor((canvas / 8 - srcBytes) / 2);
+  const canvasBytes = canvas / 8;
+  const data = new Uint8Array(canvasBytes * RECEIPT_ICON_HEIGHT);
+  for (let y = 0; y < RECEIPT_ICON_HEIGHT; y++) {
+    data.set(src.subarray(y * srcBytes, y * srcBytes + srcBytes), y * canvasBytes + leftBytes);
+  }
+  return { width: canvas, height: RECEIPT_ICON_HEIGHT, data };
 }
 
 const state: PrinterState = { kind: null, name: null, paperWidth: 32 };
@@ -677,6 +731,7 @@ export function buildReceiptBytes(booking: Booking, room: Room, extras: ReceiptE
   encoder
     .initialize()
     .align("center")
+    .logo()
     .line("Marimar Inn")
     .line("This is not an official receipt")
     .line(`Ref: ${referenceNumberFor(booking.bookingId)}`)
@@ -775,6 +830,7 @@ export function buildExtensionReceiptBytes(
   encoder
     .initialize()
     .align("center")
+    .logo()
     .line("Marimar Inn")
     .line("Extension Receipt")
     .line(`Ref: ${referenceNumberFor(booking.bookingId)}`)
@@ -884,6 +940,7 @@ export function buildDailySalesReceiptBytes(data: DailySalesReceiptData): Uint8A
   encoder
     .initialize()
     .align("center")
+    .logo()
     .line("Marimar Inn")
     .line("Daily Sales Report");
 
@@ -988,6 +1045,7 @@ export async function printTestPage() {
   encoder
     .initialize()
     .align("center")
+    .logo()
     .line("Marimar Inn")
     .line("Printer test")
     .newline()
