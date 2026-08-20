@@ -1,7 +1,7 @@
 import { collection, getDocs, query, Timestamp, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { referenceNumberFor } from "@/lib/receipt-printer";
-import type { Booking, PaymentMethod, Room, RoomType } from "@/lib/types";
+import type { Booking, PaymentMethod, Room, RoomType, ShiftExpense } from "@/lib/types";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -305,6 +305,72 @@ export interface DailyRevenuePoint {
   fbRevenue: number;
   total: number;
   checkIns: number;
+}
+
+export interface RangeDayPoint {
+  date: string;
+  checkIns: number;
+  roomRevenue: number;
+  storeRevenue: number;
+  sales: number;
+  expenses: number;
+  net: number;
+}
+
+/**
+ * One row per calendar day in [from, to], inclusive. Sales follow check-in
+ * date (same as the daily report); expenses follow recordedAt so a fare
+ * logged at 1 AM lands on that calendar day.
+ */
+export function computeRangeDailySeries(
+  from: Date,
+  to: Date,
+  bookings: Booking[],
+  expenses: ShiftExpense[]
+): RangeDayPoint[] {
+  bookings = bookings.filter((b) => b.status !== "voided");
+
+  const map = new Map<string, RangeDayPoint>();
+  const cursor = startOfDay(from);
+  const last = startOfDay(to);
+  while (cursor.getTime() <= last.getTime()) {
+    const key = dateKey(cursor);
+    map.set(key, {
+      date: key,
+      checkIns: 0,
+      roomRevenue: 0,
+      storeRevenue: 0,
+      sales: 0,
+      expenses: 0,
+      net: 0,
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  for (const booking of bookings) {
+    const point = map.get(dateKey(booking.checkInTime.toDate()));
+    if (!point) continue;
+    const room = booking.totalRoomCharge ?? 0;
+    const store = booking.totalFbCharge ?? 0;
+    point.checkIns += 1;
+    point.roomRevenue += room;
+    point.storeRevenue += store;
+    point.sales += room + store;
+  }
+
+  for (const expense of expenses) {
+    const when = expense.recordedAt?.toDate?.();
+    if (!when) continue;
+    const point = map.get(dateKey(when));
+    if (!point) continue;
+    point.expenses += expense.amount ?? 0;
+  }
+
+  for (const point of map.values()) {
+    point.net = point.sales - point.expenses;
+  }
+
+  return Array.from(map.values());
 }
 
 export interface RoomTypeRevenue {

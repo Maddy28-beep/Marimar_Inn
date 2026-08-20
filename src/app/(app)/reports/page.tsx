@@ -11,14 +11,18 @@ import {
   computeDailySalesReport,
   computeMonthlyReport,
   computeOverdueHistory,
+  computeRangeDailySeries,
+  endOfDay,
   endOfMonth,
   fetchActiveBookings,
   fetchBookingsInRange,
+  startOfDay,
   startOfMonth,
   type DailyReport,
   type DailySalesReport,
   type MonthlyReport,
   type OverdueRecord,
+  type RangeDayPoint,
 } from "@/lib/reports";
 import { DailySalesTable } from "@/components/reports/daily-sales-table";
 import { AddExpenseForm } from "@/components/expenses/add-expense-form";
@@ -60,7 +64,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RevenueChart } from "@/components/reports/revenue-chart";
+import { RevenueChart, SalesExpensesChart } from "@/components/reports/revenue-chart";
 import { DownloadIcon, PrinterIcon } from "lucide-react";
 
 function todayInputValue(): string {
@@ -71,6 +75,11 @@ function todayInputValue(): string {
 function thisMonthInputValue(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function firstOfMonthInputValue(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
 type ShiftFilter = "fullDay" | "day" | "night";
@@ -907,6 +916,371 @@ function MonthlyReportTab({ rooms }: { rooms: Room[] | null }) {
   );
 }
 
+function RangeReportTab() {
+  const [fromValue, setFromValue] = useState(firstOfMonthInputValue);
+  const [toValue, setToValue] = useState(todayInputValue);
+  const [days, setDays] = useState<RangeDayPoint[]>([]);
+  const [salesReport, setSalesReport] = useState<DailySalesReport | null>(null);
+  const [expenses, setExpenses] = useState<ShiftExpense[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const from = fromValue <= toValue ? fromValue : toValue;
+      const to = fromValue <= toValue ? toValue : fromValue;
+      const start = startOfDay(new Date(`${from}T00:00:00`));
+      const end = endOfDay(new Date(`${to}T00:00:00`));
+      const spanDays = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+      if (spanDays > 366) {
+        toast.error("Pick a range of 1 year or less.");
+        return;
+      }
+      setLoading(true);
+      try {
+        const [bookings, rangeExpenses] = await Promise.all([
+          fetchBookingsInRange("checkInTime", start, end),
+          fetchExpensesInRange(start, end),
+        ]);
+        if (!cancelled) {
+          setDays(computeRangeDailySeries(start, end, bookings, rangeExpenses));
+          setSalesReport(computeDailySalesReport(bookings));
+          setExpenses(rangeExpenses);
+        }
+      } catch {
+        if (!cancelled) toast.error("Couldn't load that date range.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [fromValue, toValue]);
+
+  const from = fromValue <= toValue ? fromValue : toValue;
+  const to = fromValue <= toValue ? toValue : fromValue;
+  const rangeLabel = `${formatReportDate(from)} — ${formatReportDate(to)}`;
+  const expenseTotal = totalExpenses(expenses);
+  const salesTotal = days.reduce((sum, day) => sum + day.sales, 0);
+  const roomTotal = days.reduce((sum, day) => sum + day.roomRevenue, 0);
+  const storeTotal = days.reduce((sum, day) => sum + day.storeRevenue, 0);
+  const checkIns = days.reduce((sum, day) => sum + day.checkIns, 0);
+  const netSales = salesTotal - expenseTotal;
+
+  async function handleExport() {
+    await exportToExcel(`marimar-inn-range-${from}-to-${to}`, [
+      {
+        name: "Overview",
+        title: "Custom range report",
+        subtitle: rangeLabel,
+        tables: [
+          {
+            heading: "Overall",
+            columns: [
+              { header: "Metric", key: "metric", width: 28 },
+              { header: "Value", key: "value", width: 22, format: "auto" },
+            ],
+            rows: [
+              { metric: "From", value: formatReportDate(from) },
+              { metric: "To", value: formatReportDate(to) },
+              { metric: "Check-ins", value: checkIns },
+              { metric: "Room revenue", value: roomTotal },
+              { metric: "Store items revenue", value: storeTotal },
+              { metric: "Total sales", value: salesTotal },
+              { metric: "Cash collected", value: salesReport?.totals.cashCollected ?? 0 },
+              { metric: "GCash collected", value: salesReport?.totals.gcashCollected ?? 0 },
+              { metric: "QRPh collected", value: salesReport?.totals.qrphCollected ?? 0 },
+              { metric: "Expenses", value: expenseTotal },
+              { metric: "Net sales", value: netSales },
+            ],
+            emphasizeLastRow: true,
+          },
+        ],
+      },
+      {
+        name: "By day",
+        title: "Sales and expenses by day",
+        subtitle: rangeLabel,
+        tables: [
+          {
+            columns: [
+              { header: "Date", key: "date", width: 16 },
+              { header: "Check-ins", key: "checkIns", width: 12, format: "integer" },
+              { header: "Room", key: "room", width: 14, format: "currency" },
+              { header: "Store", key: "store", width: 14, format: "currency" },
+              { header: "Sales", key: "sales", width: 14, format: "currency" },
+              { header: "Expenses", key: "expenses", width: 14, format: "currency" },
+              { header: "Net", key: "net", width: 14, format: "currency" },
+            ],
+            rows: [
+              ...days.map((day) => ({
+                date: day.date,
+                checkIns: day.checkIns,
+                room: day.roomRevenue,
+                store: day.storeRevenue,
+                sales: day.sales,
+                expenses: day.expenses,
+                net: day.net,
+              })),
+              {
+                date: "Total",
+                checkIns,
+                room: roomTotal,
+                store: storeTotal,
+                sales: salesTotal,
+                expenses: expenseTotal,
+                net: netSales,
+              },
+            ],
+            emphasizeLastRow: true,
+          },
+        ],
+      },
+      {
+        name: "Expenses",
+        title: "Expenses",
+        subtitle: rangeLabel,
+        tables: [
+          {
+            columns: [
+              { header: "Date", key: "date", width: 16 },
+              { header: "Time", key: "time", width: 12 },
+              { header: "Shift", key: "shift", width: 10 },
+              { header: "What for", key: "description", width: 28 },
+              { header: "Staff", key: "staff", width: 18 },
+              { header: "Amount", key: "amount", width: 14, format: "currency" as const },
+            ],
+            rows:
+              expenses.length === 0
+                ? [{ date: "No expenses in this range.", time: "", shift: "", description: "", staff: "", amount: "" }]
+                : [
+                    ...expenses.map((expense) => {
+                      const when = expense.recordedAt?.toDate?.() ?? null;
+                      return {
+                        date: when
+                          ? `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, "0")}-${String(when.getDate()).padStart(2, "0")}`
+                          : "",
+                        time: when
+                          ? when.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })
+                          : "",
+                        shift: when ? shiftLabelForTime(when) : "",
+                        description: expense.description,
+                        staff: expense.cashierName,
+                        amount: expense.amount,
+                      };
+                    }),
+                    {
+                      date: "Total",
+                      time: "",
+                      shift: "",
+                      description: "",
+                      staff: "",
+                      amount: expenseTotal,
+                    },
+                  ],
+            emphasizeLastRow: expenses.length > 0,
+          },
+        ],
+      },
+    ]);
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+            From
+            <Input type="date" value={fromValue} onChange={(e) => setFromValue(e.target.value)} className="w-44" />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+            To
+            <Input type="date" value={toValue} onChange={(e) => setToValue(e.target.value)} className="w-44" />
+          </label>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleExport} disabled={loading}>
+            <DownloadIcon className="size-3.5" />
+            Export Excel
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => window.print()} disabled={loading}>
+            <PrinterIcon className="size-3.5" />
+            Print / PDF
+          </Button>
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : (
+        <div className="print-area flex flex-col gap-4">
+          <div className="hidden text-center print:block">
+            <div className="font-heading text-lg font-semibold">Marimar Inn - Davao</div>
+            <div className="text-sm">Custom range report</div>
+            <div className="text-xs text-muted-foreground">{rangeLabel}</div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <StatCard label="Check-ins" value={String(checkIns)} />
+            <StatCard label="Room revenue" value={peso(roomTotal)} />
+            <StatCard label="Store items" value={peso(storeTotal)} />
+            <StatCard label="Total sales" value={peso(salesTotal)} />
+            <StatCard label="Expenses" value={peso(expenseTotal)} />
+            <StatCard label="Net sales" value={peso(netSales)} />
+          </div>
+
+          {salesReport && (
+            <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-lg border bg-muted/50 p-3 text-sm">
+              <div>
+                <span className="text-muted-foreground">Cash collected</span>{" "}
+                <span className="font-medium">{peso(salesReport.totals.cashCollected)}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">GCash collected</span>{" "}
+                <span className="font-medium">{peso(salesReport.totals.gcashCollected)}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">QRPh collected</span>{" "}
+                <span className="font-medium">{peso(salesReport.totals.qrphCollected)}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Total collected</span>{" "}
+                <span className="font-medium">{peso(salesReport.totals.totalPaid)}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Net after expenses</span>{" "}
+                <span className="font-medium">{peso(salesReport.totals.totalPaid - expenseTotal)}</span>
+              </div>
+            </div>
+          )}
+
+          {days.length <= 62 && (
+            <Card className="print:hidden">
+              <CardHeader>
+                <CardTitle>Sales vs expenses</CardTitle>
+                <CardDescription>{rangeLabel}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <SalesExpensesChart data={days} />
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>By day</CardTitle>
+              <CardDescription>Sales, expenses, and net for each date in the range.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-muted-foreground">
+                    <tr>
+                      <th className="py-1 font-medium">Date</th>
+                      <th className="py-1 font-medium">Check-ins</th>
+                      <th className="py-1 font-medium text-right">Room</th>
+                      <th className="py-1 font-medium text-right">Store</th>
+                      <th className="py-1 font-medium text-right">Sales</th>
+                      <th className="py-1 font-medium text-right">Expenses</th>
+                      <th className="py-1 font-medium text-right">Net</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {days.map((day) => (
+                      <tr key={day.date} className="border-t">
+                        <td className="py-1.5 whitespace-nowrap">{day.date}</td>
+                        <td className="py-1.5">{day.checkIns}</td>
+                        <td className="py-1.5 text-right whitespace-nowrap">{peso(day.roomRevenue)}</td>
+                        <td className="py-1.5 text-right whitespace-nowrap">{peso(day.storeRevenue)}</td>
+                        <td className="py-1.5 text-right whitespace-nowrap">{peso(day.sales)}</td>
+                        <td className="py-1.5 text-right whitespace-nowrap">{peso(day.expenses)}</td>
+                        <td className="py-1.5 text-right whitespace-nowrap font-medium">{peso(day.net)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t bg-muted font-medium">
+                      <td className="py-1.5">Total</td>
+                      <td className="py-1.5">{checkIns}</td>
+                      <td className="py-1.5 text-right whitespace-nowrap">{peso(roomTotal)}</td>
+                      <td className="py-1.5 text-right whitespace-nowrap">{peso(storeTotal)}</td>
+                      <td className="py-1.5 text-right whitespace-nowrap">{peso(salesTotal)}</td>
+                      <td className="py-1.5 text-right whitespace-nowrap">{peso(expenseTotal)}</td>
+                      <td className="py-1.5 text-right whitespace-nowrap">{peso(netSales)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Expenses</CardTitle>
+              <CardDescription>
+                {expenses.length === 0
+                  ? "No expenses in this range."
+                  : `${expenses.length} ${expenses.length === 1 ? "entry" : "entries"} · ${peso(expenseTotal)}`}
+              </CardDescription>
+            </CardHeader>
+            {expenses.length > 0 && (
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="text-left text-muted-foreground">
+                      <tr>
+                        <th className="py-1 font-medium">Date</th>
+                        <th className="py-1 font-medium">Time</th>
+                        <th className="py-1 font-medium">Shift</th>
+                        <th className="py-1 font-medium">What for</th>
+                        <th className="py-1 font-medium">Staff</th>
+                        <th className="py-1 font-medium text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {expenses.map((expense) => {
+                        const when = expense.recordedAt?.toDate?.() ?? null;
+                        return (
+                          <tr key={expense.expenseId} className="border-t">
+                            <td className="py-1.5 whitespace-nowrap">
+                              {when
+                                ? `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, "0")}-${String(when.getDate()).padStart(2, "0")}`
+                                : "—"}
+                            </td>
+                            <td className="py-1.5 whitespace-nowrap">
+                              {when
+                                ? when.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })
+                                : "—"}
+                            </td>
+                            <td className="py-1.5">{when ? shiftLabelForTime(when) : "—"}</td>
+                            <td className="py-1.5">{expense.description}</td>
+                            <td className="py-1.5 whitespace-nowrap">{expense.cashierName}</td>
+                            <td className="py-1.5 text-right whitespace-nowrap">{peso(expense.amount)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t bg-muted font-medium">
+                        <td className="py-1.5" colSpan={5}>
+                          Total expenses
+                        </td>
+                        <td className="py-1.5 text-right whitespace-nowrap">{peso(expenseTotal)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InventoryReportTab() {
   const [items, setItems] = useState<InventoryItem[] | null>(null);
   const [monthValue, setMonthValue] = useState(thisMonthInputValue());
@@ -1164,7 +1538,7 @@ function ReportsContent() {
         <h1 className="font-heading text-2xl font-semibold tracking-tight">Reports</h1>
         <p className="text-sm text-muted-foreground">
           {isOwner
-            ? "Revenue, occupancy, sales, and overdue tracking — daily, monthly, and inventory views."
+            ? "Revenue, occupancy, sales, and overdue tracking — daily, custom range, monthly, and inventory views."
             : "Today's sales — print or export to hand off at end of shift."}
         </p>
       </div>
@@ -1173,12 +1547,16 @@ function ReportsContent() {
         <Tabs defaultValue="daily">
           <TabsList>
             <TabsTrigger value="daily">Daily</TabsTrigger>
+            <TabsTrigger value="range">Custom range</TabsTrigger>
             <TabsTrigger value="monthly">Monthly</TabsTrigger>
             <TabsTrigger value="overdue">Overdue</TabsTrigger>
             <TabsTrigger value="inventory">Inventory</TabsTrigger>
           </TabsList>
           <TabsContent value="daily">
             <DailyReportTab rooms={rooms} />
+          </TabsContent>
+          <TabsContent value="range">
+            <RangeReportTab />
           </TabsContent>
           <TabsContent value="monthly">
             <MonthlyReportTab rooms={rooms} />
