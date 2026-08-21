@@ -1,5 +1,6 @@
 import { collection, getDocs, query, Timestamp, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { bookingExtras } from "@/lib/booking-extras";
 import { referenceNumberFor } from "@/lib/receipt-printer";
 import type { Booking, PaymentMethod, Room, RoomType, ShiftExpense, StoreSale } from "@/lib/types";
 
@@ -139,6 +140,9 @@ export interface DailySalesRow {
   packageAmount: number;
   extensionHours: number;
   extensionAmount: number;
+  extrasLabel: string;
+  extrasAmount: number;
+  amenityAmount: number;
   actualCheckOutTime: Date | null;
   totalRoomAmount: number;
   totalStoreAmount: number;
@@ -154,6 +158,8 @@ export interface DailySalesRow {
 export interface DailySalesTotals {
   packageAmount: number;
   extensionAmount: number;
+  extrasAmount: number;
+  amenityAmount: number;
   totalRoomAmount: number;
   totalStoreAmount: number;
   totalPaid: number;
@@ -180,9 +186,22 @@ export function computeDailySalesReport(
     .filter((b) => b.status !== "voided")
     .sort((a, b) => a.checkInTime.toMillis() - b.checkInTime.toMillis())
     .map((booking) => {
+      const extras = bookingExtras(booking);
       const packageHours = booking.originalPackageHours ?? booking.hoursBooked;
       const packageAmount = booking.originalPackagePrice ?? booking.totalRoomCharge ?? 0;
       const totalRoomAmount = booking.totalRoomCharge ?? 0;
+      const leftoverRoom = Math.max(0, totalRoomAmount - packageAmount);
+      const extensionHours = Math.max(0, (booking.hoursBooked ?? packageHours) - packageHours);
+      // Extra person is billed on the room, not as stay hours. Without this
+      // split it lands in "Ext amt" with a blank Ext hrs column.
+      let extrasAmount = extras.extrasAmount;
+      let extrasLabel = extras.extrasLabel;
+      let extensionAmount = Math.max(0, leftoverRoom - extras.extraPersonAmount);
+      if (extras.extraPersonAmount === 0 && extensionHours === 0 && leftoverRoom > 0) {
+        extrasAmount += leftoverRoom;
+        extrasLabel = extrasLabel || "Extra/Request";
+        extensionAmount = 0;
+      }
       const checkInDate = booking.checkInTime.toDate();
       return {
         bookingId: booking.bookingId,
@@ -193,11 +212,14 @@ export function computeDailySalesReport(
         checkInTime: checkInDate,
         scheduledCheckOutTime: new Date(checkInDate.getTime() + packageHours * 60 * 60 * 1000),
         packageAmount,
-        extensionHours: Math.max(0, (booking.hoursBooked ?? packageHours) - packageHours),
-        extensionAmount: Math.max(0, totalRoomAmount - packageAmount),
+        extensionHours,
+        extensionAmount,
+        extrasLabel,
+        extrasAmount,
+        amenityAmount: extras.amenityAmount,
         actualCheckOutTime: booking.checkOutTime ? booking.checkOutTime.toDate() : null,
         totalRoomAmount,
-        totalStoreAmount: booking.totalFbCharge ?? 0,
+        totalStoreAmount: Math.max(0, (booking.totalFbCharge ?? 0) - extras.amenityAmount),
         totalPaid: booking.amountPaid ?? 0,
         paymentMethod: booking.paymentMethod,
         gcashReference: booking.gcashReference,
@@ -221,6 +243,9 @@ export function computeDailySalesReport(
       packageAmount: 0,
       extensionHours: 0,
       extensionAmount: 0,
+      extrasLabel: "",
+      extrasAmount: 0,
+      amenityAmount: 0,
       actualCheckOutTime: when,
       totalRoomAmount: 0,
       totalStoreAmount: sale.totalAmount ?? 0,
@@ -240,6 +265,8 @@ export function computeDailySalesReport(
     (acc, row) => {
       acc.packageAmount += row.packageAmount;
       acc.extensionAmount += row.extensionAmount;
+      acc.extrasAmount += row.extrasAmount;
+      acc.amenityAmount += row.amenityAmount;
       acc.totalRoomAmount += row.totalRoomAmount;
       acc.totalStoreAmount += row.totalStoreAmount;
       acc.totalPaid += row.totalPaid;
@@ -269,6 +296,8 @@ export function computeDailySalesReport(
     {
       packageAmount: 0,
       extensionAmount: 0,
+      extrasAmount: 0,
+      amenityAmount: 0,
       totalRoomAmount: 0,
       totalStoreAmount: 0,
       totalPaid: 0,

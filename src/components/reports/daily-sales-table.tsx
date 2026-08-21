@@ -40,6 +40,8 @@ const HEADERS = [
   "Amount",
   "Ext hrs",
   "Ext amt",
+  "Extra/Request",
+  "Extra/Request amt",
   "Actual out",
   "Room total",
   "Store total",
@@ -48,6 +50,15 @@ const HEADERS = [
   "Others",
   "Remarks",
 ];
+
+const RIGHT_ALIGNED = new Set([
+  "Amount",
+  "Ext amt",
+  "Extra/Request amt",
+  "Room total",
+  "Store total",
+  "Paid",
+]);
 
 export function DailySalesTable({
   report,
@@ -62,7 +73,8 @@ export function DailySalesTable({
 }) {
   const { rows, totals } = report;
   const expenseTotal = totalExpenses(expenses);
-  const overallSale = totals.totalRoomAmount + totals.totalStoreAmount;
+  // Extra person stays inside Room total; towels/blankets are Extra, not Store.
+  const overallSale = totals.totalRoomAmount + totals.totalStoreAmount + totals.amenityAmount;
   const netCash = totals.cashCollected - expenseTotal;
   const netCollected = totals.totalPaid - expenseTotal;
   const netSales = overallSale - expenseTotal;
@@ -73,14 +85,12 @@ export function DailySalesTable({
         <table className="w-full min-w-[960px] border-collapse text-[11px] print:text-[8px]">
           <thead>
             <tr className="bg-muted">
-              {HEADERS.map((h, i) => (
+              {HEADERS.map((h) => (
                 <th
                   key={h}
                   className={
                     "border p-1 text-left font-medium whitespace-nowrap" +
-                    (i >= 5 && i !== 6 && i !== 8 && i !== 12 && i !== 13 && i !== 14
-                      ? " text-right"
-                      : "")
+                    (RIGHT_ALIGNED.has(h) ? " text-right" : "")
                   }
                 >
                   {h}
@@ -108,6 +118,10 @@ export function DailySalesTable({
                   <td className="border p-1 text-right whitespace-nowrap">
                     {row.extensionAmount > 0 ? peso(row.extensionAmount) : ""}
                   </td>
+                  <td className="border p-1 whitespace-nowrap">{row.extrasLabel}</td>
+                  <td className="border p-1 text-right whitespace-nowrap">
+                    {row.extrasAmount > 0 ? peso(row.extrasAmount) : ""}
+                  </td>
                   <td className="border p-1 whitespace-nowrap">{time(row.actualCheckOutTime)}</td>
                   <td className="border p-1 text-right whitespace-nowrap">{peso(row.totalRoomAmount)}</td>
                   <td className="border p-1 text-right whitespace-nowrap">
@@ -134,6 +148,8 @@ export function DailySalesTable({
                 <td className="border p-1 text-right whitespace-nowrap">{peso(totals.packageAmount)}</td>
                 <td className="border p-1" />
                 <td className="border p-1 text-right whitespace-nowrap">{peso(totals.extensionAmount)}</td>
+                <td className="border p-1" />
+                <td className="border p-1 text-right whitespace-nowrap">{peso(totals.extrasAmount)}</td>
                 <td className="border p-1" />
                 <td className="border p-1 text-right whitespace-nowrap">{peso(totals.totalRoomAmount)}</td>
                 <td className="border p-1 text-right whitespace-nowrap">{peso(totals.totalStoreAmount)}</td>

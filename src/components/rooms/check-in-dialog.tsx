@@ -379,7 +379,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
               </div>
               {(receipt.booking.extraPersonCount ?? 0) > 0 && (
                 <div className="flex justify-between text-muted-foreground">
-                  <span>{receipt.booking.extraPersonCount}× Extra person</span>
+                  <span>{receipt.booking.extraPersonCount}× Extra/Request</span>
                   <span>₱{((receipt.booking.extraPersonCount ?? 0) * EXTRA_PERSON_FEE).toFixed(2)}</span>
                 </div>
               )}
@@ -583,7 +583,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
           )}
 
           <div className="flex flex-col gap-1">
-            <Label className="text-base font-bold">Extras</Label>
+            <Label className="text-base font-bold">Extra / Request</Label>
             <QtyRow
               label="Extra person"
               hint={`₱${EXTRA_PERSON_FEE} each`}

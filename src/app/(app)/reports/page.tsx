@@ -205,7 +205,9 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   const timeLabel = shiftTimeLabel(shift);
   const expenseTotal = totalExpenses(expenses);
   const overallSale = salesReport
-    ? salesReport.totals.totalRoomAmount + salesReport.totals.totalStoreAmount
+    ? salesReport.totals.totalRoomAmount +
+      salesReport.totals.totalStoreAmount +
+      salesReport.totals.amenityAmount
     : 0;
   const netCash = (salesReport?.totals.cashCollected ?? 0) - expenseTotal;
   const netCollected = (salesReport?.totals.totalPaid ?? 0) - expenseTotal;
@@ -239,6 +241,8 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
               { header: "Amount", key: "amount", width: 12, format: "currency" },
               { header: "Ext hrs", key: "extHrs", width: 9, format: "integer" },
               { header: "Ext amt", key: "extAmt", width: 12, format: "currency" },
+              { header: "Extra/Request", key: "extra", width: 22 },
+              { header: "Extra/Request amt", key: "extraAmt", width: 16, format: "currency" },
               { header: "Actual out", key: "actualOut", width: 10 },
               { header: "Room total", key: "roomTotal", width: 14, format: "currency" },
               { header: "Store total", key: "storeTotal", width: 14, format: "currency" },
@@ -258,6 +262,8 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                 amount: row.packageAmount,
                 extHrs: row.extensionHours || "",
                 extAmt: row.extensionAmount || "",
+                extra: row.extrasLabel,
+                extraAmt: row.extrasAmount || "",
                 actualOut: time(row.actualCheckOutTime),
                 roomTotal: row.totalRoomAmount,
                 storeTotal: row.totalStoreAmount,
@@ -290,6 +296,8 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                       amount: salesReport.totals.packageAmount,
                       extHrs: "",
                       extAmt: salesReport.totals.extensionAmount,
+                      extra: "",
+                      extraAmt: salesReport.totals.extrasAmount,
                       actualOut: "",
                       roomTotal: salesReport.totals.totalRoomAmount,
                       storeTotal: salesReport.totals.totalStoreAmount,
@@ -425,6 +433,8 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
         packageHours: row.packageHours,
         extensionHours: row.extensionHours,
         extensionAmount: row.extensionAmount,
+        extrasLabel: row.extrasLabel,
+        extrasAmount: row.extrasAmount,
         totalRoomAmount: row.totalRoomAmount,
         totalStoreAmount: row.totalStoreAmount,
         totalPaid: row.totalPaid,

@@ -21,6 +21,7 @@ import {
   hoursElapsed,
 } from "@/lib/bookings";
 import { type Booking, type Room } from "@/lib/types";
+import { bookingExtras, isAmenityItem } from "@/lib/booking-extras";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { ReceiptBrandHeader } from "@/components/receipt-brand-header";
@@ -57,10 +58,13 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
   // for edge cases.
   const [openTimeCharge, setOpenTimeCharge] = useState(() => {
     if (!booking.openEnded) return String(booking.totalRoomCharge);
+    const extrasOnBooking = bookingExtras(booking);
     const packageHours = booking.originalPackageHours ?? booking.hoursBooked;
-    const packagePrice = booking.originalPackagePrice ?? booking.totalRoomCharge;
+    const packagePrice =
+      booking.originalPackagePrice ??
+      Math.max(0, booking.totalRoomCharge - extrasOnBooking.extraPersonAmount);
     const extraHours = Math.max(0, hoursElapsed(booking.checkInTime, now) - packageHours);
-    return String(packagePrice + computeOpenTimeCharge(extraHours));
+    return String(packagePrice + extrasOnBooking.extraPersonAmount + computeOpenTimeCharge(extraHours));
   });
   const [submitting, setSubmitting] = useState(false);
   const [checkOutTime, setCheckOutTime] = useState<Date | null>(null);
@@ -307,29 +311,74 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
                 <span>{(checkOutTime ?? now).toLocaleString()}</span>
               </div>
               <div className="my-1 border-t" />
-              <div className="flex justify-between">
-                <span>
-                  Room charge{" "}
-                  {booking.openEnded ? "(open time)" : `(${receiptData.hoursBooked}h)`}
-                </span>
-                <span>₱{receiptData.totalRoomCharge.toFixed(2)}</span>
-              </div>
-              {booking.items.length > 0 && (
-                <>
-                  {booking.items.map((line) => (
-                    <div key={line.itemId} className="flex justify-between text-muted-foreground">
+              {(() => {
+                const extrasOnReceipt = bookingExtras(receiptData);
+                const packageHours = receiptData.originalPackageHours ?? receiptData.hoursBooked;
+                const packagePrice =
+                  receiptData.originalPackagePrice ??
+                  Math.max(0, receiptData.totalRoomCharge - extrasOnReceipt.extraPersonAmount);
+                const extensionHours = receiptData.openEnded
+                  ? 0
+                  : Math.max(0, (receiptData.hoursBooked ?? packageHours) - packageHours);
+                const extensionAmount = Math.max(
+                  0,
+                  receiptData.totalRoomCharge - packagePrice - extrasOnReceipt.extraPersonAmount
+                );
+                const storeItems = receiptData.items.filter((line) => !isAmenityItem(line));
+                const storeTotal = Math.max(0, receiptData.totalFbCharge - extrasOnReceipt.amenityAmount);
+                return (
+                  <>
+                    <div className="flex justify-between">
                       <span>
-                        {line.quantity}× {line.name}
+                        Room {receiptData.openEnded ? "(open time)" : `(${packageHours}h)`}
                       </span>
-                      <span>₱{line.subtotal.toFixed(2)}</span>
+                      <span>₱{packagePrice.toFixed(2)}</span>
                     </div>
-                  ))}
-                  <div className="flex justify-between">
-                    <span>Store items total</span>
-                    <span>₱{booking.totalFbCharge.toFixed(2)}</span>
-                  </div>
-                </>
-              )}
+                    {extrasOnReceipt.extraPersons > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>{extrasOnReceipt.extraPersons}× Extra/Request</span>
+                        <span>₱{extrasOnReceipt.extraPersonAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {extrasOnReceipt.towels > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>{extrasOnReceipt.towels}× Towel</span>
+                        <span>₱{extrasOnReceipt.towelAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {extrasOnReceipt.blankets > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>{extrasOnReceipt.blankets}× Blanket</span>
+                        <span>₱{extrasOnReceipt.blanketAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {extensionAmount > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>
+                          {receiptData.openEnded
+                            ? "Open time"
+                            : `+${extensionHours}h extension`}
+                        </span>
+                        <span>₱{extensionAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {storeItems.map((line) => (
+                      <div key={line.itemId} className="flex justify-between text-muted-foreground">
+                        <span>
+                          {line.quantity}× {line.name}
+                        </span>
+                        <span>₱{line.subtotal.toFixed(2)}</span>
+                      </div>
+                    ))}
+                    {storeTotal > 0 && (
+                      <div className="flex justify-between">
+                        <span>Store items total</span>
+                        <span>₱{storeTotal.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
               <div className="flex justify-between font-medium">
                 <span>Total</span>
                 <span>₱{receiptData.totalAmount.toFixed(2)}</span>

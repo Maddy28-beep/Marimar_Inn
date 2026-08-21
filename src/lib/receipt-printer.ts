@@ -3,12 +3,12 @@ import WebSerialReceiptPrinter, {
 } from "@point-of-sale/webserial-receipt-printer";
 import {
   PAYMENT_METHOD_LABELS,
-  EXTRA_PERSON_FEE,
   type Booking,
   type PaymentMethod,
   type Room,
   type StoreSale,
 } from "@/lib/types";
+import { bookingExtras, isAmenityItem } from "@/lib/booking-extras";
 import { paymentPortionLines } from "@/lib/bookings";
 
 type PrinterKind = "bluetooth" | "serial" | "rawbt" | "native";
@@ -881,7 +881,16 @@ export function referenceNumberFor(bookingId: string): string {
 function guestReceiptEncoder(booking: Booking, room: Room, extras: ReceiptExtras) {
   const width = layoutWidth(state.paperWidth);
   const encoder = createEncoder(width);
-  const extraPersons = booking.extraPersonCount ?? 0;
+  const extrasOnBooking = bookingExtras(booking);
+  const packageHours = booking.originalPackageHours ?? booking.hoursBooked;
+  const packagePrice =
+    booking.originalPackagePrice ??
+    Math.max(0, booking.totalRoomCharge - extrasOnBooking.extraPersonAmount);
+  const extensionHours = Math.max(0, (booking.hoursBooked ?? packageHours) - packageHours);
+  const extensionAmount = Math.max(
+    0,
+    booking.totalRoomCharge - packagePrice - extrasOnBooking.extraPersonAmount
+  );
 
   encoder
     .initialize()
@@ -896,22 +905,32 @@ function guestReceiptEncoder(booking: Booking, room: Room, extras: ReceiptExtras
     .line(`In: ${booking.checkInTime.toDate().toLocaleString()}`)
     .line(`Out: ${new Date().toLocaleString()}`)
     .newline()
-    .line(
+    .line(twoColumn(`Room (${packageHours}h)`, money(packagePrice), width));
+
+  if (extrasOnBooking.extraPersons > 0) {
+    encoder.line(
       twoColumn(
-        `Room (${booking.hoursBooked}h)`,
-        money(booking.originalPackagePrice ?? Math.max(0, booking.totalRoomCharge - extraPersons * EXTRA_PERSON_FEE)),
+        `${extrasOnBooking.extraPersons}x Extra/Request`,
+        money(extrasOnBooking.extraPersonAmount),
         width
       )
     );
-
-  if (extraPersons > 0) {
-    encoder.line(twoColumn(`${extraPersons}x Extra person`, money(extraPersons * EXTRA_PERSON_FEE), width));
+  }
+  if (extrasOnBooking.towels > 0) {
+    encoder.line(twoColumn(`${extrasOnBooking.towels}x Towel`, money(extrasOnBooking.towelAmount), width));
+  }
+  if (extrasOnBooking.blankets > 0) {
+    encoder.line(
+      twoColumn(`${extrasOnBooking.blankets}x Blanket`, money(extrasOnBooking.blanketAmount), width)
+    );
+  }
+  if (extensionAmount > 0) {
+    encoder.line(twoColumn(`+${extensionHours}h extension`, money(extensionAmount), width));
   }
 
   for (const item of booking.items ?? []) {
-    encoder.line(
-      twoColumn(`${item.quantity}x ${item.name}`, money(item.subtotal), width)
-    );
+    if (isAmenityItem(item)) continue;
+    encoder.line(twoColumn(`${item.quantity}x ${item.name}`, money(item.subtotal), width));
   }
 
   encoder
@@ -1149,6 +1168,8 @@ export interface DailySalesReceiptRow {
   packageHours: number;
   extensionHours: number;
   extensionAmount: number;
+  extrasLabel: string;
+  extrasAmount: number;
   totalRoomAmount: number;
   totalStoreAmount: number;
   totalPaid: number;
@@ -1160,6 +1181,8 @@ export interface DailySalesReceiptRow {
 export interface DailySalesReceiptTotals {
   totalRoomAmount: number;
   totalStoreAmount: number;
+  amenityAmount: number;
+  extrasAmount: number;
   totalPaid: number;
   cashCollected: number;
   gcashCollected: number;
@@ -1222,6 +1245,15 @@ function dailySalesReceiptEncoder(data: DailySalesReceiptData) {
       if (row.extensionAmount > 0) {
         encoder.line(twoColumn(`  +${row.extensionHours}h ext`, money(row.extensionAmount), width));
       }
+      if (row.extrasAmount > 0) {
+        encoder.line(
+          twoColumn(
+            `  Extra/Request${row.extrasLabel ? ` ${row.extrasLabel}` : ""}`,
+            money(row.extrasAmount),
+            width
+          )
+        );
+      }
       if (row.totalStoreAmount > 0) {
         encoder.line(twoColumn("  Store items", money(row.totalStoreAmount), width));
       }
@@ -1242,13 +1274,17 @@ function dailySalesReceiptEncoder(data: DailySalesReceiptData) {
   }
 
   const expenseTotal = (data.expenses ?? []).reduce((sum, expense) => sum + expense.amount, 0);
-  const overallSale = data.totals.totalRoomAmount + data.totals.totalStoreAmount;
+  const overallSale =
+    data.totals.totalRoomAmount + data.totals.totalStoreAmount + (data.totals.amenityAmount ?? 0);
 
   encoder
     .bold(true)
     .line(twoColumn("Room total", money(data.totals.totalRoomAmount), width))
-    .line(twoColumn("Store total", money(data.totals.totalStoreAmount), width))
-    .bold(false)
+    .line(twoColumn("Store total", money(data.totals.totalStoreAmount), width));
+  if ((data.totals.extrasAmount ?? 0) > 0) {
+    encoder.line(twoColumn("Extra/Request total", money(data.totals.extrasAmount), width));
+  }
+  encoder.bold(false)
     .newline()
     .line(twoColumn("Cash collected", money(data.totals.cashCollected), width));
 
