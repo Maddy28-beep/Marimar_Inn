@@ -7,6 +7,7 @@ export interface ExportColumn {
   key: string;
   width?: number;
   format?: ColumnFormat;
+  bold?: boolean;
 }
 
 export interface ExportTable {
@@ -116,7 +117,7 @@ function renderTable(worksheet: Worksheet, table: ExportTable, startRow: number,
       const cell = excelRow.getCell(startCol + colIndex);
       const value = row[column.key];
       cell.value = (value ?? "") as string | number | Date;
-      cell.font = { name: "Calibri", size: 11, bold: emphasize, color: { argb: TEAL } };
+      cell.font = { name: "Calibri", size: 11, bold: emphasize || Boolean(column.bold), color: { argb: TEAL } };
       cell.border = BORDER;
       cell.alignment = { vertical: "middle", horizontal: "center" };
 

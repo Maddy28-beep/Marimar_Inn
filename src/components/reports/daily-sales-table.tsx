@@ -89,7 +89,8 @@ export function DailySalesTable({
                 <th
                   key={h}
                   className={
-                    "border p-1 text-left font-medium whitespace-nowrap" +
+                    "border p-1 text-left whitespace-nowrap" +
+                    (h === "Room" ? " font-bold" : " font-medium") +
                     (RIGHT_ALIGNED.has(h) ? " text-right" : "")
                   }
                 >
@@ -108,7 +109,7 @@ export function DailySalesTable({
             ) : (
               rows.map((row) => (
                 <tr key={row.bookingId}>
-                  <td className="border p-1 whitespace-nowrap">{row.roomNumber}</td>
+                  <td className="border p-1 font-bold whitespace-nowrap">{row.roomNumber}</td>
                   <td className="border p-1 whitespace-nowrap">{row.refNumber}</td>
                   <td className="border p-1">{row.packageHours}</td>
                   <td className="border p-1 whitespace-nowrap">{time(row.checkInTime)}</td>

@@ -233,7 +233,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
         tables: [
           {
             columns: [
-              { header: "Room", key: "room", width: 6 },
+              { header: "Room", key: "room", width: 6, bold: true },
               { header: "Ref #", key: "ref", width: 10 },
               { header: "Hrs", key: "hrs", width: 5, format: "integer" },
               { header: "Check-in", key: "checkIn", width: 10 },
