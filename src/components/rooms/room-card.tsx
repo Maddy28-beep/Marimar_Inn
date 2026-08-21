@@ -14,40 +14,46 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+const CARD_SHELL =
+  "relative flex h-36 w-full flex-col gap-1 overflow-hidden rounded-2xl border p-3 pl-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md before:absolute before:inset-y-0 before:left-0 before:w-1.5";
+
 const STATUS_STYLES: Record<
   RoomStatus,
-  { label: string; card: string; dot: string; icon: LucideIcon; iconTint: string }
+  { label: string; card: string; dot: string; pill: string; icon: LucideIcon; iconTint: string }
 > = {
   available: {
     label: "Available",
-    card: "border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/15",
+    card: "border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/16 before:bg-emerald-500",
     dot: "bg-emerald-500",
+    pill: "bg-emerald-600/15 text-emerald-800 dark:text-emerald-300",
     icon: BedDoubleIcon,
     iconTint: "text-emerald-600/70 dark:text-emerald-400/60",
   },
   occupied: {
     label: "Occupied",
-    card: "border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/15",
+    card: "border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/16 before:bg-rose-500",
     dot: "bg-rose-500",
+    pill: "bg-rose-600/15 text-rose-800 dark:text-rose-300",
     icon: DoorClosedIcon,
     iconTint: "text-rose-600/70 dark:text-rose-400/60",
   },
   cleaning: {
     label: "Cleaning",
-    card: "border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/15",
+    card: "border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/16 before:bg-amber-500",
     dot: "bg-amber-500",
+    pill: "bg-amber-600/15 text-amber-800 dark:text-amber-300",
     icon: SparklesIcon,
     iconTint: "text-amber-600/70 dark:text-amber-400/60",
   },
   maintenance: {
     label: "Maintenance",
-    card: "border-muted-foreground/30 bg-muted hover:bg-muted/80",
+    card: "border-muted-foreground/25 bg-muted hover:bg-muted/80 before:bg-muted-foreground/70",
     dot: "bg-muted-foreground",
+    pill: "bg-muted-foreground/15 text-muted-foreground",
     icon: WrenchIcon,
     iconTint: "text-muted-foreground/70",
   },
 };
-
 
 interface RoomCardProps {
   room: Room;
@@ -69,19 +75,22 @@ export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
   const isRunningLow = remaining !== null && remaining <= 0.5 && remaining > 0.25;
   const isOverdue = remaining !== null && remaining <= 0;
   const balance = booking ? Math.max(booking.totalAmount - booking.amountPaid, 0) : 0;
+  const usedFrac =
+    booking && !booking.openEnded && booking.hoursBooked > 0
+      ? Math.min(1, Math.max(0, elapsed / booking.hoursBooked))
+      : 0;
 
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        // Fixed height so occupied cards (guest + countdown + balance) match empty ones.
-        "relative flex h-36 w-full flex-col gap-0.5 overflow-hidden rounded-xl border p-2.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
+        CARD_SHELL,
         // 15 minutes left or overdue gets a dark-red card, not just the
         // usual light "occupied" rose — a glance at the grid should make
         // these rooms impossible to miss.
         isCritical || isOverdue
-          ? "border-red-700/70 bg-red-700/20 hover:bg-red-700/25 dark:border-red-600/70 dark:bg-red-600/25 dark:hover:bg-red-600/30"
+          ? "border-red-700/60 bg-red-700/20 hover:bg-red-700/25 before:bg-red-700 dark:border-red-600/70 dark:bg-red-600/25 dark:hover:bg-red-600/30 dark:before:bg-red-500"
           : style.card
       )}
     >
@@ -96,15 +105,31 @@ export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
       )}
 
       <div className="flex items-start justify-between gap-2">
-        <span className="font-heading text-xl leading-none font-semibold">{room.roomNumber}</span>
-        <span className={cn("mt-1 size-2.5 shrink-0 rounded-full", style.dot)} />
+        <span className="font-heading text-xl leading-none font-semibold tracking-tight">
+          {room.roomNumber}
+        </span>
+        <span
+          className={cn(
+            "mt-1 size-2.5 shrink-0 rounded-full",
+            isCritical || isOverdue ? "bg-red-700 ring-2 ring-red-700/30 animate-pulse dark:bg-red-500" : style.dot
+          )}
+        />
       </div>
-      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-        <style.icon className={cn("size-3 shrink-0", style.iconTint)} strokeWidth={2} />
-        {ROOM_TYPE_LABELS[room.type]} · {style.label}
+      <div className="flex items-center gap-1.5">
+        <span
+          className={cn(
+            "rounded-full px-1.5 py-0.5 text-[10px] font-bold tracking-wide uppercase",
+            isCritical || isOverdue
+              ? "bg-red-700/20 text-red-800 dark:text-red-300"
+              : style.pill
+          )}
+        >
+          {style.label}
+        </span>
+        <span className="truncate text-xs text-muted-foreground">{ROOM_TYPE_LABELS[room.type]}</span>
       </div>
 
-      {booking && (
+      {booking ? (
         <div className="flex min-h-0 flex-1 flex-col gap-0.5">
           <div className="flex items-center gap-1 truncate text-sm font-medium">
             <UserIcon className="size-3.5 shrink-0" />
@@ -137,10 +162,28 @@ export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
                 : `${formatHours(remaining!)} left`}
           </div>
           {balance > 0 && (
-            <div className="mt-auto w-fit rounded-md bg-amber-500/25 px-2 py-1 text-sm font-bold text-amber-800 dark:text-amber-300">
+            <div className="mt-auto w-fit rounded-md bg-amber-500/25 px-2 py-0.5 text-sm font-bold text-amber-800 dark:text-amber-300">
               ₱{balance.toFixed(2)} due
             </div>
           )}
+        </div>
+      ) : room.status === "available" ? (
+        <div className="mt-auto text-sm font-medium text-emerald-800 dark:text-emerald-300">Tap to check in</div>
+      ) : room.status === "cleaning" ? (
+        <div className="mt-auto text-sm font-medium text-amber-800 dark:text-amber-300">Tap when ready</div>
+      ) : (
+        <div className="mt-auto text-sm font-medium text-muted-foreground">Tap to update</div>
+      )}
+
+      {booking && !booking.openEnded && (
+        <div className="absolute inset-x-0 bottom-0 h-1 bg-black/5 dark:bg-white/10">
+          <div
+            className={cn(
+              "h-full",
+              isOverdue || isCritical ? "bg-red-700" : isRunningLow ? "bg-amber-500" : "bg-rose-400"
+            )}
+            style={{ width: `${Math.round(usedFrac * 100)}%` }}
+          />
         </div>
       )}
     </button>
