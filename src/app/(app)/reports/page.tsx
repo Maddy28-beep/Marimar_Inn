@@ -492,16 +492,16 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+        <div className="grid w-full grid-cols-1 gap-2 min-[420px]:grid-cols-2 xl:flex xl:w-auto xl:flex-wrap xl:items-center">
           <Input
             type="date"
             value={dateValue}
             onChange={(e) => setDateValue(e.target.value)}
-            className="w-44"
+            className="w-full min-w-0 xl:w-44"
           />
           <Select value={shift} onValueChange={(v) => setShift(v as ShiftFilter)}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-full min-w-0 xl:w-48">
               <SelectValue>{SHIFT_LABELS[shift]}</SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -514,19 +514,19 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             placeholder="Front desk"
             value={frontDesk}
             onChange={(e) => setFrontDesk(e.target.value)}
-            className="w-36"
+            className="w-full min-w-0 xl:w-36"
           />
           <Input
             placeholder="Housekeeping"
             value={housekeeping}
             onChange={(e) => setHousekeeping(e.target.value)}
-            className="w-36"
+            className="w-full min-w-0 xl:w-36"
           />
           <div
             className={
               shift === "fullDay"
-                ? "flex h-9 items-center rounded-md border border-primary/40 bg-primary/10 px-3 text-sm font-semibold tracking-wide"
-                : "flex h-9 w-32 items-center rounded-md border bg-muted px-3 text-sm text-muted-foreground"
+                ? "flex h-9 w-full items-center rounded-md border border-primary/40 bg-primary/10 px-3 text-sm font-semibold tracking-wide min-[420px]:col-span-2 xl:w-auto xl:col-span-1"
+                : "flex h-9 w-full items-center rounded-md border bg-muted px-3 text-sm text-muted-foreground xl:w-32"
             }
             title={
               shift === "fullDay"
@@ -537,8 +537,8 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             Time: {timeLabel}
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1">
-          <div className="flex gap-2">
+        <div className="flex w-full flex-col items-stretch gap-1 sm:items-end xl:w-auto">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="lg" className="font-semibold" onClick={handleExport} disabled={!report}>
               <DownloadIcon className="size-4" />
               Export Excel
@@ -1621,37 +1621,38 @@ function ReportsContent() {
 
       {isOwner ? (
         <Tabs defaultValue="daily">
-          <TabsList className="h-auto min-h-10 flex-wrap gap-1 p-1">
-            <TabsTrigger value="daily" className="px-3 py-1.5 text-foreground">
+          <TabsList className="flex h-auto min-h-10 w-full flex-wrap justify-start gap-1 p-1 group-data-horizontal/tabs:h-auto">
+            <TabsTrigger value="daily" className="h-8 flex-none px-3 py-1.5 text-foreground">
               Daily
             </TabsTrigger>
-            <TabsTrigger value="range" className="px-3 py-1.5 font-semibold text-foreground">
-              <CalendarRangeIcon className="size-4" />
-              Custom range
+            <TabsTrigger value="range" className="h-8 flex-none px-3 py-1.5 text-foreground">
+              <CalendarRangeIcon className="hidden size-4 sm:block" />
+              <span className="sm:hidden">Range</span>
+              <span className="hidden sm:inline">Custom range</span>
             </TabsTrigger>
-            <TabsTrigger value="monthly" className="px-3 py-1.5 text-foreground">
+            <TabsTrigger value="monthly" className="h-8 flex-none px-3 py-1.5 text-foreground">
               Monthly
             </TabsTrigger>
-            <TabsTrigger value="overdue" className="px-3 py-1.5 text-foreground">
+            <TabsTrigger value="overdue" className="h-8 flex-none px-3 py-1.5 text-foreground">
               Overdue
             </TabsTrigger>
-            <TabsTrigger value="inventory" className="px-3 py-1.5 text-foreground">
+            <TabsTrigger value="inventory" className="h-8 flex-none px-3 py-1.5 text-foreground">
               Inventory
             </TabsTrigger>
           </TabsList>
-          <TabsContent value="daily">
+          <TabsContent value="daily" className="min-w-0 pt-3">
             <DailyReportTab rooms={rooms} />
           </TabsContent>
-          <TabsContent value="range">
+          <TabsContent value="range" className="min-w-0 pt-3">
             <RangeReportTab />
           </TabsContent>
-          <TabsContent value="monthly">
+          <TabsContent value="monthly" className="min-w-0 pt-3">
             <MonthlyReportTab rooms={rooms} />
           </TabsContent>
-          <TabsContent value="overdue">
+          <TabsContent value="overdue" className="min-w-0 pt-3">
             <OverdueReportTab />
           </TabsContent>
-          <TabsContent value="inventory">
+          <TabsContent value="inventory" className="min-w-0 pt-3">
             <InventoryReportTab />
           </TabsContent>
         </Tabs>
