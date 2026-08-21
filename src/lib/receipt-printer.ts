@@ -733,6 +733,11 @@ function sendViaRawBt(data: Uint8Array): void {
 }
 
 async function send(data: Uint8Array): Promise<void> {
+  if (state.kind === "bluetooth" && /rpp|jp-?58/i.test(state.name ?? "")) {
+    throw new Error(
+      "RPP02N will not print from Chrome Bluetooth. Open the Marimar Inn tablet app, tap the printer icon, tap RPP02N (it must say Tablet Bluetooth), then print."
+    );
+  }
   if (state.kind === "rawbt") {
     sendViaRawBt(data);
     return;

@@ -128,6 +128,13 @@ export function PrinterStatus() {
               <p className="text-sm text-muted-foreground">
                 {printer.name} · {printer.kind ? KIND_LABELS[printer.kind] : ""}
               </p>
+              {printer.kind === "bluetooth" && /rpp|jp-?58|mtp-|xprinter|gp-/i.test(printer.name ?? "") && (
+                <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs font-medium text-amber-800 dark:text-amber-300">
+                  Chrome Bluetooth cannot print to this printer. Close the browser, open the
+                  Marimar Inn app on the tablet, tap the printer icon, then tap {printer.name}.
+                  It must say <span className="font-bold">Tablet Bluetooth</span>.
+                </p>
+              )}
               <div className="flex flex-col gap-1.5">
                 <Button variant="outline" size="sm" onClick={() => setPreviewOpen(true)}>
                   <EyeIcon className="size-3.5" />
