@@ -3,6 +3,7 @@ import WebSerialReceiptPrinter, {
 } from "@point-of-sale/webserial-receipt-printer";
 import {
   PAYMENT_METHOD_LABELS,
+  EXTRA_PERSON_FEE,
   type Booking,
   type PaymentMethod,
   type Room,
@@ -618,7 +619,10 @@ const BLE_CHUNK_SIZE = 100;
 // pacing chunks avoids overrunning cheap printer firmware's receive
 // buffer — there's no flow control to push back if we write too fast.
 const BLE_CHUNK_DELAY_MS = 20;
-const PRINT_TIMEOUT_MS = 8000;
+// Native print reconnects, writes, then waits up to ~8s for the head. The
+// old 8s JS timeout raced that wait, aborted the promise, and kicked off a
+// second drawer job that tore the socket down mid-print — no paper, no drawer.
+const PRINT_TIMEOUT_MS = 45_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -666,18 +670,24 @@ function drawerPulse(pin: 0 | 1): number[] {
   return [0x07, 0x1b, 0x70, pin, 0x32, 0xfa];
 }
 
-async function sendPin2Kick(): Promise<void> {
-  await sleep(700);
-  await send(Uint8Array.from([0x1b, 0x40, ...drawerPulse(0)]));
-}
-
 async function sendDrawerKick(withReceipt?: Uint8Array): Promise<void> {
+  const pin2 = Uint8Array.from([0x1b, 0x40, ...drawerPulse(0)]);
   if (withReceipt) {
-    await send(withReceipt);
-  } else {
-    await send(Uint8Array.from([0x1b, 0x40, ...drawerPulse(1)]));
+    const merged = new Uint8Array(withReceipt.length + pin2.length);
+    merged.set(withReceipt);
+    merged.set(pin2, withReceipt.length);
+    await send(merged);
+    return;
   }
-  await sendPin2Kick();
+  if (state.kind === "native") {
+    const bridge = getNativePrinterBridge();
+    if (bridge?.kickDrawer) {
+      const result = String(bridge.kickDrawer() ?? "").trim();
+      if (result !== "ok") throw new Error(result || "Couldn't open the drawer.");
+      return;
+    }
+  }
+  await send(Uint8Array.from([0x1b, 0x40, ...drawerPulse(1), 0x1b, 0x40, ...drawerPulse(0)]));
 }
 
 export function printerErrorMessage(error: unknown): string {
@@ -825,6 +835,7 @@ export function referenceNumberFor(bookingId: string): string {
 function guestReceiptEncoder(booking: Booking, room: Room, extras: ReceiptExtras) {
   const width = layoutWidth(state.paperWidth);
   const encoder = createEncoder(width);
+  const extraPersons = booking.extraPersonCount ?? 0;
 
   encoder
     .initialize()
@@ -839,15 +850,22 @@ function guestReceiptEncoder(booking: Booking, room: Room, extras: ReceiptExtras
     .line(`In: ${booking.checkInTime.toDate().toLocaleString()}`)
     .line(`Out: ${new Date().toLocaleString()}`)
     .newline()
-    .line(twoColumn(`Room (${booking.hoursBooked}h)`, money(booking.totalRoomCharge), width));
+    .line(
+      twoColumn(
+        `Room (${booking.hoursBooked}h)`,
+        money(booking.originalPackagePrice ?? Math.max(0, booking.totalRoomCharge - extraPersons * EXTRA_PERSON_FEE)),
+        width
+      )
+    );
+
+  if (extraPersons > 0) {
+    encoder.line(twoColumn(`${extraPersons}x Extra person`, money(extraPersons * EXTRA_PERSON_FEE), width));
+  }
 
   for (const item of booking.items ?? []) {
     encoder.line(
       twoColumn(`${item.quantity}x ${item.name}`, money(item.subtotal), width)
     );
-  }
-  if (booking.totalFbCharge > 0) {
-    encoder.line(twoColumn("Store items", money(booking.totalFbCharge), width));
   }
 
   encoder

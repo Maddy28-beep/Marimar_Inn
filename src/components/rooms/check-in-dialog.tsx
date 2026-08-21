@@ -45,6 +45,9 @@ import {
 } from "@/components/payments/payment-fields";
 import {
   ROOM_TYPE_LABELS,
+  EXTRA_PERSON_FEE,
+  TOWEL_FEE,
+  BLANKET_FEE,
   type Booking,
   type InventoryItem,
   type RatePackage,
@@ -53,6 +56,50 @@ import {
 import { ReceiptBrandHeader } from "@/components/receipt-brand-header";
 import { ReceiptPreviewStrip } from "@/components/receipt-preview";
 import { Loader2Icon, MinusIcon, PlusIcon, PrinterIcon, SparklesIcon, WrenchIcon } from "lucide-react";
+
+function QtyRow({
+  label,
+  hint,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  hint: string;
+  value: number;
+  onChange: (next: number) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2">
+      <div className="min-w-0">
+        <div className="text-sm font-bold">{label}</div>
+        <div className="text-xs text-muted-foreground">{hint}</div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-sm"
+          onClick={() => onChange(Math.max(0, value - 1))}
+          disabled={disabled || value === 0}
+        >
+          <MinusIcon className="size-3.5" />
+        </Button>
+        <span className="w-6 text-center text-base font-semibold tabular-nums">{value}</span>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-sm"
+          onClick={() => onChange(value + 1)}
+          disabled={disabled}
+        >
+          <PlusIcon className="size-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 interface CheckInDialogProps {
   room: Room | null;
@@ -75,6 +122,9 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
   const [submitting, setSubmitting] = useState(false);
   const [inventory, setInventory] = useState<InventoryItem[] | null>(null);
   const [cart, setCart] = useState<Record<string, number>>({});
+  const [extraPersons, setExtraPersons] = useState(0);
+  const [towels, setTowels] = useState(0);
+  const [blankets, setBlankets] = useState(0);
   const [phase, setPhase] = useState<"form" | "receipt">("form");
   const [receipt, setReceipt] = useState<{
     booking: Booking;
@@ -120,8 +170,10 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
   const selectedPackage = openTimeMode
     ? shortestPackage
     : (ratePackages?.find((p) => p.packageId === selectedPackageId) ?? ratePackages?.[0] ?? null);
-  const roomTotal = selectedPackage?.price ?? 0;
-  const total = roomTotal + fbTotal;
+  const extraPersonCharge = extraPersons * EXTRA_PERSON_FEE;
+  const amenityCharge = towels * TOWEL_FEE + blankets * BLANKET_FEE;
+  const roomTotal = (selectedPackage?.price ?? 0) + extraPersonCharge;
+  const total = roomTotal + fbTotal + amenityCharge;
   const paid = collectedAmount(payment, total);
   const change = paid > total ? paid - total : 0;
   // Guests aren't allowed into the room without paying in full at the desk
@@ -161,6 +213,9 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
         specialRequests: specialRequests.trim() || undefined,
         cashierId,
         cartItems: cartLines.map((line) => ({ itemId: line.item.itemId, quantity: line.qty })),
+        extraPersonCount: extraPersons || undefined,
+        towelCount: towels || undefined,
+        blanketCount: blankets || undefined,
       });
       toast.success(`Room ${room.roomNumber} checked in.`);
 
@@ -175,7 +230,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
         originalPackagePrice: selectedPackage.price,
         openEnded: openTimeMode,
         totalRoomCharge: roomTotal,
-        totalFbCharge: fbTotal,
+        totalFbCharge: fbTotal + amenityCharge,
         totalAmount: total,
         amountPaid: amountCollected,
         paymentMethod: payload.paymentMethod,
@@ -186,13 +241,32 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
         splitQrphAmount: thisSplit.qrph,
         paymentStatus: amountCollected >= total ? "paid" : amountCollected > 0 ? "partial" : "unpaid",
         status: "active",
-        items: cartLines.map((line) => ({
-          itemId: line.item.itemId,
-          name: line.item.name,
-          unitPrice: line.item.sellingPrice,
-          quantity: line.qty,
-          subtotal: line.qty * line.item.sellingPrice,
-        })),
+        items: [
+          ...cartLines.map((line) => ({
+            itemId: line.item.itemId,
+            name: line.item.name,
+            unitPrice: line.item.sellingPrice,
+            quantity: line.qty,
+            subtotal: line.qty * line.item.sellingPrice,
+          })),
+          ...(towels > 0
+            ? [{ itemId: "amenity-towel", name: "Towel", unitPrice: TOWEL_FEE, quantity: towels, subtotal: towels * TOWEL_FEE }]
+            : []),
+          ...(blankets > 0
+            ? [
+                {
+                  itemId: "amenity-blanket",
+                  name: "Blanket",
+                  unitPrice: BLANKET_FEE,
+                  quantity: blankets,
+                  subtotal: blankets * BLANKET_FEE,
+                },
+              ]
+            : []),
+        ],
+        extraPersonCount: extraPersons || undefined,
+        towelCount: towels || undefined,
+        blanketCount: blankets || undefined,
         cashierId,
         updatedAt: Timestamp.now(),
       };
@@ -298,8 +372,23 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
               <div className="my-1 border-t" />
               <div className="flex justify-between">
                 <span>Room ({receipt.booking.hoursBooked}h)</span>
-                <span>₱{receipt.booking.totalRoomCharge.toFixed(2)}</span>
+                <span>
+                  ₱
+                  {(
+                    receipt.booking.originalPackagePrice ??
+                    Math.max(
+                      0,
+                      receipt.booking.totalRoomCharge - (receipt.booking.extraPersonCount ?? 0) * EXTRA_PERSON_FEE
+                    )
+                  ).toFixed(2)}
+                </span>
               </div>
+              {(receipt.booking.extraPersonCount ?? 0) > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>{receipt.booking.extraPersonCount}× Extra person</span>
+                  <span>₱{((receipt.booking.extraPersonCount ?? 0) * EXTRA_PERSON_FEE).toFixed(2)}</span>
+                </div>
+              )}
               {receipt.booking.items.length > 0 && (
                 <>
                   {receipt.booking.items.map((line) => (
@@ -406,6 +495,31 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
             </div>
           </div>
 
+          <div className="flex flex-col gap-2">
+            <Label className="text-base font-bold">Extras</Label>
+            <QtyRow
+              label="Extra person"
+              hint={`₱${EXTRA_PERSON_FEE} each`}
+              value={extraPersons}
+              onChange={setExtraPersons}
+              disabled={submitting}
+            />
+            <QtyRow
+              label="Towel"
+              hint={`₱${TOWEL_FEE} each`}
+              value={towels}
+              onChange={setTowels}
+              disabled={submitting}
+            />
+            <QtyRow
+              label="Blanket"
+              hint={`₱${BLANKET_FEE} each`}
+              value={blankets}
+              onChange={setBlankets}
+              disabled={submitting}
+            />
+          </div>
+
           <div className="flex flex-col gap-1.5">
             <Label className="text-base font-bold">Rate package</Label>
             {ratePackages?.length === 0 ? (
@@ -508,8 +622,20 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
               <span>
                 Room ({openTimeMode ? `open time, ${selectedPackage?.hours ?? "—"}h min` : `${selectedPackage?.hours ?? "—"}h`})
               </span>
-              <span>₱{roomTotal.toFixed(2)}</span>
+              <span>₱{(selectedPackage?.price ?? 0).toFixed(2)}</span>
             </div>
+            {extraPersons > 0 && (
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>{extraPersons}× Extra person</span>
+                <span>₱{extraPersonCharge.toFixed(2)}</span>
+              </div>
+            )}
+            {amenityCharge > 0 && (
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Towel / blanket</span>
+                <span>₱{amenityCharge.toFixed(2)}</span>
+              </div>
+            )}
             {fbTotal > 0 && (
               <div className="flex items-center justify-between text-muted-foreground">
                 <span>Store items</span>

@@ -13,6 +13,13 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Booking, InventoryItem, OrderItem, PaymentMethod, PaymentStatus } from "@/lib/types";
+import {
+  AMENITY_BLANKET_ID,
+  AMENITY_TOWEL_ID,
+  BLANKET_FEE,
+  EXTRA_PERSON_FEE,
+  TOWEL_FEE,
+} from "@/lib/types";
 import { hoursElapsed } from "@/lib/time";
 import { resolveCheckoutReminder } from "@/lib/notifications";
 
@@ -64,6 +71,9 @@ export interface CheckInInput {
   specialRequests?: string;
   cashierId: string;
   cartItems?: CheckInCartLine[];
+  extraPersonCount?: number;
+  towelCount?: number;
+  blanketCount?: number;
 }
 
 function paymentStatusFor(amountPaid: number, totalAmount: number): PaymentStatus {
@@ -168,9 +178,35 @@ export function computeOpenTimeCharge(hoursStayed: number): number {
   return blocks * (OPEN_TIME_RATE_PER_HOUR / 2);
 }
 
+function amenityLineItems(towels: number, blankets: number): OrderItem[] {
+  const items: OrderItem[] = [];
+  if (towels > 0) {
+    items.push({
+      itemId: AMENITY_TOWEL_ID,
+      name: "Towel",
+      unitPrice: TOWEL_FEE,
+      quantity: towels,
+      subtotal: towels * TOWEL_FEE,
+    });
+  }
+  if (blankets > 0) {
+    items.push({
+      itemId: AMENITY_BLANKET_ID,
+      name: "Blanket",
+      unitPrice: BLANKET_FEE,
+      quantity: blankets,
+      subtotal: blankets * BLANKET_FEE,
+    });
+  }
+  return items;
+}
+
 export async function checkIn(input: CheckInInput) {
   const firestore = requireDb();
-  const totalRoomCharge = input.packagePrice;
+  const extraPersonCount = Math.max(0, Math.floor(input.extraPersonCount ?? 0));
+  const towelCount = Math.max(0, Math.floor(input.towelCount ?? 0));
+  const blanketCount = Math.max(0, Math.floor(input.blanketCount ?? 0));
+  const totalRoomCharge = input.packagePrice + extraPersonCount * EXTRA_PERSON_FEE;
   const cartItems = input.cartItems ?? [];
 
   const bookingRef = doc(collection(firestore, "bookings"));
@@ -181,7 +217,8 @@ export async function checkIn(input: CheckInInput) {
     // All reads must happen before any writes in a Firestore transaction.
     const itemSnaps = await Promise.all(itemRefs.map((ref) => tx.get(ref)));
 
-    const orderItems: OrderItem[] = cartItems.map((line, i) => {
+    const orderItems: OrderItem[] = [
+      ...cartItems.map((line, i) => {
       const snap = itemSnaps[i];
       if (!snap.exists()) throw new Error("An item in the order no longer exists.");
       const data = snap.data() as InventoryItem;
@@ -195,7 +232,9 @@ export async function checkIn(input: CheckInInput) {
         quantity: line.quantity,
         subtotal: line.quantity * data.sellingPrice,
       };
-    });
+      }),
+      ...amenityLineItems(towelCount, blanketCount),
+    ];
 
     const totalFbCharge = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
     const totalAmount = totalRoomCharge + totalFbCharge;
@@ -241,6 +280,9 @@ export async function checkIn(input: CheckInInput) {
       ...(input.gcashReference ? { gcashReference: input.gcashReference } : {}),
       ...(input.qrphReference ? { qrphReference: input.qrphReference } : {}),
       ...(input.openEnded ? { openEnded: true } : {}),
+      ...(extraPersonCount > 0 ? { extraPersonCount } : {}),
+      ...(towelCount > 0 ? { towelCount } : {}),
+      ...(blanketCount > 0 ? { blanketCount } : {}),
     };
 
     tx.set(bookingRef, booking);

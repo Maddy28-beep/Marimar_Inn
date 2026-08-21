@@ -99,7 +99,7 @@ service cloud.firestore {
           'paymentMethod', 'gcashReference', 'qrphReference',
           'splitCashAmount', 'splitGcashAmount', 'splitQrphAmount',
           'paymentStatus', 'status', 'checkOutTime', 'items', 'transactions',
-          'specialRequests', 'updatedAt'
+          'specialRequests', 'updatedAt', 'extraPersonCount', 'towelCount', 'blanketCount'
         ]);
 
       // Only owner, admin can delete bookings

@@ -72,6 +72,9 @@ export interface Booking {
   // billed as a final lump sum at checkout since there's no per-hour rate
   // set yet. The countdown/overdue UI and reminder alarm skip these rooms.
   openEnded?: boolean;
+  extraPersonCount?: number;
+  towelCount?: number;
+  blanketCount?: number;
   totalRoomCharge: number;
   totalFbCharge: number;
   totalAmount: number;
@@ -138,6 +141,12 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   qrph: "QRPh",
   split: "Split",
 };
+
+export const EXTRA_PERSON_FEE = 100;
+export const TOWEL_FEE = 20;
+export const BLANKET_FEE = 20;
+export const AMENITY_TOWEL_ID = "amenity-towel";
+export const AMENITY_BLANKET_ID = "amenity-blanket";
 
 // Cash taken out of the drawer during a shift (supplies, fare, etc.).
 // Timestamped so daily/shift reports can deduct it from that period's cash.

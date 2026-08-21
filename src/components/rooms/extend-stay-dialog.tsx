@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -11,7 +11,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   convertToOpenTime,
@@ -21,6 +20,7 @@ import {
   OPEN_TIME_RATE_PER_HOUR,
   REGULAR_BOOKING_MIN_HOURS,
 } from "@/lib/bookings";
+import { subscribeToRatePackages } from "@/lib/rooms";
 import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
@@ -43,7 +43,7 @@ import {
   paymentPayload,
   type PaymentDraft,
 } from "@/components/payments/payment-fields";
-import { type Booking, type PaymentMethod, type Room } from "@/lib/types";
+import { type Booking, type PaymentMethod, type RatePackage, type Room } from "@/lib/types";
 import { Loader2Icon, PrinterIcon } from "lucide-react";
 
 interface ExtendStayDialogProps {
@@ -52,22 +52,21 @@ interface ExtendStayDialogProps {
   onClose: () => void;
 }
 
-type ExtendMode = "hour" | "open";
+type ExtendMode = "package" | "open";
 
 export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogProps) {
   const now = useNowTick(1000);
   const printer = useReceiptPrinter();
   const { appUser } = useAuth();
   const staffName = appUser?.displayName ?? appUser?.email ?? "Staff";
-  const [mode, setMode] = useState<ExtendMode>("hour");
-  const [hourPrice, setHourPrice] = useState(String(OPEN_TIME_RATE_PER_HOUR));
-  const [payment, setPayment] = useState<PaymentDraft>(() => ({
-    ...emptyPaymentDraft(),
-    amountPaid: String(OPEN_TIME_RATE_PER_HOUR),
-  }));
+  const [mode, setMode] = useState<ExtendMode>("package");
+  const [ratePackages, setRatePackages] = useState<RatePackage[] | null>(null);
+  const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
+  const [payment, setPayment] = useState<PaymentDraft>(emptyPaymentDraft);
   const [submitting, setSubmitting] = useState(false);
   const [phase, setPhase] = useState<"form" | "receipt">("form");
   const [receipt, setReceipt] = useState<{
+    hours: number;
     amountCharged: number;
     amountPaid: number;
     change: number;
@@ -79,29 +78,43 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
     splitQrphAmount?: number;
   } | null>(null);
 
+  useEffect(() => subscribeToRatePackages(setRatePackages), []);
+
+  useEffect(() => {
+    if (!ratePackages?.length) return;
+    setSelectedPackageId((current) => current ?? ratePackages[0].packageId);
+    setPayment((current) => {
+      if (current.method !== "cash" || current.amountPaid !== "") return current;
+      return { ...current, amountPaid: String(ratePackages[0].price) };
+    });
+  }, [ratePackages]);
+
   const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, now);
   const overdueMinutes = remaining < 0 ? -remaining * 60 : 0;
   const tooOverdueToExtend = isTooOverdueToExtend(booking, now);
   const packageHours = booking.originalPackageHours ?? booking.hoursBooked;
   const packagePrice = booking.originalPackagePrice ?? booking.totalRoomCharge;
-  const additionalCost = Number(hourPrice) || 0;
+  const selectedPackage =
+    ratePackages?.find((pkg) => pkg.packageId === selectedPackageId) ?? ratePackages?.[0] ?? null;
+  const additionalHours = selectedPackage?.hours ?? 0;
+  const additionalCost = selectedPackage?.price ?? 0;
   const paid = collectedAmount(payment, additionalCost);
   const change = paid > additionalCost ? paid - additionalCost : 0;
 
-  async function handleExtendByHour() {
+  async function handleExtendByPackage() {
     if (tooOverdueToExtend) {
       toast.error("Too overdue for a quick extension — check out and start a new 3h booking.");
       return;
     }
-    if (additionalCost <= 0) {
-      toast.error("Enter the price for the extra hour.");
+    if (!selectedPackage || additionalHours <= 0 || additionalCost <= 0) {
+      toast.error("Pick a rate package to extend.");
       return;
     }
     setSubmitting(true);
     const amountCollected = Math.min(paid, additionalCost);
     const payload = paymentPayload(payment, additionalCost);
     try {
-      await extendStay(booking, 1, additionalCost, amountCollected, {
+      await extendStay(booking, additionalHours, additionalCost, amountCollected, {
         paymentMethod: payload.paymentMethod,
         gcashReference: payload.gcashReference,
         qrphReference: payload.qrphReference,
@@ -109,12 +122,12 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
         splitGcashAmount: payload.splitGcashAmount,
         splitQrphAmount: payload.splitQrphAmount,
       });
-      toast.success(`Room ${room.roomNumber} extended by 1h.`);
+      toast.success(`Room ${room.roomNumber} extended by ${additionalHours}h.`);
       if (printer.connected) {
         try {
           await printExtensionReceipt(booking, room, {
             staffName,
-            hours: 1,
+            hours: additionalHours,
             amountCharged: additionalCost,
             amountPaid: amountCollected,
             change,
@@ -131,6 +144,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
         }
       }
       setReceipt({
+        hours: additionalHours,
         amountCharged: additionalCost,
         amountPaid: amountCollected,
         change,
@@ -155,7 +169,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
     try {
       await printExtensionReceipt(booking, room, {
         staffName,
-        hours: 1,
+        hours: receipt.hours,
         amountCharged: receipt.amountCharged,
         amountPaid: receipt.amountPaid,
         change: receipt.change,
@@ -238,7 +252,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
             </div>
             <div className="my-1 border-t" />
             <div className="flex justify-between font-medium">
-              <span>+1h extension</span>
+              <span>+{receipt.hours}h extension</span>
               <span>₱{receipt.amountCharged.toFixed(2)}</span>
             </div>
             <PaymentBreakdownDisplay
@@ -266,7 +280,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
               <ReceiptPreviewStrip
                 lines={previewExtensionReceipt(booking, room, {
                   staffName,
-                  hours: 1,
+                  hours: receipt.hours,
                   amountCharged: receipt.amountCharged,
                   amountPaid: receipt.amountPaid,
                   change: receipt.change,
@@ -315,20 +329,31 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
 
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label>Extend by</Label>
+            <Label className="text-base font-bold">Extend by</Label>
             <div className="flex flex-wrap gap-1.5">
+              {ratePackages?.map((pkg) => (
+                <Button
+                  key={pkg.packageId}
+                  type="button"
+                  size="sm"
+                  className="font-semibold"
+                  variant={mode === "package" && selectedPackage?.packageId === pkg.packageId ? "default" : "outline"}
+                  onClick={() => {
+                    setMode("package");
+                    setSelectedPackageId(pkg.packageId);
+                    setPayment((current) =>
+                      current.method === "cash" ? { ...current, amountPaid: String(pkg.price) } : current
+                    );
+                  }}
+                  disabled={submitting || tooOverdueToExtend}
+                >
+                  {pkg.hours}h · ₱{pkg.price}
+                </Button>
+              ))}
               <Button
                 type="button"
                 size="sm"
-                variant={mode === "hour" ? "default" : "outline"}
-                onClick={() => setMode("hour")}
-                disabled={submitting || tooOverdueToExtend}
-              >
-                +1 hour
-              </Button>
-              <Button
-                type="button"
-                size="sm"
+                className="font-semibold"
                 variant={mode === "open" ? "default" : "outline"}
                 onClick={() => setMode("open")}
                 disabled={submitting || tooOverdueToExtend}
@@ -344,20 +369,11 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
               extend, either by the hour or to open time. Check the guest out and start a new
               booking ({REGULAR_BOOKING_MIN_HOURS}h / ₱200 minimum) instead.
             </p>
-          ) : mode === "hour" ? (
+          ) : mode === "package" ? (
             <>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="hourPrice">Price for the hour</Label>
-                <Input
-                  id="hourPrice"
-                  type="number"
-                  min={0}
-                  value={hourPrice}
-                  onChange={(e) => setHourPrice(e.target.value)}
-                  disabled={submitting}
-                  className="max-w-40"
-                />
-              </div>
+              <p className="text-sm text-muted-foreground">
+                Adds the selected package onto this stay — {additionalHours}h for ₱{additionalCost.toFixed(2)}.
+              </p>
 
               <PaymentFields
                 draft={payment}
@@ -381,14 +397,14 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
           <Button variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          {mode === "hour" ? (
+          {mode === "package" ? (
             <Button
-              onClick={handleExtendByHour}
-              disabled={submitting || tooOverdueToExtend}
+              onClick={() => void handleExtendByPackage()}
+              disabled={submitting || tooOverdueToExtend || !selectedPackage}
               title={tooOverdueToExtend ? "Too overdue — start a new 3h booking instead" : undefined}
             >
               {submitting && <Loader2Icon className="size-4 animate-spin" />}
-              Extend by 1 hour
+              Extend {additionalHours}h · ₱{additionalCost.toFixed(2)}
             </Button>
           ) : (
             <Button
