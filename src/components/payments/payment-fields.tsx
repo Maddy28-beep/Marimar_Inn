@@ -104,7 +104,7 @@ export function PaymentFields({
           onValueChange={(v) => patch({ method: v as PaymentMethod })}
           disabled={disabled}
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger className="h-11 w-full text-base font-semibold">
             <SelectValue>{PAYMENT_METHOD_LABELS[draft.method]}</SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -145,8 +145,8 @@ export function PaymentFields({
 
       {draft.method === "gcash" || draft.method === "qrph" ? (
         <div className="flex flex-col gap-1.5">
-          <Label>Amount paid</Label>
-          <div className="flex h-9 items-center rounded-md border bg-muted px-3 text-sm text-muted-foreground">
+          <Label className="text-base font-bold">Amount paid</Label>
+          <div className="flex h-11 items-center rounded-lg border-2 bg-muted px-3 text-base font-semibold text-foreground">
             Full amount — ₱{due.toFixed(2)} via {PAYMENT_METHOD_LABELS[draft.method]}
           </div>
         </div>
@@ -154,7 +154,7 @@ export function PaymentFields({
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`${idPrefix}-split-cash`}>Cash amount</Label>
+              <Label htmlFor={`${idPrefix}-split-cash`} className="text-base font-bold">Cash amount</Label>
               <Input
                 id={`${idPrefix}-split-cash`}
                 type="number"
@@ -162,10 +162,11 @@ export function PaymentFields({
                 value={draft.splitCash}
                 onChange={(e) => patch({ splitCash: e.target.value })}
                 disabled={disabled}
+                className="h-11 border-2 text-base font-semibold"
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`${idPrefix}-split-gcash`}>GCash amount</Label>
+              <Label htmlFor={`${idPrefix}-split-gcash`} className="text-base font-bold">GCash amount</Label>
               <Input
                 id={`${idPrefix}-split-gcash`}
                 type="number"
@@ -173,10 +174,11 @@ export function PaymentFields({
                 value={draft.splitGcash}
                 onChange={(e) => patch({ splitGcash: e.target.value })}
                 disabled={disabled}
+                className="h-11 border-2 text-base font-semibold"
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`${idPrefix}-split-qrph`}>QRPh amount</Label>
+              <Label htmlFor={`${idPrefix}-split-qrph`} className="text-base font-bold">QRPh amount</Label>
               <Input
                 id={`${idPrefix}-split-qrph`}
                 type="number"
@@ -184,6 +186,7 @@ export function PaymentFields({
                 value={draft.splitQrph}
                 onChange={(e) => patch({ splitQrph: e.target.value })}
                 disabled={disabled}
+                className="h-11 border-2 text-base font-semibold"
               />
             </div>
           </div>
@@ -198,7 +201,7 @@ export function PaymentFields({
       ) : (
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor={`${idPrefix}-amount`}>Amount paid</Label>
+            <Label htmlFor={`${idPrefix}-amount`} className="text-base font-bold">Amount paid</Label>
             <Input
               id={`${idPrefix}-amount`}
               type="number"
@@ -207,11 +210,12 @@ export function PaymentFields({
               value={draft.amountPaid}
               onChange={(e) => patch({ amountPaid: e.target.value })}
               disabled={disabled}
+              className="h-11 border-2 text-base font-semibold"
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Change</Label>
-            <div className="flex h-8 items-center text-sm font-medium">₱{change.toFixed(2)}</div>
+            <Label className="text-base font-bold">Change</Label>
+            <div className="flex h-11 items-center text-base font-semibold">₱{change.toFixed(2)}</div>
           </div>
         </div>
       )}
