@@ -176,9 +176,9 @@ class EscPosBuilder {
     return this.push(0x0a, 0x1d, 0x56, 0x42, 0x00);
   }
 
-  /** Pin 5 pulse inside the receipt job — must come before cut. */
+  /** Both drawer pins, before cut — RPP02N ignores a kick-only Bluetooth job. */
   kick() {
-    return this.push(...drawerPulse(1));
+    return this.push(...drawerKickBytes());
   }
 
   finish() {
@@ -663,31 +663,37 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
 }
 
 /**
- * Short ESC p (100ms). No printable text — Open drawer must not feed a slip.
- * On a cash sale the pulse sits inside the receipt, before the cut.
+ * ESC p + DLE DC4 on pin 5 then pin 2. Kick-only Bluetooth jobs are ignored
+ * by the RPP02N — the pulses have to ride in a real print job, before cut.
  */
 function drawerPulse(pin: 0 | 1): number[] {
-  return [0x07, 0x1b, 0x70, pin, 0x32, 0xfa];
+  return [0x1b, 0x70, pin, 0x3c, 0x78];
+}
+
+function drawerKickBytes(): number[] {
+  return [
+    ...drawerPulse(1),
+    ...drawerPulse(0),
+    0x10, 0x14, 0x01, 0x01, 0x01,
+    0x10, 0x14, 0x01, 0x00, 0x01,
+  ];
+}
+
+function buildDrawerKickJob(): Uint8Array {
+  return Uint8Array.from([
+    0x1b, 0x40,
+    0x1b, 0x4d, 0x00,
+    ...drawerKickBytes(),
+    0x0a,
+    0x0a,
+    0x1d, 0x56, 0x42, 0x00,
+  ]);
 }
 
 async function sendDrawerKick(withReceipt?: Uint8Array): Promise<void> {
-  const pin2 = Uint8Array.from([0x1b, 0x40, ...drawerPulse(0)]);
-  if (withReceipt) {
-    const merged = new Uint8Array(withReceipt.length + pin2.length);
-    merged.set(withReceipt);
-    merged.set(pin2, withReceipt.length);
-    await send(merged);
-    return;
-  }
-  if (state.kind === "native") {
-    const bridge = getNativePrinterBridge();
-    if (bridge?.kickDrawer) {
-      const result = String(bridge.kickDrawer() ?? "").trim();
-      if (result !== "ok") throw new Error(result || "Couldn't open the drawer.");
-      return;
-    }
-  }
-  await send(Uint8Array.from([0x1b, 0x40, ...drawerPulse(1), 0x1b, 0x40, ...drawerPulse(0)]));
+  // Do not call native kickDrawer() — that path sends pulses with no cut,
+  // the clone ACKs the socket, and the drawer never moves.
+  await send(withReceipt ?? buildDrawerKickJob());
 }
 
 export function printerErrorMessage(error: unknown): string {
