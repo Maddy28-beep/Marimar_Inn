@@ -45,13 +45,20 @@ class PrinterBridge {
     @SuppressLint("MissingPermission")
     @JavascriptInterface
     fun connect(mac: String): String {
-        return runOnPrinterThread {
-            val result = connectLocked(mac)
-            if (result == "ok") {
-                lastMac = mac
+        val adapter = BluetoothAdapter.getDefaultAdapter()
+            ?: return "Bluetooth is not available on this tablet."
+        if (!adapter.isEnabled) return "Turn Bluetooth on first."
+        lastMac = mac
+        // Don't block the WebView JS thread on RFCOMM — that froze the whole
+        // front desk while the printer woke up. writeBase64 reconnects if
+        // this handshake is still in flight.
+        executor.execute {
+            try {
+                connectLocked(mac)
+            } catch (_: Exception) {
             }
-            result
         }
+        return "ok"
     }
 
     @SuppressLint("MissingPermission")

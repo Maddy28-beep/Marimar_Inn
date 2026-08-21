@@ -12,8 +12,10 @@ export function BrandLogo({
     <Image
       src="/logo/logo.png"
       alt="Marimar Inn"
-      width={2089}
-      height={753}
+      width={480}
+      height={173}
+      sizes="160px"
+      quality={70}
       priority={priority}
       className={cn("h-auto w-auto max-w-none bg-transparent object-contain", className)}
     />

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { PrinterStatus } from "@/components/printer-status";
 import { CashDrawerControl } from "@/components/cash-drawer-control";
-import { hoursElapsed, subscribeToActiveBookings } from "@/lib/bookings";
-import { subscribeToRooms } from "@/lib/rooms";
+import { hoursElapsed } from "@/lib/bookings";
+import { FrontDeskProvider, useFrontDesk } from "@/context/front-desk-context";
 import {
   checkoutReminderBookingId,
   CHECKOUT_WARNING_HOURS,
@@ -55,19 +55,10 @@ function HeaderClock({ className }: { className?: string }) {
 }
 
 function useCheckoutReminderScanner() {
-  const [bookingsByRoom, setBookingsByRoom] = useState<Map<string, Booking>>(new Map());
-  const [roomsById, setRoomsById] = useState<Map<string, Room>>(new Map());
-  const [roomsLoaded, setRoomsLoaded] = useState(false);
-  const now = useNowTick(30_000);
-
-  useEffect(() => subscribeToActiveBookings(setBookingsByRoom), []);
-  useEffect(
-    () =>
-      subscribeToRooms((rooms) => {
-        setRoomsById(new Map(rooms.map((r) => [r.roomId, r])));
-        setRoomsLoaded(true);
-      }),
-    []
+  const { rooms, bookingsByRoom, roomsLoaded, now } = useFrontDesk();
+  const roomsById = useMemo(
+    () => new Map((rooms ?? []).map((room) => [room.roomId, room])),
+    [rooms]
   );
 
   useEffect(() => {
@@ -324,7 +315,9 @@ export default function AuthenticatedLayout({
 }) {
   return (
     <ProtectedRoute>
-      <AppShell>{children}</AppShell>
+      <FrontDeskProvider>
+        <AppShell>{children}</AppShell>
+      </FrontDeskProvider>
     </ProtectedRoute>
   );
 }

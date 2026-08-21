@@ -11,8 +11,8 @@ android {
         applicationId = "ph.marimarinn.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "8"
+        versionCode = 9
+        versionName = "9"
     }
 
     buildFeatures {

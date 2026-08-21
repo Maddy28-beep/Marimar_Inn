@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { cn } from "@/lib/utils";
 import { ROOM_TYPE_LABELS, type Booking, type Room, type RoomStatus } from "@/lib/types";
 import { hoursElapsed } from "@/lib/bookings";
@@ -15,7 +16,7 @@ import {
 } from "lucide-react";
 
 const CARD_SHELL =
-  "relative flex h-36 w-full flex-col gap-1 overflow-hidden rounded-2xl border p-3 pl-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md before:absolute before:inset-y-0 before:left-0 before:w-1.5";
+  "relative flex h-36 w-full flex-col gap-1 overflow-hidden rounded-2xl border p-3 pl-3.5 text-left shadow-sm before:absolute before:inset-y-0 before:left-0 before:w-1.5";
 
 const STATUS_STYLES: Record<
   RoomStatus,
@@ -59,10 +60,10 @@ interface RoomCardProps {
   room: Room;
   booking?: Booking;
   now: Date;
-  onClick: () => void;
+  onSelect: (room: Room) => void;
 }
 
-export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
+export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }: RoomCardProps) {
   const { appUser } = useAuth();
   const isOwner = appUser?.role === "owner";
   const style = STATUS_STYLES[room.status];
@@ -83,7 +84,7 @@ export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={() => onSelect(room)}
       className={cn(
         CARD_SHELL,
         // 15 minutes left or overdue gets a dark-red card, not just the
@@ -188,4 +189,4 @@ export function RoomCard({ room, booking, now, onClick }: RoomCardProps) {
       )}
     </button>
   );
-}
+});

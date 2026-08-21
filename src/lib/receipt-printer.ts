@@ -560,6 +560,8 @@ async function reconnectNativePrinter(stored: StoredDevice | null): Promise<void
   await connectNativePrinter(pick);
 }
 
+let reconnectInFlight: Promise<void> | null = null;
+
 export async function tryReconnectPrinter(): Promise<void> {
   // Every component that calls useReceiptPrinter() (PrinterStatus, plus
   // every dialog that can print) fires this on its own mount. Without this
@@ -570,6 +572,18 @@ export async function tryReconnectPrinter(): Promise<void> {
   // The UI would keep showing "Connected" (state.kind is untouched unless
   // a fresh attempt actually succeeds or the device fires its own
   // disconnect event) while prints silently go nowhere.
+  if (state.kind !== null) return;
+  if (reconnectInFlight) return reconnectInFlight;
+
+  reconnectInFlight = doTryReconnectPrinter();
+  try {
+    await reconnectInFlight;
+  } finally {
+    reconnectInFlight = null;
+  }
+}
+
+async function doTryReconnectPrinter(): Promise<void> {
   if (state.kind !== null) return;
 
   const stored = loadStoredDevice();

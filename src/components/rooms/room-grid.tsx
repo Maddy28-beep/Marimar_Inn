@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useAuth } from "@/context/auth-context";
-import { subscribeToRooms } from "@/lib/rooms";
-import { subscribeToActiveBookings, hoursElapsed, EXTEND_OVERDUE_CUTOFF_HOURS, EXTEND_OVERDUE_CUTOFF_MINUTES } from "@/lib/bookings";
+import { useFrontDesk } from "@/context/front-desk-context";
+import { hoursElapsed, EXTEND_OVERDUE_CUTOFF_HOURS, EXTEND_OVERDUE_CUTOFF_MINUTES } from "@/lib/bookings";
 import { formatHours } from "@/lib/time";
 import type { Booking, Room, RoomStatus, RoomType } from "@/lib/types";
 import { ROOM_TYPE_LABELS } from "@/lib/types";
-import { useNowTick } from "@/hooks/use-now-tick";
 import { RoomCard } from "@/components/rooms/room-card";
 import { CheckInDialog } from "@/components/rooms/check-in-dialog";
 import { RoomDetailDialog } from "@/components/rooms/room-detail-dialog";
@@ -49,23 +48,11 @@ type DialogState =
 
 export function RoomGrid() {
   const { appUser } = useAuth();
-  const [rooms, setRooms] = useState<Room[] | null>(null);
-  const [bookingsByRoom, setBookingsByRoom] = useState<Map<string, Booking>>(new Map());
+  const { rooms, bookingsByRoom, now } = useFrontDesk();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [dialog, setDialog] = useState<DialogState>(null);
-  const now = useNowTick(30_000);
-
-  useEffect(() => {
-    const unsubscribe = subscribeToRooms(setRooms);
-    return unsubscribe;
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = subscribeToActiveBookings(setBookingsByRoom);
-    return unsubscribe;
-  }, []);
 
   // Owner-facing oversight: cashiers sometimes let a guest stay past their
   // booked time (or extend informally) without logging it in the system, so
@@ -99,18 +86,21 @@ export function RoomGrid() {
     });
   }, [rooms, statusFilter, typeFilter, search]);
 
-  function handleRoomClick(room: Room) {
-    if (room.status === "available") {
-      setDialog({ kind: "check-in", room });
-      return;
-    }
-    if (room.status === "occupied") {
-      if (!bookingsByRoom.get(room.roomId)) return;
-      setDialog({ kind: "detail", room });
-      return;
-    }
-    setDialog({ kind: "status", room });
-  }
+  const handleRoomClick = useCallback(
+    (room: Room) => {
+      if (room.status === "available") {
+        setDialog({ kind: "check-in", room });
+        return;
+      }
+      if (room.status === "occupied") {
+        if (!bookingsByRoom.get(room.roomId)) return;
+        setDialog({ kind: "detail", room });
+        return;
+      }
+      setDialog({ kind: "status", room });
+    },
+    [bookingsByRoom]
+  );
 
   if (rooms === null) {
     return (
@@ -211,7 +201,7 @@ export function RoomGrid() {
             room={room}
             booking={bookingsByRoom.get(room.roomId)}
             now={now}
-            onClick={() => handleRoomClick(room)}
+            onSelect={handleRoomClick}
           />
         ))}
       </div>

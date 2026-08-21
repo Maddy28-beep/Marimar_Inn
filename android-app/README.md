@@ -24,7 +24,8 @@ Each printer-app update is a **new file**, never overwrite:
 - `D:\Downloads\MarimarInn-tablet-v6.apk` — darker, slower thermal print
 - `D:\Downloads\MarimarInn-tablet-v7.apk` — cash drawer kick stays on one Bluetooth connection
 - `D:\Downloads\MarimarInn-tablet-v8.apk` — keep the printer socket open so print and drawer do not drop on every job
-- Next change will be `v9`, and so on
+- `D:\Downloads\MarimarInn-tablet-v9.apk` — cache the site and connect the printer in the background so the tablet stays responsive
+- Next change will be `v10`, and so on
 
 Install the **highest** version number. Allow Nearby devices when Android asks.
 

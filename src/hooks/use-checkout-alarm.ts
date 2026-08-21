@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { hoursElapsed, subscribeToActiveBookings } from "@/lib/bookings";
+import { hoursElapsed } from "@/lib/bookings";
 import {
   checkoutReminderBookingId,
   CHECKOUT_CRITICAL_HOURS,
@@ -9,6 +9,7 @@ import {
   subscribeToNotifications,
 } from "@/lib/notifications";
 import { playCriticalChime, playOverdueAlarm, playWarningChime } from "@/lib/alarm";
+import { useFrontDesk } from "@/context/front-desk-context";
 import type { AppNotification, Booking } from "@/lib/types";
 
 const REPEAT_INTERVAL_MS = 3 * 60 * 1000;
@@ -53,6 +54,7 @@ function liveCheckoutState(booking: Booking | undefined) {
  * the stay was gone.
  */
 export function useCheckoutAlarm() {
+  const { bookingsByRoom } = useFrontDesk();
   const mountedAtRef = useRef(0);
   const bookingsByIdRef = useRef<Map<string, Booking>>(new Map());
   const notificationsRef = useRef<AppNotification[]>([]);
@@ -61,70 +63,64 @@ export function useCheckoutAlarm() {
   const wasOverdueRef = useRef<Map<string, boolean>>(new Map());
   const repeatTimersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
 
-  useEffect(() => {
-    mountedAtRef.current = Date.now();
+  function evaluate() {
+    const reminders = notificationsRef.current.filter(
+      (n) => n.type === "checkout_reminder" && !n.resolved
+    );
+    const currentIds = new Set<string>();
+    const pastWarmup = Date.now() - mountedAtRef.current > WARMUP_MS;
 
-    function evaluate() {
-      const reminders = notificationsRef.current.filter(
-        (n) => n.type === "checkout_reminder" && !n.resolved
-      );
-      const currentIds = new Set<string>();
-      const pastWarmup = Date.now() - mountedAtRef.current > WARMUP_MS;
+    for (const n of reminders) {
+      const bookingId = checkoutReminderBookingId(n);
+      const booking = bookingId ? bookingsByIdRef.current.get(bookingId) : undefined;
+      const state = liveCheckoutState(booking);
+      if (!state) continue;
 
-      for (const n of reminders) {
-        const bookingId = checkoutReminderBookingId(n);
-        const booking = bookingId ? bookingsByIdRef.current.get(bookingId) : undefined;
-        const state = liveCheckoutState(booking);
-        if (!state) continue;
+      currentIds.add(n.notificationId);
+      const wasKnown = knownIdsRef.current.has(n.notificationId);
+      const wasCritical = wasCriticalRef.current.get(n.notificationId) ?? false;
+      const wasOverdue = wasOverdueRef.current.get(n.notificationId) ?? false;
 
-        currentIds.add(n.notificationId);
-        const wasKnown = knownIdsRef.current.has(n.notificationId);
-        const wasCritical = wasCriticalRef.current.get(n.notificationId) ?? false;
-        const wasOverdue = wasOverdueRef.current.get(n.notificationId) ?? false;
-
-        if (pastWarmup) {
-          if (!wasKnown) playWarningChime();
-          if (state.isCritical && !wasCritical) playCriticalChime();
-          if (state.isOverdue && !wasOverdue) playOverdueAlarm();
-        }
-
-        if (state.isOverdue && !repeatTimersRef.current.has(n.notificationId)) {
-          const timer = setInterval(() => playOverdueAlarm(), REPEAT_INTERVAL_MS);
-          repeatTimersRef.current.set(n.notificationId, timer);
-        }
-        if (!state.isOverdue) {
-          const timer = repeatTimersRef.current.get(n.notificationId);
-          if (timer) {
-            clearInterval(timer);
-            repeatTimersRef.current.delete(n.notificationId);
-          }
-        }
-
-        knownIdsRef.current.add(n.notificationId);
-        wasCriticalRef.current.set(n.notificationId, state.isCritical);
-        wasOverdueRef.current.set(n.notificationId, state.isOverdue);
+      if (pastWarmup) {
+        if (!wasKnown) playWarningChime();
+        if (state.isCritical && !wasCritical) playCriticalChime();
+        if (state.isOverdue && !wasOverdue) playOverdueAlarm();
       }
 
-      for (const id of Array.from(knownIdsRef.current)) {
-        if (!currentIds.has(id)) {
-          knownIdsRef.current.delete(id);
-          wasCriticalRef.current.delete(id);
-          wasOverdueRef.current.delete(id);
-          const timer = repeatTimersRef.current.get(id);
-          if (timer) {
-            clearInterval(timer);
-            repeatTimersRef.current.delete(id);
-          }
+      if (state.isOverdue && !repeatTimersRef.current.has(n.notificationId)) {
+        const timer = setInterval(() => playOverdueAlarm(), REPEAT_INTERVAL_MS);
+        repeatTimersRef.current.set(n.notificationId, timer);
+      }
+      if (!state.isOverdue) {
+        const timer = repeatTimersRef.current.get(n.notificationId);
+        if (timer) {
+          clearInterval(timer);
+          repeatTimersRef.current.delete(n.notificationId);
+        }
+      }
+
+      knownIdsRef.current.add(n.notificationId);
+      wasCriticalRef.current.set(n.notificationId, state.isCritical);
+      wasOverdueRef.current.set(n.notificationId, state.isOverdue);
+    }
+
+    for (const id of Array.from(knownIdsRef.current)) {
+      if (!currentIds.has(id)) {
+        knownIdsRef.current.delete(id);
+        wasCriticalRef.current.delete(id);
+        wasOverdueRef.current.delete(id);
+        const timer = repeatTimersRef.current.get(id);
+        if (timer) {
+          clearInterval(timer);
+          repeatTimersRef.current.delete(id);
         }
       }
     }
+  }
 
-    const stopBookings = subscribeToActiveBookings((byRoom) => {
-      const byId = new Map<string, Booking>();
-      byRoom.forEach((booking) => byId.set(booking.bookingId, booking));
-      bookingsByIdRef.current = byId;
-      evaluate();
-    });
+  useEffect(() => {
+    mountedAtRef.current = Date.now();
+
     const unsubscribe = subscribeToNotifications((notifications) => {
       notificationsRef.current = notifications;
       evaluate();
@@ -132,10 +128,16 @@ export function useCheckoutAlarm() {
 
     const timers = repeatTimersRef.current;
     return () => {
-      stopBookings();
       unsubscribe();
       timers.forEach((timer) => clearInterval(timer));
       timers.clear();
     };
   }, []);
+
+  useEffect(() => {
+    const byId = new Map<string, Booking>();
+    bookingsByRoom.forEach((booking) => byId.set(booking.bookingId, booking));
+    bookingsByIdRef.current = byId;
+    evaluate();
+  }, [bookingsByRoom]);
 }
