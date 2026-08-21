@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   convertToOpenTime,
@@ -52,17 +53,21 @@ interface ExtendStayDialogProps {
   onClose: () => void;
 }
 
-type ExtendMode = "package" | "open";
+type ExtendMode = "hour" | "package" | "open";
 
 export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogProps) {
   const now = useNowTick(1000);
   const printer = useReceiptPrinter();
   const { appUser } = useAuth();
   const staffName = appUser?.displayName ?? appUser?.email ?? "Staff";
-  const [mode, setMode] = useState<ExtendMode>("package");
+  const [mode, setMode] = useState<ExtendMode>("hour");
+  const [hourPrice, setHourPrice] = useState(String(OPEN_TIME_RATE_PER_HOUR));
   const [ratePackages, setRatePackages] = useState<RatePackage[] | null>(null);
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
-  const [payment, setPayment] = useState<PaymentDraft>(emptyPaymentDraft);
+  const [payment, setPayment] = useState<PaymentDraft>(() => ({
+    ...emptyPaymentDraft(),
+    amountPaid: String(OPEN_TIME_RATE_PER_HOUR),
+  }));
   const [submitting, setSubmitting] = useState(false);
   const [phase, setPhase] = useState<"form" | "receipt">("form");
   const [receipt, setReceipt] = useState<{
@@ -83,10 +88,6 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
   useEffect(() => {
     if (!ratePackages?.length) return;
     setSelectedPackageId((current) => current ?? ratePackages[0].packageId);
-    setPayment((current) => {
-      if (current.method !== "cash" || current.amountPaid !== "") return current;
-      return { ...current, amountPaid: String(ratePackages[0].price) };
-    });
   }, [ratePackages]);
 
   const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, now);
@@ -96,8 +97,12 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
   const packagePrice = booking.originalPackagePrice ?? booking.totalRoomCharge;
   const selectedPackage =
     ratePackages?.find((pkg) => pkg.packageId === selectedPackageId) ?? ratePackages?.[0] ?? null;
-  const additionalHours = selectedPackage?.hours ?? 0;
-  const additionalCost = selectedPackage?.price ?? 0;
+  const extraPackages = (ratePackages ?? []).filter(
+    (pkg) => !(pkg.hours === 1 && pkg.price === OPEN_TIME_RATE_PER_HOUR)
+  );
+  const additionalHours = mode === "hour" ? 1 : selectedPackage?.hours ?? 0;
+  const additionalCost =
+    mode === "hour" ? Number(hourPrice) || 0 : selectedPackage?.price ?? 0;
   const paid = collectedAmount(payment, additionalCost);
   const change = paid > additionalCost ? paid - additionalCost : 0;
 
@@ -106,8 +111,8 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
       toast.error("Too overdue for a quick extension — check out and start a new 3h booking.");
       return;
     }
-    if (!selectedPackage || additionalHours <= 0 || additionalCost <= 0) {
-      toast.error("Pick a rate package to extend.");
+    if (additionalHours <= 0 || additionalCost <= 0) {
+      toast.error(mode === "hour" ? "Enter the price for the extra hour." : "Pick a rate package to extend.");
       return;
     }
     setSubmitting(true);
@@ -331,7 +336,22 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
           <div className="flex flex-col gap-1.5">
             <Label className="text-base font-bold">Extend by</Label>
             <div className="flex flex-wrap gap-1.5">
-              {ratePackages?.map((pkg) => (
+              <Button
+                type="button"
+                size="sm"
+                className="font-semibold"
+                variant={mode === "hour" ? "default" : "outline"}
+                onClick={() => {
+                  setMode("hour");
+                  setPayment((current) =>
+                    current.method === "cash" ? { ...current, amountPaid: hourPrice } : current
+                  );
+                }}
+                disabled={submitting || tooOverdueToExtend}
+              >
+                1h · ₱{OPEN_TIME_RATE_PER_HOUR}
+              </Button>
+              {extraPackages.map((pkg) => (
                 <Button
                   key={pkg.packageId}
                   type="button"
@@ -369,11 +389,44 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
               extend, either by the hour or to open time. Check the guest out and start a new
               booking ({REGULAR_BOOKING_MIN_HOURS}h / ₱200 minimum) instead.
             </p>
-          ) : mode === "package" ? (
+          ) : mode === "open" ? (
+            <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+              The {packageHours}h package (₱{packagePrice.toFixed(2)}) still applies in full —
+              this only removes the fixed end time so the stay can keep going past it. No
+              charge is collected now; at checkout, any time beyond the {packageHours}h bills
+              on top at ₱{OPEN_TIME_RATE_PER_HOUR}/hr in 30-min blocks.
+            </p>
+          ) : (
             <>
-              <p className="text-sm text-muted-foreground">
-                Adds the selected package onto this stay — {additionalHours}h for ₱{additionalCost.toFixed(2)}.
-              </p>
+              {mode === "hour" ? (
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-sm text-muted-foreground">
+                    Adds 1 extra hour onto this stay for ₱{additionalCost.toFixed(2)}.
+                  </p>
+                  <Label htmlFor="hourPrice" className="text-base font-bold">
+                    Price for the hour
+                  </Label>
+                  <Input
+                    id="hourPrice"
+                    type="number"
+                    min={0}
+                    value={hourPrice}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setHourPrice(next);
+                      setPayment((current) =>
+                        current.method === "cash" ? { ...current, amountPaid: next } : current
+                      );
+                    }}
+                    disabled={submitting}
+                    className="max-w-40"
+                  />
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Adds the selected package onto this stay — {additionalHours}h for ₱{additionalCost.toFixed(2)}.
+                </p>
+              )}
 
               <PaymentFields
                 draft={payment}
@@ -383,13 +436,6 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
                 idPrefix="extend"
               />
             </>
-          ) : (
-            <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
-              The {packageHours}h package (₱{packagePrice.toFixed(2)}) still applies in full —
-              this only removes the fixed end time so the stay can keep going past it. No
-              charge is collected now; at checkout, any time beyond the {packageHours}h bills
-              on top at ₱{OPEN_TIME_RATE_PER_HOUR}/hr in 30-min blocks.
-            </p>
           )}
         </div>
 
@@ -397,16 +443,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
           <Button variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          {mode === "package" ? (
-            <Button
-              onClick={() => void handleExtendByPackage()}
-              disabled={submitting || tooOverdueToExtend || !selectedPackage}
-              title={tooOverdueToExtend ? "Too overdue — start a new 3h booking instead" : undefined}
-            >
-              {submitting && <Loader2Icon className="size-4 animate-spin" />}
-              Extend {additionalHours}h · ₱{additionalCost.toFixed(2)}
-            </Button>
-          ) : (
+          {mode === "open" ? (
             <Button
               onClick={handleConvertToOpenTime}
               disabled={submitting || tooOverdueToExtend}
@@ -414,6 +451,20 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
             >
               {submitting && <Loader2Icon className="size-4 animate-spin" />}
               Switch to open time
+            </Button>
+          ) : (
+            <Button
+              onClick={() => void handleExtendByPackage()}
+              disabled={
+                submitting ||
+                tooOverdueToExtend ||
+                additionalCost <= 0 ||
+                (mode === "package" && !selectedPackage)
+              }
+              title={tooOverdueToExtend ? "Too overdue — start a new 3h booking instead" : undefined}
+            >
+              {submitting && <Loader2Icon className="size-4 animate-spin" />}
+              Extend {additionalHours}h · ₱{additionalCost.toFixed(2)}
             </Button>
           )}
         </DialogFooter>

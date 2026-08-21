@@ -128,7 +128,9 @@ export function PrinterStatus() {
               <p className="text-sm text-muted-foreground">
                 {printer.name} · {printer.kind ? KIND_LABELS[printer.kind] : ""}
               </p>
-              {printer.kind === "bluetooth" && /rpp|jp-?58|mtp-|xprinter|gp-/i.test(printer.name ?? "") && (
+              {printer.kind === "bluetooth" &&
+                !printer.nativeApp &&
+                /rpp|jp-?58|mtp-|xprinter|gp-/i.test(printer.name ?? "") && (
                 <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs font-medium text-amber-800 dark:text-amber-300">
                   Chrome Bluetooth cannot print to this printer. Close the browser, open the
                   Marimar Inn app on the tablet, tap the printer icon, then tap {printer.name}.

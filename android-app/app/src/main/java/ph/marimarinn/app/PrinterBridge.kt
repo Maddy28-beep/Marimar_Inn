@@ -109,16 +109,26 @@ class PrinterBridge {
         return runOnPrinterThread {
             val mac = lastMac ?: return@runOnPrinterThread "Printer is not connected. Tap the printer icon and connect again."
             if (data.isNullOrEmpty()) return@runOnPrinterThread "Nothing to print."
-            fun sendOnce(): String {
+            fun writeOrReconnect(): String {
+                if (output != null && socket?.isConnected == true) {
+                    try {
+                        return writeLocked(data)
+                    } catch (_: Exception) {
+                        disconnectLocked()
+                    }
+                }
                 val reopened = connectLocked(mac)
                 if (reopened != "ok") return reopened
                 return writeLocked(data)
             }
             try {
-                sendOnce()
+                writeOrReconnect()
             } catch (error: Exception) {
                 try {
-                    sendOnce()
+                    disconnectLocked()
+                    val reopened = connectLocked(mac)
+                    if (reopened != "ok") return@runOnPrinterThread reopened
+                    writeLocked(data)
                 } catch (retryError: Exception) {
                     retryError.message ?: error.message ?: "Print failed."
                 }

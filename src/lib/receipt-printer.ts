@@ -536,6 +536,27 @@ export async function connectRawBtPrinter(): Promise<void> {
  * varies, so this can quietly no-op — the UI should still offer a manual
  * "Connect printer" action as a fallback.
  */
+function looksLikeBluetoothMac(id: string): boolean {
+  return /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/.test(id);
+}
+
+async function reconnectNativePrinter(stored: StoredDevice | null): Promise<void> {
+  const paired = listNativePairedPrinters();
+  const storedMac =
+    stored?.bluetoothId && looksLikeBluetoothMac(stored.bluetoothId) ? stored.bluetoothId : null;
+  const byMac = storedMac
+    ? (paired.find((item) => item.id.toLowerCase() === storedMac.toLowerCase()) ?? {
+        id: storedMac,
+        name: stored?.name ?? "Bluetooth printer",
+      })
+    : null;
+  const byName = stored?.name ? paired.find((item) => item.name === stored.name) : null;
+  const namedPrinter = paired.find((item) => /rpp|jp-?58|printer|pos/i.test(item.name));
+  const pick = byMac ?? byName ?? namedPrinter ?? paired[0];
+  if (!pick) return;
+  await connectNativePrinter(pick);
+}
+
 export async function tryReconnectPrinter(): Promise<void> {
   // Every component that calls useReceiptPrinter() (PrinterStatus, plus
   // every dialog that can print) fires this on its own mount. Without this
@@ -550,6 +571,20 @@ export async function tryReconnectPrinter(): Promise<void> {
 
   const stored = loadStoredDevice();
   state.paperWidth = stored?.paperWidth ?? readPaperWidth();
+
+  // The tablet APK can print only over classic Bluetooth SPP. Never restore a
+  // Web Bluetooth "connection" inside it — that badge looks Connected and
+  // every write (receipt + drawer) goes nowhere.
+  if (getNativePrinterBridge()) {
+    emit();
+    try {
+      await reconnectNativePrinter(stored);
+    } catch {
+      emit();
+    }
+    return;
+  }
+
   if (!stored) {
     emit();
     return;
@@ -574,9 +609,6 @@ export async function tryReconnectPrinter(): Promise<void> {
       state.kind = "rawbt";
       state.name = "RawBT app";
       emit();
-    } else if (stored.kind === "native" && stored.bluetoothId) {
-      const name = stored.name ?? "Bluetooth printer";
-      await connectNativePrinter({ id: stored.bluetoothId, name });
     }
   } catch {
     // No previously-authorized device found (or permission wasn't retained) — stays disconnected.
@@ -733,27 +765,21 @@ function sendViaRawBt(data: Uint8Array): void {
 }
 
 async function send(data: Uint8Array): Promise<void> {
-  if (state.kind === "bluetooth" && /rpp|jp-?58/i.test(state.name ?? "")) {
-    throw new Error(
-      "RPP02N will not print from Chrome Bluetooth. Open the Marimar Inn tablet app, tap the printer icon, tap RPP02N (it must say Tablet Bluetooth), then print."
-    );
-  }
-  if (state.kind === "rawbt") {
-    sendViaRawBt(data);
-    return;
-  }
-
-  if (state.kind === "native") {
-    const bridge = getNativePrinterBridge();
-    if (!bridge) throw new Error("Open Marimar Inn from the tablet app to print.");
+  const native = getNativePrinterBridge();
+  if (native) {
     const bytes = data instanceof Uint8Array ? data : new Uint8Array(data ?? []);
     try {
       const payload = uint8ArrayToBase64(bytes);
-      const result = String(bridge.writeBase64(payload) ?? "").trim();
+      const result = String(native.writeBase64(payload) ?? "").trim();
       if (result !== "ok") throw new Error(result || "The printer didn't accept the job.");
     } catch (error) {
       throw new Error(printerErrorMessage(error));
     }
+    return;
+  }
+
+  if (state.kind === "rawbt") {
+    sendViaRawBt(data);
     return;
   }
 
