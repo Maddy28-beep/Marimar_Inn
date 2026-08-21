@@ -71,30 +71,29 @@ function QtyRow({
   disabled?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2">
-      <div className="min-w-0">
-        <div className="text-sm font-bold">{label}</div>
-        <div className="text-xs text-muted-foreground">{hint}</div>
-      </div>
-      <div className="flex items-center gap-2">
+    <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-1.5">
+      <p className="min-w-0 truncate text-sm font-bold">
+        {label} <span className="font-medium text-muted-foreground">{hint}</span>
+      </p>
+      <div className="flex shrink-0 items-center gap-1.5">
         <Button
           type="button"
           variant="outline"
-          size="icon-sm"
+          size="icon-xs"
           onClick={() => onChange(Math.max(0, value - 1))}
           disabled={disabled || value === 0}
         >
-          <MinusIcon className="size-3.5" />
+          <MinusIcon className="size-3" />
         </Button>
-        <span className="w-6 text-center text-base font-semibold tabular-nums">{value}</span>
+        <span className="w-5 text-center text-sm font-semibold tabular-nums">{value}</span>
         <Button
           type="button"
           variant="outline"
-          size="icon-sm"
+          size="icon-xs"
           onClick={() => onChange(value + 1)}
           disabled={disabled}
         >
-          <PlusIcon className="size-3.5" />
+          <PlusIcon className="size-3" />
         </Button>
       </div>
     </div>
@@ -592,7 +591,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
             </div>
           )}
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1">
             <Label className="text-base font-bold">Extras</Label>
             <QtyRow
               label="Extra person"

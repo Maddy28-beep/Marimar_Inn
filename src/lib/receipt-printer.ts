@@ -125,13 +125,16 @@ class EscPosBuilder {
   }
 
   initialize() {
-    // RPP02N: ESC @, Font A, bold. DC2 # (Gprinter density) is treated as a
-    // bitmap command on this head and swallows the following text — paper
-    // comes out blank while drawer/cut still fire.
+    // RPP02N / Rongta: ASCII text is blank if the head is still in Chinese
+    // mode. Density is ESC 7 (RPP heat), never DC2 # or GS ( K — those either
+    // swallow the text as a bitmap or print as garbage.
     this.alignment = "left";
-    this.push(0x1b, 0x40);
-    this.push(0x1b, 0x4d, 0x00);
-    this.push(0x1b, 0x45, 0x01);
+    this.push(0x1b, 0x40); // reset
+    this.push(0x1c, 0x2e); // FS . cancel Kanji/Chinese so "Marimar Inn" prints
+    this.push(0x1b, 0x74, 0x00); // PC437
+    this.push(0x1b, 0x4d, 0x00); // Font A
+    this.push(0x1b, 0x37, 9, 170, 20); // max dots, long heat, slower interval
+    this.push(0x1b, 0x45, 0x01); // bold
     return this;
   }
 
@@ -166,13 +169,14 @@ class EscPosBuilder {
   }
 
   private feed() {
-    return this.push(0x0a);
+    return this.push(0x0d, 0x0a);
   }
 
   cut() {
-    // One line of feed so the last text clears the blade — extra LFs here
-    // were wasting a strip of blank paper after every receipt.
-    return this.push(0x0a, 0x1d, 0x56, 0x42, 0x00);
+    // GS V 65: feed then cut — same form native printTest uses. 0x42/0
+    // (cut immediately) can slice the buffer before this clone burns the
+    // last lines.
+    return this.push(0x0d, 0x0a, 0x0d, 0x0a, 0x1d, 0x56, 0x41, 0x03);
   }
 
   /** Pin 5 pulse inside the receipt job — must come before cut. */
