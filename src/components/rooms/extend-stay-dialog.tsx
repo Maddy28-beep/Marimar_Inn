@@ -34,6 +34,7 @@ import {
   printerErrorMessage,
   referenceNumberFor,
   kickDrawerForCashPayment,
+  staffFirstName,
 } from "@/lib/receipt-printer";
 import {
   cashCollectedNow,
@@ -262,7 +263,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
             <div className="my-1 border-t" />
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>Staff</span>
-              <span>{staffName}</span>
+              <span>{staffFirstName(staffName)}</span>
             </div>
           </div>
 

@@ -26,7 +26,7 @@ import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { ReceiptBrandHeader } from "@/components/receipt-brand-header";
 import { ReceiptPreviewStrip } from "@/components/receipt-preview";
-import { printThermalReceipt, previewGuestReceipt, printerErrorMessage, referenceNumberFor, kickDrawerForCashPayment } from "@/lib/receipt-printer";
+import { printThermalReceipt, previewGuestReceipt, printerErrorMessage, referenceNumberFor, kickDrawerForCashPayment, staffFirstName } from "@/lib/receipt-printer";
 import {
   cashCollectedNow,
   collectedAmount,
@@ -394,7 +394,7 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
               <div className="my-1 border-t" />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Staff</span>
-                <span>{staffName}</span>
+                <span>{staffFirstName(staffName)}</span>
               </div>
             </div>
 

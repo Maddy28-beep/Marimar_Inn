@@ -214,6 +214,15 @@ function toPrinterAscii(value: string): string {
   });
 }
 
+/** Guest receipts only show a first name — not the cashier's full display name. */
+export function staffFirstName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "Staff";
+  const local = trimmed.includes("@") ? trimmed.split("@")[0] : trimmed;
+  const first = local.split(/[\s._-]+/).find(Boolean);
+  return first || "Staff";
+}
+
 function createEncoder(_width?: number) {
   return new EscPosBuilder(SIDE_MARGIN);
 }
@@ -966,7 +975,7 @@ function guestReceiptEncoder(booking: Booking, room: Room, extras: ReceiptExtras
   encoder
     .newline()
     .align("center")
-    .line(`Staff: ${extras.staffName}`)
+    .line(`Staff: ${staffFirstName(extras.staffName)}`)
     .newline()
     .line("Thank you for staying!");
   if (extras.kickDrawer) encoder.kick();
@@ -1041,7 +1050,7 @@ function storeSaleReceiptEncoder(sale: StoreSale, extras: StoreSaleReceiptExtras
   if (sale.qrphReference) encoder.line(`QRPh Ref: ${sale.qrphReference}`);
   if (extras.change > 0) encoder.line(twoColumn("Change", money(extras.change), width));
 
-  encoder.newline().align("center").line(`Staff: ${extras.staffName}`).newline().line("Thank you!");
+  encoder.newline().align("center").line(`Staff: ${staffFirstName(extras.staffName)}`).newline().line("Thank you!");
   if (extras.kickDrawer) encoder.kick();
   encoder.finish();
   return encoder;
@@ -1131,7 +1140,7 @@ function extensionReceiptEncoder(
   encoder
     .newline()
     .align("center")
-    .line(`Staff: ${extras.staffName}`)
+    .line(`Staff: ${staffFirstName(extras.staffName)}`)
     .newline()
     .line("Thank you for staying!");
   if (extras.kickDrawer) encoder.kick();
