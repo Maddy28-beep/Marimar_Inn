@@ -176,9 +176,9 @@ class EscPosBuilder {
     return this.push(0x0a, 0x1d, 0x56, 0x42, 0x00);
   }
 
-  /** Both drawer pins, before cut — RPP02N ignores a kick-only Bluetooth job. */
+  /** Pin 5 pulse inside the receipt job — must come before cut. */
   kick() {
-    return this.push(...drawerKickBytes());
+    return this.push(...drawerPulse(1));
   }
 
   finish() {
@@ -663,37 +663,29 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
 }
 
 /**
- * ESC p + DLE DC4 on pin 5 then pin 2. Kick-only Bluetooth jobs are ignored
- * by the RPP02N — the pulses have to ride in a real print job, before cut.
+ * Same kick that opened the drawer on this RPP02N this morning:
+ * BEL + ESC p, pin 5 first, wait, then pin 2 as a second job.
  */
 function drawerPulse(pin: 0 | 1): number[] {
-  return [0x1b, 0x70, pin, 0x3c, 0x78];
+  return [0x07, 0x1b, 0x70, pin, 0x32, 0xfa];
 }
 
-function drawerKickBytes(): number[] {
-  return [
-    ...drawerPulse(1),
-    ...drawerPulse(0),
-    0x10, 0x14, 0x01, 0x01, 0x01,
-    0x10, 0x14, 0x01, 0x00, 0x01,
-  ];
-}
-
-function buildDrawerKickJob(): Uint8Array {
-  return Uint8Array.from([
-    0x1b, 0x40,
-    0x1b, 0x4d, 0x00,
-    ...drawerKickBytes(),
-    0x0a,
-    0x0a,
-    0x1d, 0x56, 0x42, 0x00,
-  ]);
+async function sendPin2Kick(): Promise<void> {
+  await sleep(700);
+  await send(Uint8Array.from([0x1b, 0x40, ...drawerPulse(0)]));
 }
 
 async function sendDrawerKick(withReceipt?: Uint8Array): Promise<void> {
-  // Do not call native kickDrawer() — that path sends pulses with no cut,
-  // the clone ACKs the socket, and the drawer never moves.
-  await send(withReceipt ?? buildDrawerKickJob());
+  if (withReceipt) {
+    await send(withReceipt);
+  } else {
+    await send(Uint8Array.from([0x1b, 0x40, ...drawerPulse(1)]));
+  }
+  try {
+    await sendPin2Kick();
+  } catch {
+    // Pin 5 already went out with the first job — don't fail the sale if pin 2 is ignored.
+  }
 }
 
 export function printerErrorMessage(error: unknown): string {
