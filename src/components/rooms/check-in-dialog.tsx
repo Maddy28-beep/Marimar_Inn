@@ -407,7 +407,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label>Rate package</Label>
+            <Label className="text-base font-bold">Rate package</Label>
             {ratePackages?.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No rate packages set up yet — add some under Manage Rooms.
@@ -453,7 +453,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
 
           {inventory !== null && inventory.length > 0 && (
             <div className="flex flex-col gap-1.5">
-              <Label>Store items (optional)</Label>
+              <Label className="text-base font-bold">Store items (optional)</Label>
               <div className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-lg border p-1.5">
                 {inventory.map((item) => {
                   const qty = cart[item.itemId] ?? 0;

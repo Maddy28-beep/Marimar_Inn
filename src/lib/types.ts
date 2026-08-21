@@ -148,4 +148,21 @@ export interface ShiftExpense {
   recordedAt: Timestamp;
   cashierId: string;
   cashierName: string;
-};
+}
+
+export interface StoreSale {
+  saleId: string;
+  soldAt: Timestamp;
+  guestName: string;
+  items: OrderItem[];
+  totalAmount: number;
+  amountPaid: number;
+  paymentMethod: PaymentMethod;
+  gcashReference?: string;
+  qrphReference?: string;
+  splitCashAmount?: number;
+  splitGcashAmount?: number;
+  splitQrphAmount?: number;
+  cashierId: string;
+  cashierName: string;
+}

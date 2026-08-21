@@ -98,7 +98,7 @@ export function PaymentFields({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1.5">
-        <Label>Payment method</Label>
+        <Label className="text-base font-bold">Payment method</Label>
         <Select
           value={draft.method}
           onValueChange={(v) => patch({ method: v as PaymentMethod })}

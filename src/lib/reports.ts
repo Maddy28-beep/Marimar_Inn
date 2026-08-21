@@ -1,7 +1,7 @@
 import { collection, getDocs, query, Timestamp, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { referenceNumberFor } from "@/lib/receipt-printer";
-import type { Booking, PaymentMethod, Room, RoomType, ShiftExpense } from "@/lib/types";
+import type { Booking, PaymentMethod, Room, RoomType, ShiftExpense, StoreSale } from "@/lib/types";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -78,10 +78,10 @@ interface ItemTally {
   revenue: number;
 }
 
-function tallyItems(bookings: Booking[]): Map<string, ItemTally> {
+function tallyItems(records: { items?: { itemId: string; name: string; quantity: number; subtotal: number }[] }[]): Map<string, ItemTally> {
   const map = new Map<string, ItemTally>();
-  for (const booking of bookings) {
-    for (const item of booking.items ?? []) {
+  for (const record of records) {
+    for (const item of record.items ?? []) {
       const existing = map.get(item.itemId);
       if (existing) {
         existing.quantity += item.quantity;
@@ -103,18 +103,18 @@ export interface DailyReport {
   mostOrderedItems: ItemTally[];
 }
 
-export function computeDailyReport(checkedInToday: Booking[], checkOutsToday: number): DailyReport {
-  // A voided booking never happened as a sale — it must never inflate
-  // check-in counts, revenue, or item tallies just because a room was
-  // briefly assigned to it before the front desk cancelled it.
+export function computeDailyReport(
+  checkedInToday: Booking[],
+  checkOutsToday: number,
+  storeSales: StoreSale[] = []
+): DailyReport {
   checkedInToday = checkedInToday.filter((b) => b.status !== "voided");
 
-  // Bookings created before Phase 3 predate totalFbCharge/items — treat
-  // missing numeric fields as 0 rather than letting `undefined` poison the
-  // sum into NaN.
   const roomRevenue = checkedInToday.reduce((sum, b) => sum + (b.totalRoomCharge ?? 0), 0);
-  const fbRevenue = checkedInToday.reduce((sum, b) => sum + (b.totalFbCharge ?? 0), 0);
-  const mostOrderedItems = Array.from(tallyItems(checkedInToday).values())
+  const fbRevenue =
+    checkedInToday.reduce((sum, b) => sum + (b.totalFbCharge ?? 0), 0) +
+    storeSales.reduce((sum, sale) => sum + (sale.totalAmount ?? 0), 0);
+  const mostOrderedItems = Array.from(tallyItems([...checkedInToday, ...storeSales]).values())
     .sort((a, b) => b.quantity - a.quantity)
     .slice(0, 10);
 
@@ -172,7 +172,10 @@ export interface DailySalesReport {
  * checked in that day, split into package vs. extension amounts using the
  * originalPackageHours/Price snapshot taken at check-in.
  */
-export function computeDailySalesReport(bookings: Booking[]): DailySalesReport {
+export function computeDailySalesReport(
+  bookings: Booking[],
+  storeSales: StoreSale[] = []
+): DailySalesReport {
   const rows: DailySalesRow[] = bookings
     .filter((b) => b.status !== "voided")
     .sort((a, b) => a.checkInTime.toMillis() - b.checkInTime.toMillis())
@@ -204,6 +207,34 @@ export function computeDailySalesReport(bookings: Booking[]): DailySalesReport {
         splitQrphAmount: booking.splitQrphAmount,
       };
     });
+
+  for (const sale of storeSales) {
+    const when = sale.soldAt?.toDate?.() ?? new Date();
+    rows.push({
+      bookingId: sale.saleId,
+      roomNumber: "Store",
+      refNumber: referenceNumberFor(sale.saleId),
+      guestName: sale.guestName || "Walk-in",
+      packageHours: 0,
+      checkInTime: when,
+      scheduledCheckOutTime: when,
+      packageAmount: 0,
+      extensionHours: 0,
+      extensionAmount: 0,
+      actualCheckOutTime: when,
+      totalRoomAmount: 0,
+      totalStoreAmount: sale.totalAmount ?? 0,
+      totalPaid: sale.amountPaid ?? 0,
+      paymentMethod: sale.paymentMethod,
+      gcashReference: sale.gcashReference,
+      qrphReference: sale.qrphReference,
+      splitCashAmount: sale.splitCashAmount,
+      splitGcashAmount: sale.splitGcashAmount,
+      splitQrphAmount: sale.splitQrphAmount,
+    });
+  }
+
+  rows.sort((a, b) => a.checkInTime.getTime() - b.checkInTime.getTime());
 
   const totals = rows.reduce<DailySalesTotals>(
     (acc, row) => {
@@ -326,7 +357,8 @@ export function computeRangeDailySeries(
   from: Date,
   to: Date,
   bookings: Booking[],
-  expenses: ShiftExpense[]
+  expenses: ShiftExpense[],
+  storeSales: StoreSale[] = []
 ): RangeDayPoint[] {
   bookings = bookings.filter((b) => b.status !== "voided");
 
@@ -356,6 +388,16 @@ export function computeRangeDailySeries(
     point.roomRevenue += room;
     point.storeRevenue += store;
     point.sales += room + store;
+  }
+
+  for (const sale of storeSales) {
+    const when = sale.soldAt?.toDate?.();
+    if (!when) continue;
+    const point = map.get(dateKey(when));
+    if (!point) continue;
+    const amount = sale.totalAmount ?? 0;
+    point.storeRevenue += amount;
+    point.sales += amount;
   }
 
   for (const expense of expenses) {
@@ -394,7 +436,8 @@ export interface MonthlyReport {
 export function computeMonthlyReport(
   bookings: Booking[],
   rooms: Room[],
-  monthDate: Date
+  monthDate: Date,
+  storeSales: StoreSale[] = []
 ): MonthlyReport {
   bookings = bookings.filter((b) => b.status !== "voided");
 
@@ -438,11 +481,23 @@ export function computeMonthlyReport(
     }
   }
 
+  for (const sale of storeSales) {
+    const amount = sale.totalAmount ?? 0;
+    fbRevenue += amount;
+    const when = sale.soldAt?.toDate?.();
+    if (!when) continue;
+    const point = dailyMap.get(dateKey(when));
+    if (point) {
+      point.fbRevenue += amount;
+      point.total += amount;
+    }
+  }
+
   const totalRoomHoursAvailable = rooms.length * numDays * 24;
   const occupancyPercent =
     totalRoomHoursAvailable > 0 ? (totalHoursBooked / totalRoomHoursAvailable) * 100 : 0;
 
-  const items = Array.from(tallyItems(bookings).values());
+  const items = Array.from(tallyItems([...bookings, ...storeSales]).values());
 
   return {
     totalRevenue: roomRevenue + fbRevenue,

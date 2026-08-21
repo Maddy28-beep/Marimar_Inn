@@ -228,6 +228,27 @@ service cloud.firestore {
     }
 
     // ============================================
+    // STORE SALES (walk-in items, no room)
+    // ============================================
+    match /storeSales/{saleId} {
+      allow read: if isAuthenticated();
+
+      allow create: if isStaff() &&
+        request.resource.data.keys().hasAll([
+          'saleId', 'soldAt', 'guestName', 'items', 'totalAmount',
+          'amountPaid', 'paymentMethod', 'cashierId', 'cashierName'
+        ]) &&
+        request.resource.data.saleId == saleId &&
+        request.resource.data.guestName is string &&
+        request.resource.data.totalAmount is number &&
+        request.resource.data.amountPaid is number &&
+        request.resource.data.cashierId == request.auth.uid;
+
+      allow update: if false;
+      allow delete: if isOwnerOrAdmin();
+    }
+
+    // ============================================
     // SETTINGS COLLECTION (System Settings)
     // ============================================
     match /settings/{settingId} {

@@ -13,6 +13,8 @@ import { CheckInDialog } from "@/components/rooms/check-in-dialog";
 import { RoomDetailDialog } from "@/components/rooms/room-detail-dialog";
 import { CheckoutDialog } from "@/components/rooms/checkout-dialog";
 import { RoomStatusDialog } from "@/components/rooms/room-status-dialog";
+import { StoreCard } from "@/components/store/store-card";
+import { WalkInSaleDialog } from "@/components/store/walk-in-sale-dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -42,6 +44,7 @@ type DialogState =
   | { kind: "detail"; room: Room }
   | { kind: "checkout"; room: Room; booking: Booking }
   | { kind: "status"; room: Room }
+  | { kind: "store" }
   | null;
 
 export function RoomGrid() {
@@ -199,6 +202,9 @@ export function RoomGrid() {
       </div>
 
       <div className="grid auto-rows-[9rem] grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+        {(!search.trim() || "store".includes(search.trim().toLowerCase())) &&
+          statusFilter === "all" &&
+          typeFilter === "all" && <StoreCard onClick={() => setDialog({ kind: "store" })} />}
         {filteredRooms.map((room) => (
           <RoomCard
             key={room.roomId}
@@ -242,6 +248,10 @@ export function RoomGrid() {
           staffName={appUser.displayName ?? appUser.email ?? "Staff"}
           onClose={() => setDialog(null)}
         />
+      )}
+
+      {dialog?.kind === "store" && appUser && (
+        <WalkInSaleDialog onClose={() => setDialog(null)} />
       )}
 
       {dialog?.kind === "status" && (

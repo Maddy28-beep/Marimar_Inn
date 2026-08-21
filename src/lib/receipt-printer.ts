@@ -6,6 +6,7 @@ import {
   type Booking,
   type PaymentMethod,
   type Room,
+  type StoreSale,
 } from "@/lib/types";
 import { paymentPortionLines } from "@/lib/bookings";
 
@@ -905,6 +906,70 @@ export function previewGuestReceipt(
 
 export async function printThermalReceipt(booking: Booking, room: Room, extras: ReceiptExtras) {
   const bytes = buildReceiptBytes(booking, room, extras);
+  if (extras.kickDrawer) await sendDrawerKick(bytes);
+  else await send(bytes);
+}
+
+export interface StoreSaleReceiptExtras {
+  staffName: string;
+  change: number;
+  kickDrawer?: boolean;
+}
+
+function storeSaleReceiptEncoder(sale: StoreSale, extras: StoreSaleReceiptExtras) {
+  const width = layoutWidth(state.paperWidth);
+  const encoder = createEncoder(width);
+
+  encoder
+    .initialize()
+    .align("center")
+    .line("Marimar Inn")
+    .line("This is not an official receipt")
+    .line("Store sale")
+    .line(`Ref: ${referenceNumberFor(sale.saleId)}`)
+    .newline()
+    .align("left")
+    .line(twoColumn("Customer", sale.guestName, width))
+    .line(sale.soldAt.toDate().toLocaleString());
+
+  encoder.newline();
+  for (const item of sale.items) {
+    encoder.line(twoColumn(`${item.quantity}x ${item.name}`, money(item.subtotal), width));
+  }
+
+  encoder.newline().line(twoColumn("Total", money(sale.totalAmount), width));
+
+  const portions = paymentPortionLines({
+    cash: sale.splitCashAmount ?? 0,
+    gcash: sale.splitGcashAmount ?? 0,
+    qrph: sale.splitQrphAmount ?? 0,
+  });
+  if (portions.length > 1) {
+    for (const line of portions) {
+      encoder.line(twoColumn(`Paid (${line.label})`, money(line.amount), width));
+    }
+  } else {
+    encoder.line(
+      twoColumn(`Paid (${PAYMENT_METHOD_LABELS[sale.paymentMethod]})`, money(sale.amountPaid), width)
+    );
+  }
+
+  if (sale.gcashReference) encoder.line(`GCash Ref: ${sale.gcashReference}`);
+  if (sale.qrphReference) encoder.line(`QRPh Ref: ${sale.qrphReference}`);
+  if (extras.change > 0) encoder.line(twoColumn("Change", money(extras.change), width));
+
+  encoder.newline().align("center").line(`Staff: ${extras.staffName}`).newline().line("Thank you!");
+  if (extras.kickDrawer) encoder.kick();
+  encoder.finish();
+  return encoder;
+}
+
+export function previewStoreSaleReceipt(sale: StoreSale, extras: StoreSaleReceiptExtras): ReceiptPreviewLine[] {
+  return storeSaleReceiptEncoder(sale, extras).getPreview();
+}
+
+export async function printStoreSaleReceipt(sale: StoreSale, extras: StoreSaleReceiptExtras) {
+  const bytes = storeSaleReceiptEncoder(sale, extras).encode();
   if (extras.kickDrawer) await sendDrawerKick(bytes);
   else await send(bytes);
 }

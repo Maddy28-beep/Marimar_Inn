@@ -24,7 +24,7 @@ import {
   type OverdueRecord,
   type RangeDayPoint,
 } from "@/lib/reports";
-import { DailySalesTable } from "@/components/reports/daily-sales-table";
+import { fetchStoreSalesInRange } from "@/lib/store-sales";
 import { AddExpenseForm } from "@/components/expenses/add-expense-form";
 import { OpenDrawerForm } from "@/components/cash-drawer-open";
 import { exportToExcel, formatReportDate, formatReportMonth } from "@/lib/export";
@@ -172,14 +172,15 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
       setLoading(true);
       const [start, end] = shiftRange(dateValue, shift);
       try {
-        const [checkedIn, checkedOut, shiftExpenses] = await Promise.all([
+        const [checkedIn, checkedOut, shiftExpenses, storeSales] = await Promise.all([
           fetchBookingsInRange("checkInTime", start, end),
           fetchBookingsInRange("checkOutTime", start, end),
           fetchExpensesInRange(start, end),
+          fetchStoreSalesInRange(start, end),
         ]);
         if (!cancelled) {
-          setReport(computeDailyReport(checkedIn, checkedOut.length));
-          setSalesReport(computeDailySalesReport(checkedIn));
+          setReport(computeDailyReport(checkedIn, checkedOut.length, storeSales));
+          setSalesReport(computeDailySalesReport(checkedIn, storeSales));
           setExpenses(shiftExpenses);
         }
       } catch {
@@ -527,37 +528,40 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
         </div>
         <div className="flex flex-col items-end gap-1">
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleExport} disabled={!report}>
-              <DownloadIcon className="size-3.5" />
+            <Button variant="outline" size="lg" className="font-semibold" onClick={handleExport} disabled={!report}>
+              <DownloadIcon className="size-4" />
               Export Excel
             </Button>
             <Button
               variant="outline"
-              size="sm"
+              size="lg"
+              className="font-semibold"
               onClick={() => setThermalPreviewOpen(true)}
               disabled={!salesReport}
             >
-              <EyeIcon className="size-3.5" />
+              <EyeIcon className="size-4" />
               Preview (thermal)
             </Button>
             <Button
               variant="outline"
-              size="sm"
+              size="lg"
+              className="font-semibold"
               onClick={handlePrintThermal}
               disabled={!salesReport || !printer.connected}
               title={!printer.connected ? "Connect a thermal printer first (printer icon, top right)" : undefined}
             >
-              <PrinterIcon className="size-3.5" />
+              <PrinterIcon className="size-4" />
               Print (thermal)
             </Button>
             <Button
               variant="outline"
-              size="sm"
+              size="lg"
+              className="font-semibold"
               onClick={() => window.print()}
               disabled={!report}
               title="Choose Landscape in the print dialog for the best fit"
             >
-              <PrinterIcon className="size-3.5" />
+              <PrinterIcon className="size-4" />
               Print / PDF
             </Button>
           </div>
@@ -720,12 +724,13 @@ function MonthlyReportTab({ rooms }: { rooms: Room[] | null }) {
       const [year, month] = monthValue.split("-").map(Number);
       const monthDate = new Date(year, month - 1, 1);
       try {
-        const [bookings, monthExpenses] = await Promise.all([
+        const [bookings, monthExpenses, storeSales] = await Promise.all([
           fetchBookingsInRange("checkInTime", startOfMonth(monthDate), endOfMonth(monthDate)),
           fetchExpensesInRange(startOfMonth(monthDate), endOfMonth(monthDate)),
+          fetchStoreSalesInRange(startOfMonth(monthDate), endOfMonth(monthDate)),
         ]);
         if (!cancelled) {
-          setReport(computeMonthlyReport(bookings, rooms ?? [], monthDate));
+          setReport(computeMonthlyReport(bookings, rooms ?? [], monthDate, storeSales));
           setExpenseTotal(totalExpenses(monthExpenses));
         }
       } catch {
@@ -852,11 +857,11 @@ function MonthlyReportTab({ rooms }: { rooms: Room[] | null }) {
           className="w-44"
         />
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleExport} disabled={!report}>
-            <DownloadIcon className="size-3.5" />
+          <Button variant="outline" size="lg" className="font-semibold" onClick={handleExport} disabled={!report}>
+            <DownloadIcon className="size-4" />
             Export Excel
           </Button>
-          <Button variant="outline" size="sm" onClick={() => window.print()} disabled={!report}>
+          <Button variant="outline" size="lg" className="font-semibold" onClick={() => window.print()} disabled={!report}>
             <PrinterIcon className="size-3.5" />
             Print / PDF
           </Button>
@@ -986,13 +991,14 @@ function RangeReportTab() {
       }
       setLoading(true);
       try {
-        const [bookings, rangeExpenses] = await Promise.all([
+        const [bookings, rangeExpenses, storeSales] = await Promise.all([
           fetchBookingsInRange("checkInTime", start, end),
           fetchExpensesInRange(start, end),
+          fetchStoreSalesInRange(start, end),
         ]);
         if (!cancelled) {
-          setDays(computeRangeDailySeries(start, end, bookings, rangeExpenses));
-          setSalesReport(computeDailySalesReport(bookings));
+          setDays(computeRangeDailySeries(start, end, bookings, rangeExpenses, storeSales));
+          setSalesReport(computeDailySalesReport(bookings, storeSales));
           setExpenses(rangeExpenses);
         }
       } catch {
@@ -1149,12 +1155,12 @@ function RangeReportTab() {
           </label>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleExport} disabled={loading}>
-            <DownloadIcon className="size-3.5" />
+          <Button variant="outline" size="lg" className="font-semibold" onClick={handleExport} disabled={loading}>
+            <DownloadIcon className="size-4" />
             Export Excel
           </Button>
-          <Button variant="outline" size="sm" onClick={() => window.print()} disabled={loading}>
-            <PrinterIcon className="size-3.5" />
+          <Button variant="outline" size="lg" className="font-semibold" onClick={() => window.print()} disabled={loading}>
+            <PrinterIcon className="size-4" />
             Print / PDF
           </Button>
         </div>
@@ -1352,13 +1358,16 @@ function InventoryReportTab() {
       const [year, month] = monthValue.split("-").map(Number);
       const monthDate = new Date(year, month - 1, 1);
       try {
-        const bookings = await fetchBookingsInRange(
-          "checkInTime",
-          startOfMonth(monthDate),
-          endOfMonth(monthDate)
-        );
+        const [bookings, storeSales] = await Promise.all([
+          fetchBookingsInRange(
+            "checkInTime",
+            startOfMonth(monthDate),
+            endOfMonth(monthDate)
+          ),
+          fetchStoreSalesInRange(startOfMonth(monthDate), endOfMonth(monthDate)),
+        ]);
         if (!cancelled) {
-          setTopConsumed(computeMonthlyReport(bookings, [], monthDate).topItemsByQuantity);
+          setTopConsumed(computeMonthlyReport(bookings, [], monthDate, storeSales).topItemsByQuantity);
         }
       } catch {
         if (!cancelled) toast.error("Couldn't load consumption data.");
