@@ -125,14 +125,13 @@ class EscPosBuilder {
   }
 
   initialize() {
-    // Cheap 58mm clones ignore Epson density/speed bytes (they printed as
-    // garbage) and double-height made every receipt huge. Font A + bold is
-    // what this head actually renders.
+    // RPP02N: ESC @, Font A, bold. DC2 # (Gprinter density) is treated as a
+    // bitmap command on this head and swallows the following text — paper
+    // comes out blank while drawer/cut still fire.
     this.alignment = "left";
     this.push(0x1b, 0x40);
-    this.push(0x1b, 0x4d, 0x00); // Font A
-    this.push(0x12, 0x23, 0x08); // DC2 # 8 — Gprinter/Zjiang density
-    this.push(0x1b, 0x45, 0x01); // bold
+    this.push(0x1b, 0x4d, 0x00);
+    this.push(0x1b, 0x45, 0x01);
     return this;
   }
 
@@ -704,15 +703,15 @@ function drawerPulse(pin: 0 | 1): number[] {
 
 async function sendPin2Kick(): Promise<void> {
   await sleep(700);
-  await send(Uint8Array.from([0x1b, 0x40, ...drawerPulse(0)]));
+  await send(Uint8Array.from(drawerPulse(0)));
 }
 
 async function sendDrawerKick(withReceipt?: Uint8Array): Promise<void> {
   if (withReceipt) {
     await send(withReceipt);
-  } else {
-    await send(Uint8Array.from([0x1b, 0x40, ...drawerPulse(1)]));
+    return;
   }
+  await send(Uint8Array.from([0x1b, 0x40, ...drawerPulse(1)]));
   try {
     await sendPin2Kick();
   } catch {

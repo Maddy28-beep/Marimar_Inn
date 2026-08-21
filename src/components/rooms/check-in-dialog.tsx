@@ -495,31 +495,6 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
             </div>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <Label className="text-base font-bold">Extras</Label>
-            <QtyRow
-              label="Extra person"
-              hint={`₱${EXTRA_PERSON_FEE} each`}
-              value={extraPersons}
-              onChange={setExtraPersons}
-              disabled={submitting}
-            />
-            <QtyRow
-              label="Towel"
-              hint={`₱${TOWEL_FEE} each`}
-              value={towels}
-              onChange={setTowels}
-              disabled={submitting}
-            />
-            <QtyRow
-              label="Blanket"
-              hint={`₱${BLANKET_FEE} each`}
-              value={blankets}
-              onChange={setBlankets}
-              disabled={submitting}
-            />
-          </div>
-
           <div className="flex flex-col gap-1.5">
             <Label className="text-base font-bold">Rate package</Label>
             {ratePackages?.length === 0 ? (
@@ -616,6 +591,31 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
               </div>
             </div>
           )}
+
+          <div className="flex flex-col gap-2">
+            <Label className="text-base font-bold">Extras</Label>
+            <QtyRow
+              label="Extra person"
+              hint={`₱${EXTRA_PERSON_FEE} each`}
+              value={extraPersons}
+              onChange={setExtraPersons}
+              disabled={submitting}
+            />
+            <QtyRow
+              label="Towel"
+              hint={`₱${TOWEL_FEE} each`}
+              value={towels}
+              onChange={setTowels}
+              disabled={submitting}
+            />
+            <QtyRow
+              label="Blanket"
+              hint={`₱${BLANKET_FEE} each`}
+              value={blankets}
+              onChange={setBlankets}
+              disabled={submitting}
+            />
+          </div>
 
           <div className="flex flex-col gap-1 rounded-lg bg-muted px-3 py-2 text-sm">
             <div className="flex items-center justify-between text-muted-foreground">
