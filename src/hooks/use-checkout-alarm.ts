@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { subscribeToNotifications } from "@/lib/notifications";
+import { hoursElapsed, subscribeToActiveBookings } from "@/lib/bookings";
+import {
+  checkoutReminderBookingId,
+  CHECKOUT_CRITICAL_HOURS,
+  CHECKOUT_WARNING_HOURS,
+  subscribeToNotifications,
+} from "@/lib/notifications";
 import { playCriticalChime, playOverdueAlarm, playWarningChime } from "@/lib/alarm";
+import type { AppNotification, Booking } from "@/lib/types";
 
 const REPEAT_INTERVAL_MS = 3 * 60 * 1000;
 
@@ -15,6 +22,17 @@ const REPEAT_INTERVAL_MS = 3 * 60 * 1000;
 // existed before the page ever loaded. Using a time window instead of a
 // one-shot flag absorbs any number of quick initial emissions.
 const WARMUP_MS = 4000;
+
+function liveCheckoutState(booking: Booking | undefined) {
+  if (!booking || booking.openEnded) return null;
+  const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, new Date());
+  if (remaining > CHECKOUT_WARNING_HOURS) return null;
+  const isOverdue = remaining <= 0;
+  return {
+    isOverdue,
+    isCritical: !isOverdue && remaining <= CHECKOUT_CRITICAL_HOURS,
+  };
+}
 
 /**
  * Watches unresolved checkout-reminder notifications and plays an audible
@@ -29,50 +47,62 @@ const WARMUP_MS = 4000;
  * already-warned/overdue room at once. Already-overdue rooms still get
  * their repeat timer started silently, so they start alarming after the
  * first interval.
+ *
+ * A leftover reminder for a room that is already checked out / available
+ * does not ring. The bell used to follow the notification doc even after
+ * the stay was gone.
  */
 export function useCheckoutAlarm() {
   const mountedAtRef = useRef(0);
+  const bookingsByIdRef = useRef<Map<string, Booking>>(new Map());
+  const notificationsRef = useRef<AppNotification[]>([]);
   const knownIdsRef = useRef<Set<string>>(new Set());
   const wasCriticalRef = useRef<Map<string, boolean>>(new Map());
   const wasOverdueRef = useRef<Map<string, boolean>>(new Map());
-  const wasPastCutoffRef = useRef<Map<string, boolean>>(new Map());
   const repeatTimersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
 
   useEffect(() => {
     mountedAtRef.current = Date.now();
-    const unsubscribe = subscribeToNotifications((notifications) => {
-      const reminders = notifications.filter(
+
+    function evaluate() {
+      const reminders = notificationsRef.current.filter(
         (n) => n.type === "checkout_reminder" && !n.resolved
       );
-      const currentIds = new Set(reminders.map((n) => n.notificationId));
+      const currentIds = new Set<string>();
       const pastWarmup = Date.now() - mountedAtRef.current > WARMUP_MS;
 
       for (const n of reminders) {
-        const isPastCutoff = n.message.includes("more than 10 minutes overdue");
-        const isOverdue =
-          isPastCutoff || n.message.includes("please check out");
-        const isCritical = !isOverdue && n.message.includes("15 minutes");
+        const bookingId = checkoutReminderBookingId(n);
+        const booking = bookingId ? bookingsByIdRef.current.get(bookingId) : undefined;
+        const state = liveCheckoutState(booking);
+        if (!state) continue;
+
+        currentIds.add(n.notificationId);
         const wasKnown = knownIdsRef.current.has(n.notificationId);
         const wasCritical = wasCriticalRef.current.get(n.notificationId) ?? false;
         const wasOverdue = wasOverdueRef.current.get(n.notificationId) ?? false;
-        const wasPastCutoff = wasPastCutoffRef.current.get(n.notificationId) ?? false;
 
         if (pastWarmup) {
           if (!wasKnown) playWarningChime();
-          if (isCritical && !wasCritical) playCriticalChime();
-          if (isOverdue && !wasOverdue) playOverdueAlarm();
-          if (isPastCutoff && !wasPastCutoff) playOverdueAlarm();
+          if (state.isCritical && !wasCritical) playCriticalChime();
+          if (state.isOverdue && !wasOverdue) playOverdueAlarm();
         }
 
-        if (isOverdue && !repeatTimersRef.current.has(n.notificationId)) {
+        if (state.isOverdue && !repeatTimersRef.current.has(n.notificationId)) {
           const timer = setInterval(() => playOverdueAlarm(), REPEAT_INTERVAL_MS);
           repeatTimersRef.current.set(n.notificationId, timer);
         }
+        if (!state.isOverdue) {
+          const timer = repeatTimersRef.current.get(n.notificationId);
+          if (timer) {
+            clearInterval(timer);
+            repeatTimersRef.current.delete(n.notificationId);
+          }
+        }
 
         knownIdsRef.current.add(n.notificationId);
-        wasCriticalRef.current.set(n.notificationId, isCritical);
-        wasOverdueRef.current.set(n.notificationId, isOverdue);
-        wasPastCutoffRef.current.set(n.notificationId, isPastCutoff);
+        wasCriticalRef.current.set(n.notificationId, state.isCritical);
+        wasOverdueRef.current.set(n.notificationId, state.isOverdue);
       }
 
       for (const id of Array.from(knownIdsRef.current)) {
@@ -80,7 +110,6 @@ export function useCheckoutAlarm() {
           knownIdsRef.current.delete(id);
           wasCriticalRef.current.delete(id);
           wasOverdueRef.current.delete(id);
-          wasPastCutoffRef.current.delete(id);
           const timer = repeatTimersRef.current.get(id);
           if (timer) {
             clearInterval(timer);
@@ -88,10 +117,22 @@ export function useCheckoutAlarm() {
           }
         }
       }
+    }
+
+    const stopBookings = subscribeToActiveBookings((byRoom) => {
+      const byId = new Map<string, Booking>();
+      byRoom.forEach((booking) => byId.set(booking.bookingId, booking));
+      bookingsByIdRef.current = byId;
+      evaluate();
+    });
+    const unsubscribe = subscribeToNotifications((notifications) => {
+      notificationsRef.current = notifications;
+      evaluate();
     });
 
     const timers = repeatTimersRef.current;
     return () => {
+      stopBookings();
       unsubscribe();
       timers.forEach((timer) => clearInterval(timer));
       timers.clear();

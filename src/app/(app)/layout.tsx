@@ -12,9 +12,15 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { PrinterStatus } from "@/components/printer-status";
 import { CashDrawerControl } from "@/components/cash-drawer-control";
-import { subscribeToActiveBookings } from "@/lib/bookings";
+import { hoursElapsed, subscribeToActiveBookings } from "@/lib/bookings";
 import { subscribeToRooms } from "@/lib/rooms";
-import { syncCheckoutReminder } from "@/lib/notifications";
+import {
+  checkoutReminderBookingId,
+  CHECKOUT_WARNING_HOURS,
+  resolveCheckoutReminder,
+  subscribeToNotifications,
+  syncCheckoutReminder,
+} from "@/lib/notifications";
 import { primeAlarmAudio, resumeAlarmAudio } from "@/lib/alarm";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useCheckoutAlarm } from "@/hooks/use-checkout-alarm";
@@ -51,11 +57,16 @@ function HeaderClock({ className }: { className?: string }) {
 function useCheckoutReminderScanner() {
   const [bookingsByRoom, setBookingsByRoom] = useState<Map<string, Booking>>(new Map());
   const [roomsById, setRoomsById] = useState<Map<string, Room>>(new Map());
+  const [roomsLoaded, setRoomsLoaded] = useState(false);
   const now = useNowTick(30_000);
 
   useEffect(() => subscribeToActiveBookings(setBookingsByRoom), []);
   useEffect(
-    () => subscribeToRooms((rooms) => setRoomsById(new Map(rooms.map((r) => [r.roomId, r])))),
+    () =>
+      subscribeToRooms((rooms) => {
+        setRoomsById(new Map(rooms.map((r) => [r.roomId, r])));
+        setRoomsLoaded(true);
+      }),
     []
   );
 
@@ -64,8 +75,37 @@ function useCheckoutReminderScanner() {
       const room = roomsById.get(booking.roomId);
       if (room) syncCheckoutReminder(booking, room, now).catch(() => {});
     });
-    // Re-scan whenever the active bookings/rooms sets change or the 30s tick fires.
   }, [bookingsByRoom, roomsById, now]);
+
+  // Clear leftover checkout reminders for stays that are already gone, or
+  // that were extended past the 30-minute window. Those docs used to keep
+  // the alarm looping even when every room card was Available.
+  useEffect(() => {
+    if (!roomsLoaded) return;
+    return subscribeToNotifications((notifications) => {
+      const activeById = new Map<string, Booking>();
+      bookingsByRoom.forEach((booking) => activeById.set(booking.bookingId, booking));
+      for (const n of notifications) {
+        const bookingId = checkoutReminderBookingId(n);
+        if (!bookingId) continue;
+        const booking = activeById.get(bookingId);
+        if (booking) {
+          if (booking.openEnded) {
+            resolveCheckoutReminder(bookingId).catch(() => {});
+            continue;
+          }
+        const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, new Date());
+          if (remaining > CHECKOUT_WARNING_HOURS) {
+            resolveCheckoutReminder(bookingId).catch(() => {});
+          }
+          continue;
+        }
+        const room = n.roomId ? roomsById.get(n.roomId) : undefined;
+        if (room?.status === "occupied") continue;
+        resolveCheckoutReminder(bookingId).catch(() => {});
+      }
+    });
+  }, [bookingsByRoom, roomsById, roomsLoaded]);
 }
 
 interface NavLink {

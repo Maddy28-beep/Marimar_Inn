@@ -89,8 +89,16 @@ export async function syncLowStockNotification(
   }
 }
 
-const WARNING_THRESHOLD_HOURS = 0.5; // 30 minutes
-const CRITICAL_THRESHOLD_HOURS = 0.25; // 15 minutes
+export const CHECKOUT_WARNING_HOURS = 0.5; // 30 minutes
+export const CHECKOUT_CRITICAL_HOURS = 0.25; // 15 minutes
+
+export function checkoutReminderBookingId(notification: AppNotification): string | null {
+  if (notification.type !== "checkout_reminder") return null;
+  const prefix = "checkout-reminder-";
+  return notification.notificationId.startsWith(prefix)
+    ? notification.notificationId.slice(prefix.length)
+    : null;
+}
 
 /**
  * Idempotent: creates a checkout-reminder notification once a booking drops
@@ -105,13 +113,13 @@ export async function syncCheckoutReminder(booking: Booking, room: Room, now: Da
   if (booking.openEnded) return;
 
   const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, now);
-  if (remaining > WARNING_THRESHOLD_HOURS) return;
+  if (remaining > CHECKOUT_WARNING_HOURS) return;
 
   const firestore = requireDb();
   const ref = doc(firestore, "notifications", `checkout-reminder-${booking.bookingId}`);
   const pastExtendCutoff = remaining <= -EXTEND_OVERDUE_CUTOFF_HOURS;
   const overdue = remaining <= 0;
-  const critical = !overdue && remaining <= CRITICAL_THRESHOLD_HOURS;
+  const critical = !overdue && remaining <= CHECKOUT_CRITICAL_HOURS;
   const message = pastExtendCutoff
     ? `Room ${room.roomNumber} — ${booking.guestName} is more than ${EXTEND_OVERDUE_CUTOFF_MINUTES} minutes overdue. Cannot extend — check out and start a new 3h booking.`
     : overdue
