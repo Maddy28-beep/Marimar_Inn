@@ -375,10 +375,6 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
                   Print Receipt
                 </Button>
               )}
-              <Button variant="outline" onClick={() => window.print()}>
-                <PrinterIcon className="size-4" />
-                Print paper copy
-              </Button>
             </DialogFooter>
           </>
         )}

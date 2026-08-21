@@ -231,10 +231,6 @@ export function WalkInSaleDialog({ onClose }: WalkInSaleDialogProps) {
                   Print Receipt
                 </Button>
               )}
-              <Button variant="outline" onClick={() => window.print()}>
-                <PrinterIcon className="size-4" />
-                Print paper copy
-              </Button>
             </DialogFooter>
           </>
         ) : (

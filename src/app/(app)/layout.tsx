@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
@@ -12,10 +12,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { PrinterStatus } from "@/components/printer-status";
 import { CashDrawerControl } from "@/components/cash-drawer-control";
-import { hoursElapsed } from "@/lib/bookings";
+import { hoursElapsed, EXTEND_OVERDUE_CUTOFF_HOURS } from "@/lib/bookings";
 import { FrontDeskProvider, useFrontDesk } from "@/context/front-desk-context";
 import {
   checkoutReminderBookingId,
+  CHECKOUT_CRITICAL_HOURS,
   CHECKOUT_WARNING_HOURS,
   resolveCheckoutReminder,
   subscribeToNotifications,
@@ -54,8 +55,20 @@ function HeaderClock({ className }: { className?: string }) {
   );
 }
 
+function reminderBucket(booking: Booking, now: Date): string {
+  if (booking.openEnded) return "open";
+  const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, now);
+  if (remaining > CHECKOUT_WARNING_HOURS) return "ok";
+  if (remaining > CHECKOUT_CRITICAL_HOURS) return "warn";
+  if (remaining > 0) return "critical";
+  if (remaining > -EXTEND_OVERDUE_CUTOFF_HOURS) return "overdue";
+  return "cutoff";
+}
+
 function useCheckoutReminderScanner() {
-  const { rooms, bookingsByRoom, roomsLoaded, now } = useFrontDesk();
+  const { rooms, bookingsByRoom, roomsLoaded } = useFrontDesk();
+  const now = useNowTick(60_000);
+  const lastBucketRef = useRef<Map<string, string>>(new Map());
   const roomsById = useMemo(
     () => new Map((rooms ?? []).map((room) => [room.roomId, room])),
     [rooms]
@@ -64,8 +77,18 @@ function useCheckoutReminderScanner() {
   useEffect(() => {
     bookingsByRoom.forEach((booking) => {
       const room = roomsById.get(booking.roomId);
-      if (room) syncCheckoutReminder(booking, room, now).catch(() => {});
+      if (!room) return;
+      const bucket = reminderBucket(booking, now);
+      if (lastBucketRef.current.get(booking.bookingId) === bucket) return;
+      lastBucketRef.current.set(booking.bookingId, bucket);
+      if (bucket === "ok" || bucket === "open") return;
+      syncCheckoutReminder(booking, room, now).catch(() => {});
     });
+    for (const id of Array.from(lastBucketRef.current.keys())) {
+      if (![...bookingsByRoom.values()].some((booking) => booking.bookingId === id)) {
+        lastBucketRef.current.delete(id);
+      }
+    }
   }, [bookingsByRoom, roomsById, now]);
 
   // Clear leftover checkout reminders for stays that are already gone, or
@@ -114,6 +137,12 @@ const NAV_LINKS: NavLink[] = [
   { href: "/users", label: "Manage Staff", icon: UsersIcon, ownerOnly: true },
 ];
 
+function CheckoutReminderHost() {
+  useCheckoutReminderScanner();
+  useCheckoutAlarm();
+  return null;
+}
+
 function AppShell({ children }: { children: React.ReactNode }) {
   const { appUser, signOut } = useAuth();
   const router = useRouter();
@@ -121,8 +150,6 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  useCheckoutReminderScanner();
-  useCheckoutAlarm();
 
   // Browsers block audio until the page has seen a user gesture — unlock the
   // alarm's AudioContext on the first tap/click/keypress so it's ready by
@@ -316,6 +343,7 @@ export default function AuthenticatedLayout({
   return (
     <ProtectedRoute>
       <FrontDeskProvider>
+        <CheckoutReminderHost />
         <AppShell>{children}</AppShell>
       </FrontDeskProvider>
     </ProtectedRoute>

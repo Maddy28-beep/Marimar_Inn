@@ -5,6 +5,7 @@ import { useAuth } from "@/context/auth-context";
 import { useFrontDesk } from "@/context/front-desk-context";
 import { hoursElapsed, EXTEND_OVERDUE_CUTOFF_HOURS, EXTEND_OVERDUE_CUTOFF_MINUTES } from "@/lib/bookings";
 import { formatHours } from "@/lib/time";
+import { useNowTick } from "@/hooks/use-now-tick";
 import type { Booking, Room, RoomStatus, RoomType } from "@/lib/types";
 import { ROOM_TYPE_LABELS } from "@/lib/types";
 import { RoomCard } from "@/components/rooms/room-card";
@@ -48,7 +49,8 @@ type DialogState =
 
 export function RoomGrid() {
   const { appUser } = useAuth();
-  const { rooms, bookingsByRoom, now } = useFrontDesk();
+  const { rooms, bookingsByRoom } = useFrontDesk();
+  const now = useNowTick(60_000);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");

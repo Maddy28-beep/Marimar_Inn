@@ -6,53 +6,35 @@ import { ROOM_TYPE_LABELS, type Booking, type Room, type RoomStatus } from "@/li
 import { hoursElapsed } from "@/lib/bookings";
 import { formatHours } from "@/lib/time";
 import { useAuth } from "@/context/auth-context";
-import {
-  BedDoubleIcon,
-  DoorClosedIcon,
-  SparklesIcon,
-  UserIcon,
-  WrenchIcon,
-  type LucideIcon,
-} from "lucide-react";
+import { UserIcon } from "lucide-react";
 
 const CARD_SHELL =
   "relative flex h-36 w-full flex-col gap-1 overflow-hidden rounded-2xl border p-3 pl-3.5 text-left shadow-sm before:absolute before:inset-y-0 before:left-0 before:w-1.5";
 
-const STATUS_STYLES: Record<
-  RoomStatus,
-  { label: string; card: string; dot: string; pill: string; icon: LucideIcon; iconTint: string }
-> = {
+const STATUS_STYLES: Record<RoomStatus, { label: string; card: string; dot: string; pill: string }> = {
   available: {
     label: "Available",
-    card: "border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/16 before:bg-emerald-500",
+    card: "border-emerald-500/30 bg-emerald-500/10 before:bg-emerald-500",
     dot: "bg-emerald-500",
     pill: "bg-emerald-600/15 text-emerald-800 dark:text-emerald-300",
-    icon: BedDoubleIcon,
-    iconTint: "text-emerald-600/70 dark:text-emerald-400/60",
   },
   occupied: {
     label: "Occupied",
-    card: "border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/16 before:bg-rose-500",
+    card: "border-rose-500/30 bg-rose-500/10 before:bg-rose-500",
     dot: "bg-rose-500",
     pill: "bg-rose-600/15 text-rose-800 dark:text-rose-300",
-    icon: DoorClosedIcon,
-    iconTint: "text-rose-600/70 dark:text-rose-400/60",
   },
   cleaning: {
     label: "Cleaning",
-    card: "border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/16 before:bg-amber-500",
+    card: "border-amber-500/30 bg-amber-500/10 before:bg-amber-500",
     dot: "bg-amber-500",
     pill: "bg-amber-600/15 text-amber-800 dark:text-amber-300",
-    icon: SparklesIcon,
-    iconTint: "text-amber-600/70 dark:text-amber-400/60",
   },
   maintenance: {
     label: "Maintenance",
-    card: "border-muted-foreground/25 bg-muted hover:bg-muted/80 before:bg-muted-foreground/70",
+    card: "border-muted-foreground/25 bg-muted before:bg-muted-foreground/70",
     dot: "bg-muted-foreground",
     pill: "bg-muted-foreground/15 text-muted-foreground",
-    icon: WrenchIcon,
-    iconTint: "text-muted-foreground/70",
   },
 };
 
@@ -95,16 +77,6 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
           : style.card
       )}
     >
-      {!booking && (
-        <style.icon
-          className={cn(
-            "pointer-events-none absolute -right-3 -bottom-3 size-20 rotate-[-8deg] opacity-[0.12]",
-            style.iconTint
-          )}
-          strokeWidth={1.5}
-        />
-      )}
-
       <div className="flex items-start justify-between gap-2">
         <span className="font-heading text-xl leading-none font-semibold tracking-tight">
           {room.roomNumber}
@@ -112,7 +84,7 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
         <span
           className={cn(
             "mt-1 size-2.5 shrink-0 rounded-full",
-            isCritical || isOverdue ? "bg-red-700 ring-2 ring-red-700/30 animate-pulse dark:bg-red-500" : style.dot
+            isCritical || isOverdue ? "bg-red-700 ring-2 ring-red-700/30 dark:bg-red-500" : style.dot
           )}
         />
       </div>
