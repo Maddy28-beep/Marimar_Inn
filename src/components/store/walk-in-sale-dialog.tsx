@@ -30,7 +30,7 @@ import {
   printStoreSaleReceipt,
   printerErrorMessage,
   referenceNumberFor,
-  shouldOpenDrawer,
+  kickDrawerForCashPayment,
 } from "@/lib/receipt-printer";
 import {
   cashCollectedNow,
@@ -125,13 +125,9 @@ export function WalkInSaleDialog({ onClose }: WalkInSaleDialogProps) {
       });
       if (printer.connected) {
         try {
-          await printStoreSaleReceipt(sale, {
-            staffName,
-            change,
-            kickDrawer: shouldOpenDrawer(cashCollectedNow(payment, total)),
-          });
+          await kickDrawerForCashPayment(cashCollectedNow(payment, total));
         } catch (error) {
-          toast.error(`Sold, but the printer said: ${printerErrorMessage(error)}`);
+          toast.error(`Sold, but the drawer said: ${printerErrorMessage(error)}`);
         }
       }
       setReceipt({ sale, change });
@@ -232,12 +228,12 @@ export function WalkInSaleDialog({ onClose }: WalkInSaleDialogProps) {
               {printer.connected && (
                 <Button variant="outline" onClick={() => void printThermalCopy()}>
                   <PrinterIcon className="size-4" />
-                  Reprint (thermal)
+                  Print Receipt
                 </Button>
               )}
-              <Button onClick={() => window.print()}>
+              <Button variant="outline" onClick={() => window.print()}>
                 <PrinterIcon className="size-4" />
-                Print receipt
+                Print paper copy
               </Button>
             </DialogFooter>
           </>

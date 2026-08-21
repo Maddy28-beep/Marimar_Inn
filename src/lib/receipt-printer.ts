@@ -1339,3 +1339,12 @@ export async function openCashDrawer() {
 export function shouldOpenDrawer(cashCollectedNow: number): boolean {
   return isDrawerEnabled() && cashCollectedNow > 0;
 }
+
+/**
+ * Cash sales open the drawer as their own job — never bundled with a receipt.
+ * No-op for GCash/QRPh or when the header switch is off.
+ */
+export async function kickDrawerForCashPayment(cashCollectedNow: number): Promise<void> {
+  if (!shouldOpenDrawer(cashCollectedNow)) return;
+  await openCashDrawer();
+}

@@ -33,7 +33,7 @@ import {
   previewExtensionReceipt,
   printerErrorMessage,
   referenceNumberFor,
-  shouldOpenDrawer,
+  kickDrawerForCashPayment,
 } from "@/lib/receipt-printer";
 import {
   cashCollectedNow,
@@ -130,22 +130,9 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
       toast.success(`Room ${room.roomNumber} extended by ${additionalHours}h.`);
       if (printer.connected) {
         try {
-          await printExtensionReceipt(booking, room, {
-            staffName,
-            hours: additionalHours,
-            amountCharged: additionalCost,
-            amountPaid: amountCollected,
-            change,
-            paymentMethod: payload.paymentMethod,
-            gcashReference: payload.gcashReference,
-            qrphReference: payload.qrphReference,
-            splitCashAmount: payload.splitCashAmount,
-            splitGcashAmount: payload.splitGcashAmount,
-            splitQrphAmount: payload.splitQrphAmount,
-            kickDrawer: shouldOpenDrawer(cashCollectedNow(payment, additionalCost)),
-          });
+          await kickDrawerForCashPayment(cashCollectedNow(payment, additionalCost));
         } catch (error) {
-          toast.error(`Extended, but the printer said: ${printerErrorMessage(error)}`);
+          toast.error(`Extended, but the drawer said: ${printerErrorMessage(error)}`);
         }
       }
       setReceipt({
@@ -308,12 +295,12 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
             {printer.connected && (
               <Button variant="outline" onClick={printThermalCopy}>
                 <PrinterIcon className="size-4" />
-                Reprint (thermal)
+                Print Receipt
               </Button>
             )}
-            <Button onClick={() => window.print()}>
+            <Button variant="outline" onClick={() => window.print()}>
               <PrinterIcon className="size-4" />
-              Print receipt
+              Print paper copy
             </Button>
           </DialogFooter>
         </DialogContent>

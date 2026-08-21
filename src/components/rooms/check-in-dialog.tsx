@@ -32,7 +32,7 @@ import {
   previewGuestReceipt,
   printerErrorMessage,
   referenceNumberFor,
-  shouldOpenDrawer,
+  kickDrawerForCashPayment,
 } from "@/lib/receipt-printer";
 import {
   cashCollectedNow,
@@ -272,14 +272,9 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
 
       if (printer.connected) {
         try {
-          await printThermalReceipt(receiptBooking, room, {
-            staffName,
-            finalAmountPaid: amountCollected,
-            change,
-            kickDrawer: shouldOpenDrawer(cashCollectedNow(payment, total)),
-          });
+          await kickDrawerForCashPayment(cashCollectedNow(payment, total));
         } catch (error) {
-          toast.error(`Checked in, but the printer said: ${printerErrorMessage(error)}`);
+          toast.error(`Checked in, but the drawer said: ${printerErrorMessage(error)}`);
         }
       }
 
@@ -444,12 +439,12 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
               {printer.connected && (
                 <Button variant="outline" onClick={printThermalCopy}>
                   <PrinterIcon className="size-4" />
-                  Reprint (thermal)
+                  Print Receipt
                 </Button>
               )}
-              <Button onClick={() => window.print()}>
+              <Button variant="outline" onClick={() => window.print()}>
                 <PrinterIcon className="size-4" />
-                Print receipt
+                Print paper copy
               </Button>
             </DialogFooter>
           </>
