@@ -22,15 +22,16 @@ export function LogExpenseButton() {
         Log expense
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Log expense</DialogTitle>
             <DialogDescription>
-              Cash taken from the drawer. It is deducted from this shift&apos;s
-              cash and net sales, and shows on Reports for the owner.
+              Cash taken from the drawer. Add several items at once — water,
+              fare, supplies — then save. They are deducted from this
+              shift&apos;s cash and net sales.
             </DialogDescription>
           </DialogHeader>
-          <AddExpenseForm onSaved={() => setOpen(false)} submitLabel="Save expense" />
+          <AddExpenseForm onSaved={() => setOpen(false)} submitLabel="Save expenses" />
         </DialogContent>
       </Dialog>
     </>

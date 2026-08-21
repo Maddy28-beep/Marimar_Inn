@@ -578,8 +578,8 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
         <CardHeader>
           <CardTitle>Log expense</CardTitle>
           <CardDescription>
-            Cash taken from the drawer. Type what it was for and the amount.
-            It is deducted from this shift&apos;s cash and net sales.
+            Cash taken from the drawer. Add several items at once, then save.
+            They are deducted from this shift&apos;s cash and net sales.
           </CardDescription>
         </CardHeader>
         <CardContent>

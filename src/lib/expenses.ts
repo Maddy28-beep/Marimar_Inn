@@ -5,9 +5,9 @@ import {
   getDocs,
   query,
   serverTimestamp,
-  setDoc,
   Timestamp,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { ShiftExpense } from "@/lib/types";
@@ -46,25 +46,50 @@ export async function recordShiftExpense(input: {
   cashierId: string;
   cashierName: string;
 }): Promise<void> {
-  const amount = Number(input.amount);
-  const description = input.description.trim();
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new Error("Enter an amount greater than zero.");
+  await recordShiftExpenses({
+    items: [{ amount: input.amount, description: input.description }],
+    cashierId: input.cashierId,
+    cashierName: input.cashierName,
+  });
+}
+
+export async function recordShiftExpenses(input: {
+  items: { amount: number; description: string }[];
+  cashierId: string;
+  cashierName: string;
+}): Promise<number> {
+  const items = input.items.map((item) => ({
+    amount: Number(item.amount),
+    description: item.description.trim(),
+  }));
+  if (items.length === 0) {
+    throw new Error("Add at least one expense.");
   }
-  if (!description) {
-    throw new Error("Say what the expense was for.");
+  for (const item of items) {
+    if (!Number.isFinite(item.amount) || item.amount <= 0) {
+      throw new Error("Enter an amount greater than zero.");
+    }
+    if (!item.description) {
+      throw new Error("Say what each expense was for.");
+    }
   }
 
   const firestore = requireDb();
-  const ref = doc(collection(firestore, "shiftExpenses"));
-  await setDoc(ref, {
-    expenseId: ref.id,
-    amount,
-    description: description.slice(0, 120),
-    recordedAt: serverTimestamp(),
-    cashierId: input.cashierId,
-    cashierName: input.cashierName.trim() || "Staff",
-  });
+  const cashierName = input.cashierName.trim() || "Staff";
+  const batch = writeBatch(firestore);
+  for (const item of items) {
+    const ref = doc(collection(firestore, "shiftExpenses"));
+    batch.set(ref, {
+      expenseId: ref.id,
+      amount: item.amount,
+      description: item.description.slice(0, 120),
+      recordedAt: serverTimestamp(),
+      cashierId: input.cashierId,
+      cashierName,
+    });
+  }
+  await batch.commit();
+  return items.length;
 }
 
 export async function deleteShiftExpense(expenseId: string): Promise<void> {
