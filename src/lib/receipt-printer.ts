@@ -929,8 +929,8 @@ function storeSaleReceiptEncoder(sale: StoreSale, extras: StoreSaleReceiptExtras
     .line(`Ref: ${referenceNumberFor(sale.saleId)}`)
     .newline()
     .align("left")
-    .line(twoColumn("Customer", sale.guestName, width))
-    .line(sale.soldAt.toDate().toLocaleString());
+    .line(twoColumn("Customer", sale.guestName || "Walk-in", width))
+    .line(sale.soldAt?.toDate?.()?.toLocaleString() ?? new Date().toLocaleString());
 
   encoder.newline();
   for (const item of sale.items) {

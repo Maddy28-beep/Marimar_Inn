@@ -159,11 +159,62 @@ export function WalkInSaleDialog({ onClose }: WalkInSaleDialogProps) {
           <>
             <DialogHeader>
               <DialogTitle>Store sale</DialogTitle>
-              <DialogDescription>Hand this slip to the customer.</DialogDescription>
+              <DialogDescription>Hand this receipt to the customer.</DialogDescription>
             </DialogHeader>
-            <div className="flex flex-col gap-3 text-sm">
-              <ReceiptBrandHeader subtitle="Store sale" reference={referenceNumberFor(receipt.sale.saleId)} />
-              {printer.connected ? (
+
+            <div className="print-area flex flex-col gap-2 rounded-lg border p-4 text-sm">
+              <ReceiptBrandHeader
+                subtitle="This is not an official receipt"
+                reference={referenceNumberFor(receipt.sale.saleId)}
+              />
+              <div className="my-1 border-t" />
+              <div className="flex justify-between">
+                <span>Sale</span>
+                <span>Walk-in store</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Customer</span>
+                <span>{receipt.sale.guestName || "Walk-in"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Time</span>
+                <span>{receipt.sale.soldAt?.toDate?.()?.toLocaleString() ?? new Date().toLocaleString()}</span>
+              </div>
+              <div className="my-1 border-t" />
+              {receipt.sale.items.map((item) => (
+                <div key={item.itemId} className="flex justify-between">
+                  <span>
+                    {item.quantity}× {item.name}
+                  </span>
+                  <span>₱{item.subtotal.toFixed(2)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between font-medium">
+                <span>Total</span>
+                <span>₱{receipt.sale.totalAmount.toFixed(2)}</span>
+              </div>
+              <PaymentBreakdownDisplay
+                portions={methodContribution(receipt.sale.paymentMethod, receipt.sale.amountPaid, {
+                  cash: receipt.sale.splitCashAmount,
+                  gcash: receipt.sale.splitGcashAmount,
+                  qrph: receipt.sale.splitQrphAmount,
+                })}
+                method={receipt.sale.paymentMethod}
+                amountPaid={receipt.sale.amountPaid}
+                gcashReference={receipt.sale.gcashReference}
+                qrphReference={receipt.sale.qrphReference}
+                change={receipt.change}
+              />
+              <div className="my-1 border-t" />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Staff</span>
+                <span>{staffName}</span>
+              </div>
+            </div>
+
+            <div className="print:hidden flex flex-col gap-2">
+              <p className="text-xs font-medium text-muted-foreground">Thermal printer preview</p>
+              <div className="max-h-72 overflow-y-auto rounded-md bg-muted/40 p-2">
                 <ReceiptPreviewStrip
                   lines={previewStoreSaleReceipt(receipt.sale, {
                     staffName,
@@ -171,43 +222,23 @@ export function WalkInSaleDialog({ onClose }: WalkInSaleDialogProps) {
                   })}
                   paperWidth={printer.paperWidth}
                 />
-              ) : (
-                <div className="flex flex-col gap-1 rounded-lg border p-3">
-                  {receipt.sale.items.map((item) => (
-                    <div key={item.itemId} className="flex justify-between">
-                      <span>
-                        {item.quantity}× {item.name}
-                      </span>
-                      <span>₱{item.subtotal.toFixed(2)}</span>
-                    </div>
-                  ))}
-                  <div className="flex justify-between font-medium">
-                    <span>Total</span>
-                    <span>₱{receipt.sale.totalAmount.toFixed(2)}</span>
-                  </div>
-                  <PaymentBreakdownDisplay
-                    portions={methodContribution(receipt.sale.paymentMethod, receipt.sale.amountPaid, {
-                      cash: receipt.sale.splitCashAmount,
-                      gcash: receipt.sale.splitGcashAmount,
-                      qrph: receipt.sale.splitQrphAmount,
-                    })}
-                    method={receipt.sale.paymentMethod}
-                    amountPaid={receipt.sale.amountPaid}
-                    gcashReference={receipt.sale.gcashReference}
-                    qrphReference={receipt.sale.qrphReference}
-                    change={receipt.change}
-                  />
-                </div>
-              )}
+              </div>
             </div>
+
             <DialogFooter>
+              <Button variant="outline" onClick={onClose}>
+                Done
+              </Button>
               {printer.connected && (
                 <Button variant="outline" onClick={() => void printThermalCopy()}>
                   <PrinterIcon className="size-4" />
-                  Reprint
+                  Reprint (thermal)
                 </Button>
               )}
-              <Button onClick={onClose}>Done</Button>
+              <Button onClick={() => window.print()}>
+                <PrinterIcon className="size-4" />
+                Print receipt
+              </Button>
             </DialogFooter>
           </>
         ) : (
