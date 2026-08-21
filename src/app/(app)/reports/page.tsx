@@ -25,6 +25,7 @@ import {
   type RangeDayPoint,
 } from "@/lib/reports";
 import { fetchStoreSalesInRange } from "@/lib/store-sales";
+import { DailySalesTable } from "@/components/reports/daily-sales-table";
 import { AddExpenseForm } from "@/components/expenses/add-expense-form";
 import { OpenDrawerForm } from "@/components/cash-drawer-open";
 import { exportToExcel, formatReportDate, formatReportMonth } from "@/lib/export";
