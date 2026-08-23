@@ -17,6 +17,7 @@ import type { Booking, Room } from "@/lib/types";
 import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useAuth } from "@/context/auth-context";
+import { isOwnerLikeRole } from "@/lib/roles";
 import { OrderPickerDialog } from "@/components/inventory/order-picker-dialog";
 import { ExtendStayDialog } from "@/components/rooms/extend-stay-dialog";
 import { Loader2Icon, ShoppingCartIcon, TimerIcon, XIcon } from "lucide-react";
@@ -49,8 +50,8 @@ export function RoomDetailDialog({
   const isRunningLow = !booking.openEnded && !isOverdue && remaining <= 0.5;
   const balance = Math.max(booking.totalAmount - booking.amountPaid, 0);
   const { cash: cashPaid, gcash: gcashPaid } = paymentBreakdown(booking);
-  const isOwner = appUser?.role === "owner";
-  const canRemoveOrderItems = isOwner;
+  const isOwnerLike = isOwnerLikeRole(appUser?.role);
+  const canRemoveOrderItems = isOwnerLike;
 
   async function handleVoid() {
     if (!canCancel) {
@@ -112,7 +113,7 @@ export function RoomDetailDialog({
                 : isOverdue
                   ? // Owner-only duration, same reasoning as RoomCard — a
                     // cashier just sees "Overdue," not how overdue.
-                    isOwner
+                    isOwnerLike
                     ? `Overdue by ${formatHours(-remaining)}`
                     : "Overdue"
                   : `${formatHours(remaining)} remaining`}

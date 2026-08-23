@@ -9,12 +9,13 @@ import { useAuth } from "@/context/auth-context";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { openCashDrawer, printerErrorMessage } from "@/lib/receipt-printer";
 import { normalizePin, subscribeToDrawerPinConfigured, verifyDrawerPin } from "@/lib/settings";
+import { isOwnerLikeRole } from "@/lib/roles";
 import { Loader2Icon } from "lucide-react";
 
 export function OpenDrawerForm() {
   const { appUser } = useAuth();
   const printer = useReceiptPrinter();
-  const isOwner = appUser?.role === "owner";
+  const isOwnerLike = isOwnerLikeRole(appUser?.role);
   const [configured, setConfigured] = useState(false);
   const [pin, setPin] = useState("");
   const [opening, setOpening] = useState(false);
@@ -27,7 +28,7 @@ export function OpenDrawerForm() {
       return;
     }
 
-    if (!isOwner) {
+    if (!isOwnerLike) {
       if (!configured) {
         toast.error("No drawer PIN yet — ask the Owner to set one.");
         return;
@@ -68,7 +69,7 @@ export function OpenDrawerForm() {
 
   if (!appUser) return null;
 
-  if (!isOwner && !configured) {
+  if (!isOwnerLike && !configured) {
     return (
       <p className="text-xs text-muted-foreground">
         No drawer PIN set yet — ask the Owner to set one (banknote icon, top right).
@@ -76,7 +77,7 @@ export function OpenDrawerForm() {
     );
   }
 
-  if (isOwner) {
+  if (isOwnerLike) {
     return (
       <Button size="sm" onClick={handleOpen} disabled={opening}>
         {opening && <Loader2Icon className="size-4 animate-spin" />}

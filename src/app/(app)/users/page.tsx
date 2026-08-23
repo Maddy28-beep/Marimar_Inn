@@ -8,6 +8,7 @@ import { deleteStaffUser, resetStaffPassword, subscribeToUsers, type StaffUser }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { UserFormDialog } from "@/components/users/user-form-dialog";
+import { roleLabel } from "@/lib/roles";
 import { KeyRoundIcon, Loader2Icon, PlusIcon, TrashIcon } from "lucide-react";
 
 function ManageStaffContent() {
@@ -55,7 +56,7 @@ function ManageStaffContent() {
         <div>
           <h1 className="font-heading text-2xl font-semibold tracking-tight">Manage Staff</h1>
           <p className="text-sm text-muted-foreground">
-            Create sign-ins for Owner and Cashier accounts.
+            Create sign-ins for Owner, Admin, and Cashier accounts.
           </p>
         </div>
         <Button onClick={() => setDialogOpen(true)}>
@@ -82,7 +83,7 @@ function ManageStaffContent() {
                 <td className="px-4 py-2 text-muted-foreground">{user.email}</td>
                 <td className="px-4 py-2">
                   <Badge variant="secondary" className="capitalize">
-                    {user.role}
+                    {roleLabel(user.role)}
                   </Badge>
                 </td>
                 <td className="px-4 py-2">
@@ -135,7 +136,7 @@ function ManageStaffContent() {
 
 export default function ManageStaffPage() {
   return (
-    <ProtectedRoute allowedRoles={["owner"]}>
+    <ProtectedRoute allowedRoles={["owner", "admin", "superadmin"]}>
       <ManageStaffContent />
     </ProtectedRoute>
   );

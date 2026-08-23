@@ -1,7 +1,8 @@
-import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth, db, createUserOnSecondaryApp } from "@/lib/firebase";
 import type { UserRole } from "@/lib/types";
+import { isHiddenSuperadminEmail, reservedRoleForStaff } from "@/lib/roles";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -18,8 +19,7 @@ export interface StaffUser {
 export function subscribeToUsers(onChange: (users: StaffUser[]) => void) {
   const firestore = requireDb();
   return onSnapshot(collection(firestore, "users"), (snapshot) => {
-    onChange(
-      snapshot.docs.map((d) => {
+    const users = snapshot.docs.map((d) => {
         const data = d.data();
         return {
           uid: d.id,
@@ -27,9 +27,25 @@ export function subscribeToUsers(onChange: (users: StaffUser[]) => void) {
           displayName: data.displayName,
           role: data.role,
         };
-      })
-    );
+      });
+    void syncReservedStaffRoles(users);
+    onChange(users.filter((user) => !isHiddenSuperadminEmail(user.email)));
   });
+}
+
+async function syncReservedStaffRoles(users: StaffUser[]) {
+  const firestore = requireDb();
+  await Promise.all(
+    users.map(async (user) => {
+      const reservedRole = reservedRoleForStaff(user.displayName, user.email);
+      if (!reservedRole || user.role === reservedRole) return;
+      try {
+        await updateDoc(doc(firestore, "users", user.uid), { role: reservedRole });
+      } catch {
+        // Only owner-like users can change roles; other staff may subscribe here too.
+      }
+    })
+  );
 }
 
 export interface CreateStaffInput {

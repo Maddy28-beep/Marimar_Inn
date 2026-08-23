@@ -29,6 +29,7 @@ import { DailySalesTable } from "@/components/reports/daily-sales-table";
 import { AddExpenseForm } from "@/components/expenses/add-expense-form";
 import { OpenDrawerForm } from "@/components/cash-drawer-open";
 import { exportToExcel, formatReportDate, formatReportMonth } from "@/lib/export";
+import { isOwnerLikeRole } from "@/lib/roles";
 import {
   deleteShiftExpense,
   fetchExpensesInRange,
@@ -212,7 +213,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   const netCash = (salesReport?.totals.cashCollected ?? 0) - expenseTotal;
   const netCollected = (salesReport?.totals.totalPaid ?? 0) - expenseTotal;
   const netSales = overallSale - expenseTotal;
-  const isOwner = appUser?.role === "owner";
+  const isOwnerLike = isOwnerLikeRole(appUser?.role);
 
   async function handleExport() {
     if (!report) return;
@@ -624,7 +625,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             <DailySalesTable
               report={salesReport}
               expenses={expenses}
-              canRemoveExpenses={isOwner}
+              canRemoveExpenses={isOwnerLike}
               onRemoveExpense={handleRemoveExpense}
             />
           )}
@@ -1604,7 +1605,7 @@ function OverdueReportTab() {
 function ReportsContent() {
   const { appUser } = useAuth();
   const [rooms, setRooms] = useState<Room[] | null>(null);
-  const isOwner = appUser?.role === "owner";
+  const isOwnerLike = isOwnerLikeRole(appUser?.role);
 
   useEffect(() => subscribeToRooms(setRooms), []);
 
@@ -1613,13 +1614,13 @@ function ReportsContent() {
       <div>
         <h1 className="font-heading text-2xl font-semibold tracking-tight">Reports</h1>
         <p className="text-sm text-muted-foreground">
-          {isOwner
+          {isOwnerLike
             ? "Revenue, occupancy, sales, and overdue tracking — daily, custom range, monthly, and inventory views."
             : "Today's sales — print or export to hand off at end of shift."}
         </p>
       </div>
 
-      {isOwner ? (
+      {isOwnerLike ? (
         <Tabs defaultValue="daily">
           <TabsList className="flex h-auto min-h-10 w-full flex-wrap justify-start gap-1 p-1 group-data-horizontal/tabs:h-auto">
             <TabsTrigger value="daily" className="h-8 flex-none px-3 py-1.5 text-foreground">
@@ -1667,7 +1668,7 @@ function ReportsContent() {
 
 export default function ReportsPage() {
   return (
-    <ProtectedRoute allowedRoles={["owner", "cashier"]}>
+    <ProtectedRoute allowedRoles={["owner", "admin", "superadmin", "cashier"]}>
       <ReportsContent />
     </ProtectedRoute>
   );

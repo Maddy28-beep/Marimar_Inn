@@ -19,13 +19,13 @@ service cloud.firestore {
 
     // Helper function: Check if user is owner or admin
     function isOwnerOrAdmin() {
-      return isAuthenticated() && (getUserRole() == 'owner' || getUserRole() == 'admin');
+      return isAuthenticated() && (getUserRole() in ['owner', 'admin', 'superadmin']);
     }
 
     // Helper function: Check if user is staff (cashier/supervisor/manager)
     function isStaff() {
       return isAuthenticated() &&
-        (getUserRole() in ['owner', 'admin', 'manager', 'supervisor', 'cashier']);
+        (getUserRole() in ['owner', 'admin', 'superadmin', 'manager', 'supervisor', 'cashier']);
     }
 
     // ============================================
@@ -58,7 +58,15 @@ service cloud.firestore {
       allow read: if isAuthenticated();
 
       // Owner/admin/manager: full room management (rate, type, room number, floor)
-      allow create, delete: if isOwnerOrAdmin() || hasRole('manager');
+      allow create: if (isOwnerOrAdmin() || hasRole('manager')) &&
+        request.resource.data.keys().hasAll([
+          'roomId', 'roomNumber', 'floor', 'type', 'status', 'lastUpdated'
+        ]) &&
+        request.resource.data.roomId is string &&
+        request.resource.data.roomNumber is string &&
+        request.resource.data.status in ['available', 'occupied', 'cleaning', 'maintenance', 'reserved'];
+
+      allow delete: if isOwnerOrAdmin() || hasRole('manager');
 
       // Any staff (cashier included) can flip a room's status as part of
       // normal check-in/checkout/maintenance flows, but only owner/admin/
@@ -67,13 +75,6 @@ service cloud.firestore {
         (isStaff() &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastUpdated']));
 
-      // Validate room data
-      allow create: if request.resource.data.keys().hasAll([
-        'roomId', 'roomNumber', 'floor', 'type', 'status', 'lastUpdated'
-      ]) &&
-      request.resource.data.roomId is string &&
-      request.resource.data.roomNumber is string &&
-      request.resource.data.status in ['available', 'occupied', 'cleaning', 'maintenance', 'reserved'];
     }
 
     // ============================================
@@ -115,7 +116,16 @@ service cloud.firestore {
 
       // Owner/admin/manager: full inventory management (name, category,
       // price, min stock, deletes)
-      allow create, delete: if isOwnerOrAdmin() || hasRole('manager');
+      allow create: if (isOwnerOrAdmin() || hasRole('manager')) &&
+        request.resource.data.keys().hasAll([
+          'itemId', 'name', 'category', 'sellingPrice', 'quantity', 'minStockLevel'
+        ]) &&
+        request.resource.data.name is string &&
+        request.resource.data.category is string &&
+        request.resource.data.sellingPrice is number &&
+        request.resource.data.quantity is number;
+
+      allow delete: if isOwnerOrAdmin() || hasRole('manager');
 
       // Any staff (cashier included) can *decrease* stock quantity as part
       // of placing an order. Increasing quantity — restocking, or reversing
@@ -126,14 +136,6 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantity', 'lastUpdated']) &&
           request.resource.data.quantity < resource.data.quantity);
 
-      // Validate inventory data
-      allow create: if request.resource.data.keys().hasAll([
-        'itemId', 'name', 'category', 'sellingPrice', 'quantity', 'minStockLevel'
-      ]) &&
-      request.resource.data.name is string &&
-      request.resource.data.category is string &&
-      request.resource.data.sellingPrice is number &&
-      request.resource.data.quantity is number;
     }
 
     // ============================================

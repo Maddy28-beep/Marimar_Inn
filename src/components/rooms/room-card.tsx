@@ -6,6 +6,7 @@ import { ROOM_TYPE_LABELS, type Booking, type Room, type RoomStatus } from "@/li
 import { hoursElapsed } from "@/lib/bookings";
 import { formatHours } from "@/lib/time";
 import { useAuth } from "@/context/auth-context";
+import { isOwnerLikeRole } from "@/lib/roles";
 import { UserIcon } from "lucide-react";
 
 const CARD_SHELL =
@@ -47,7 +48,7 @@ interface RoomCardProps {
 
 export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }: RoomCardProps) {
   const { appUser } = useAuth();
-  const isOwner = appUser?.role === "owner";
+  const isOwnerLike = isOwnerLikeRole(appUser?.role);
   const style = STATUS_STYLES[room.status];
   const elapsed = booking ? hoursElapsed(booking.checkInTime, now) : 0;
   const remaining = booking && !booking.openEnded ? booking.hoursBooked - elapsed : null;
@@ -129,7 +130,7 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
                   // cashiers only see "Overdue" (no number) so they can't game
                   // how late they report a checkout — the Owner can still spot
                   // the real duration here or in Reports > Overdue.
-                  isOwner
+                  isOwnerLike
                   ? `Overdue ${formatHours(-remaining!)}`
                   : "Overdue"
                 : `${formatHours(remaining!)} left`}

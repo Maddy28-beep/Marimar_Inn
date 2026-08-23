@@ -13,6 +13,7 @@ import { NotificationBell } from "@/components/notifications/notification-bell";
 import { PrinterStatus } from "@/components/printer-status";
 import { CashDrawerControl } from "@/components/cash-drawer-control";
 import { hoursElapsed, EXTEND_OVERDUE_CUTOFF_HOURS } from "@/lib/bookings";
+import { isOwnerLikeRole, roleLabel } from "@/lib/roles";
 import { FrontDeskProvider, useFrontDesk } from "@/context/front-desk-context";
 import {
   checkoutReminderBookingId,
@@ -25,7 +26,7 @@ import {
 import { primeAlarmAudio, resumeAlarmAudio } from "@/lib/alarm";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useCheckoutAlarm } from "@/hooks/use-checkout-alarm";
-import type { Booking, Room } from "@/lib/types";
+import type { Booking } from "@/lib/types";
 import {
   BarChart3Icon,
   Loader2Icon,
@@ -201,7 +202,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const visibleLinks = NAV_LINKS.filter(
-    (link) => !link.ownerOnly || appUser?.role === "owner"
+    (link) => !link.ownerOnly || isOwnerLikeRole(appUser?.role)
   );
 
   return (
@@ -213,7 +214,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
           {appUser && (
             <Badge variant="secondary" className="capitalize">
-              {appUser.role}
+              {roleLabel(appUser.role)}
             </Badge>
           )}
           <nav className="hidden items-center gap-1 xl:flex">
@@ -300,7 +301,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
               <div className="flex items-center gap-2 pt-1 text-sm text-muted-foreground">
                 <span className="truncate">{appUser.displayName ?? appUser.email}</span>
                 <Badge variant="secondary" className="shrink-0 capitalize">
-                  {appUser.role}
+                  {roleLabel(appUser.role)}
                 </Badge>
               </div>
             )}

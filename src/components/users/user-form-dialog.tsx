@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { createStaffUser } from "@/lib/users";
 import type { UserRole } from "@/lib/types";
+import { roleLabel, STAFF_ROLE_OPTIONS } from "@/lib/roles";
 import { Loader2Icon } from "lucide-react";
 
 interface UserFormDialogProps {
@@ -53,7 +54,7 @@ export function UserFormDialog({ onClose }: UserFormDialogProps) {
         displayName: displayName.trim(),
         role,
       });
-      toast.success(`${displayName} added as ${role}.`);
+      toast.success(`${displayName} added as ${roleLabel(role)}.`);
       onClose();
     } catch (error) {
       const code = (error as { code?: string })?.code;
@@ -112,11 +113,14 @@ export function UserFormDialog({ onClose }: UserFormDialogProps) {
             <Label>Role</Label>
             <Select value={role} onValueChange={(v) => setRole(v as UserRole)} disabled={submitting}>
               <SelectTrigger className="w-full">
-                <SelectValue>{role === "owner" ? "Owner" : "Cashier"}</SelectValue>
+                <SelectValue>{roleLabel(role)}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="cashier">Cashier</SelectItem>
-                <SelectItem value="owner">Owner</SelectItem>
+                {STAFF_ROLE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

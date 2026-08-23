@@ -3,9 +3,11 @@
 import { useAuth } from "@/context/auth-context";
 import { RoomGrid } from "@/components/rooms/room-grid";
 import { LogExpenseButton } from "@/components/expenses/log-expense-button";
+import { isOwnerLikeRole } from "@/lib/roles";
 
 export default function DashboardPage() {
   const { appUser } = useAuth();
+  const isOwnerLike = isOwnerLikeRole(appUser?.role);
 
   return (
     <div className="flex flex-col gap-6">
@@ -15,7 +17,7 @@ export default function DashboardPage() {
             Welcome, {appUser?.displayName ?? appUser?.email}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {appUser?.role === "owner"
+            {isOwnerLike
               ? "Store-wide overview and controls."
               : "Front-desk overview for today's shift."}
           </p>

@@ -10,18 +10,18 @@ import { useAuth } from "@/context/auth-context";
 import { isDrawerEnabled, setDrawerEnabled } from "@/lib/receipt-printer";
 import { normalizePin, setDrawerPin, subscribeToDrawerPinConfigured } from "@/lib/settings";
 import { OpenDrawerForm } from "@/components/cash-drawer-open";
+import { isOwnerLikeRole } from "@/lib/roles";
 import { BanknoteIcon, Loader2Icon } from "lucide-react";
 
 export function CashDrawerControl() {
   const { appUser } = useAuth();
-  const isOwner = appUser?.role === "owner";
+  const isOwnerLike = isOwnerLikeRole(appUser?.role);
   const [configured, setConfigured] = useState(false);
   const [newPin, setNewPin] = useState("");
   const [savingPin, setSavingPin] = useState(false);
-  const [openOnCash, setOpenOnCash] = useState(false);
+  const [openOnCash, setOpenOnCash] = useState(() => isDrawerEnabled());
 
   useEffect(() => subscribeToDrawerPinConfigured(setConfigured), []);
-  useEffect(() => setOpenOnCash(isDrawerEnabled()), []);
 
   function handleToggle() {
     const next = !openOnCash;
@@ -93,7 +93,7 @@ export function CashDrawerControl() {
             <OpenDrawerForm />
           </div>
 
-          {isOwner && (
+          {isOwnerLike && (
             <div className="flex flex-col gap-1.5 border-t pt-3">
               <Label htmlFor="newDrawerPin" className="text-xs text-muted-foreground">
                 {configured ? "Change cashier PIN" : "Set a PIN for cashiers"}

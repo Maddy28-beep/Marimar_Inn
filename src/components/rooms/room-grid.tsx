@@ -8,6 +8,7 @@ import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import type { Booking, Room, RoomStatus, RoomType } from "@/lib/types";
 import { ROOM_TYPE_LABELS } from "@/lib/types";
+import { isOwnerLikeRole } from "@/lib/roles";
 import { RoomCard } from "@/components/rooms/room-card";
 import { CheckInDialog } from "@/components/rooms/check-in-dialog";
 import { RoomDetailDialog } from "@/components/rooms/room-detail-dialog";
@@ -55,6 +56,7 @@ export function RoomGrid() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [dialog, setDialog] = useState<DialogState>(null);
+  const isOwnerLike = isOwnerLikeRole(appUser?.role);
 
   // Owner-facing oversight: cashiers sometimes let a guest stay past their
   // booked time (or extend informally) without logging it in the system, so
@@ -117,7 +119,7 @@ export function RoomGrid() {
   if (rooms.length === 0) {
     return (
       <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-        {appUser?.role === "owner"
+        {isOwnerLike
           ? "No rooms yet — head to Manage Rooms to seed the initial 17 rooms."
           : "No rooms have been set up yet. Ask the Owner to seed the room list."}
       </div>
@@ -126,7 +128,7 @@ export function RoomGrid() {
 
   return (
     <div className="flex flex-col gap-4">
-      {appUser?.role === "owner" && overdueRooms.length > 0 && (
+      {isOwnerLike && overdueRooms.length > 0 && (
         <div className="flex flex-col gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 p-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-rose-700 dark:text-rose-400">
             <AlertTriangleIcon className="size-4" />

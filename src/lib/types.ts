@@ -1,6 +1,6 @@
 import type { Timestamp } from "firebase/firestore";
 
-export type UserRole = "owner" | "cashier";
+export type UserRole = "owner" | "admin" | "superadmin" | "cashier";
 
 export interface AppUser {
   uid: string;
