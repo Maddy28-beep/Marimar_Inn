@@ -157,7 +157,7 @@ export const OPEN_TIME_RATE_PER_HOUR = 100;
 export const EXTEND_OVERDUE_CUTOFF_MINUTES = 10;
 export const EXTEND_OVERDUE_CUTOFF_HOURS = EXTEND_OVERDUE_CUTOFF_MINUTES / 60;
 export const REGULAR_BOOKING_MIN_HOURS = 3;
-export const VOID_BOOKING_WINDOW_MINUTES = 5;
+export const VOID_BOOKING_WINDOW_MINUTES = 7;
 
 export function isTooOverdueToExtend(booking: Pick<Booking, "hoursBooked" | "checkInTime" | "openEnded">, now: Date): boolean {
   if (booking.openEnded) return false;
@@ -374,9 +374,9 @@ export async function recordCheckout(
   await clearCheckoutReminder(booking.bookingId);
 }
 
-export async function voidBooking(booking: Booking) {
-  if (!canVoidBooking(booking, new Date())) {
-    throw new Error("Cancel is only allowed in the first 5 minutes. Check out instead.");
+export async function voidBooking(booking: Booking, opts?: { bypassWindow?: boolean }) {
+  if (!opts?.bypassWindow && !canVoidBooking(booking, new Date())) {
+    throw new Error("Cancel is only allowed in the first 7 minutes. Check out instead.");
   }
   const firestore = requireDb();
   const batch = writeBatch(firestore);

@@ -9,8 +9,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useAuth } from "@/context/auth-context";
+import { useFrontDesk } from "@/context/front-desk-context";
 import { subscribeToNotifications, markAsRead, markAllAsRead } from "@/lib/notifications";
 import { playOverdueAlarm } from "@/lib/alarm";
+import { isOwnerLikeRole } from "@/lib/roles";
+import { VoidRequestReviewDialog } from "@/components/notifications/void-request-review-dialog";
 import type { AppNotification } from "@/lib/types";
 import { BellIcon, CheckIcon, Volume2Icon } from "lucide-react";
 
@@ -25,8 +28,10 @@ function timeAgo(date: Date, now: Date): string {
 
 export function NotificationBell() {
   const { appUser } = useAuth();
+  const { pendingVoidRequestsByBookingId } = useFrontDesk();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [now, setNow] = useState(() => new Date());
+  const [voidReviewOpen, setVoidReviewOpen] = useState(false);
 
   useEffect(() => subscribeToNotifications(setNotifications), []);
 
@@ -38,6 +43,10 @@ export function NotificationBell() {
   if (!appUser) return null;
 
   const unread = notifications.filter((n) => !n.readBy.includes(appUser.uid));
+  const isOwnerLike = isOwnerLikeRole(appUser.role);
+  const pendingVoidRequests = Array.from(pendingVoidRequestsByBookingId.values()).sort(
+    (a, b) => (a.requestedAt?.toMillis() ?? 0) - (b.requestedAt?.toMillis() ?? 0)
+  );
 
   async function handleMarkRead(id: string) {
     try {
@@ -56,6 +65,7 @@ export function NotificationBell() {
   }
 
   return (
+    <>
     <Popover>
       <PopoverTrigger render={<Button variant="ghost" size="icon" className="relative" />}>
         <BellIcon className="size-5" />
@@ -75,6 +85,22 @@ export function NotificationBell() {
             </Button>
           )}
         </div>
+        {isOwnerLike && pendingVoidRequests.length > 0 && (
+          <div className="flex items-center justify-between gap-2 border-b bg-amber-500/10 px-3 py-2">
+            <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+              {pendingVoidRequests.length} void request{pendingVoidRequests.length > 1 ? "s" : ""}{" "}
+              awaiting approval
+            </span>
+            <Button
+              variant="outline"
+              size="xs"
+              className="shrink-0 text-amber-700 dark:text-amber-400"
+              onClick={() => setVoidReviewOpen(true)}
+            >
+              Review
+            </Button>
+          </div>
+        )}
         <div className="flex max-h-80 flex-col overflow-y-auto">
           {notifications.length === 0 && (
             <p className="p-4 text-center text-sm text-muted-foreground">
@@ -127,5 +153,12 @@ export function NotificationBell() {
         </div>
       </PopoverContent>
     </Popover>
+    {voidReviewOpen && (
+      <VoidRequestReviewDialog
+        requests={pendingVoidRequests}
+        onClose={() => setVoidReviewOpen(false)}
+      />
+    )}
+    </>
   );
 }

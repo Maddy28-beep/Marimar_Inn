@@ -101,7 +101,19 @@ service cloud.firestore {
           'splitCashAmount', 'splitGcashAmount', 'splitQrphAmount',
           'paymentStatus', 'status', 'checkOutTime', 'items', 'transactions',
           'specialRequests', 'updatedAt', 'extraPersonCount', 'towelCount', 'blanketCount'
-        ]);
+        ]) &&
+        // Setting status to "voided" requires owner/admin, OR the existing
+        // 7-minute self-serve window for any staff — closes the gap where a
+        // raw write could set status:'voided' at any time; only the UI's
+        // disabled button prevented it before. Past the window, staff must
+        // go through a voidRequests approval instead.
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status']) ||
+          request.resource.data.status != 'voided' ||
+          isOwnerOrAdmin() ||
+          (resource.data.status == 'active' &&
+           resource.data.checkInTime + duration.value(7, 'm') > request.time)
+        );
 
       // Only owner, admin can delete bookings
       allow delete: if isOwnerOrAdmin();
@@ -200,6 +212,38 @@ service cloud.firestore {
 
       // Manual cleanup escape hatch — app logic never deletes, it resolves
       allow delete: if isOwnerOrAdmin();
+    }
+
+    // ============================================
+    // VOID REQUESTS (cashier-requested void, owner approval — room bookings only)
+    // ============================================
+    match /voidRequests/{voidRequestId} {
+      allow read: if isAuthenticated();
+
+      allow create: if isStaff() &&
+        request.resource.data.keys().hasOnly([
+          'voidRequestId', 'bookingId', 'roomId', 'roomNumber', 'guestName',
+          'totalAmount', 'amountPaid', 'checkInTime', 'reason', 'status',
+          'requestedBy', 'requestedByName', 'requestedAt'
+        ]) &&
+        request.resource.data.voidRequestId == voidRequestId &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.requestedBy == request.auth.uid &&
+        request.resource.data.reason is string &&
+        request.resource.data.reason.size() > 0 &&
+        request.resource.data.reason.size() <= 300;
+
+      // Only owner/admin resolve — pending -> approved/denied only, resolver
+      // must be the caller, and nothing else about the original request can
+      // be rewritten (keeps this an honest audit trail).
+      allow update: if isOwnerOrAdmin() &&
+        resource.data.status == 'pending' &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'resolvedBy', 'resolvedByName', 'resolvedAt', 'resolutionNote']) &&
+        request.resource.data.status in ['approved', 'denied'] &&
+        request.resource.data.resolvedBy == request.auth.uid;
+
+      allow delete: if false; // durable audit trail
     }
 
     // ============================================

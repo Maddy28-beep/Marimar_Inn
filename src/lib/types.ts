@@ -15,6 +15,32 @@ export type PaymentMethod = "cash" | "gcash" | "qrph" | "split";
 export type PaymentStatus = "unpaid" | "partial" | "paid";
 export type BookingStatus = "active" | "checked_out" | "voided";
 
+export type VoidRequestStatus = "pending" | "approved" | "denied";
+
+// A cashier-filed request to cancel a booking past the self-serve void
+// window — durable audit trail, resolved exactly once by an owner/admin.
+// Amounts/names are snapshotted at request time so the review UI and the
+// audit trail don't depend on the (possibly since-changed or gone) booking.
+export interface VoidRequest {
+  voidRequestId: string;
+  bookingId: string;
+  roomId: string;
+  roomNumber: string;
+  guestName: string;
+  totalAmount: number;
+  amountPaid: number;
+  checkInTime: Timestamp;
+  reason: string;
+  status: VoidRequestStatus;
+  requestedBy: string;
+  requestedByName: string;
+  requestedAt: Timestamp;
+  resolvedBy?: string;
+  resolvedByName?: string;
+  resolvedAt?: Timestamp;
+  resolutionNote?: string;
+}
+
 export interface Room {
   roomId: string;
   roomNumber: string;
@@ -114,7 +140,7 @@ export interface InventoryItem {
   lastUpdated: Timestamp;
 }
 
-export type NotificationType = "checkout_reminder" | "low_stock";
+export type NotificationType = "checkout_reminder" | "low_stock" | "void_request";
 
 export interface AppNotification {
   notificationId: string;
@@ -124,6 +150,8 @@ export interface AppNotification {
   roomNumber?: string;
   itemId?: string;
   itemName?: string;
+  bookingId?: string;
+  voidRequestId?: string;
   createdAt: Timestamp;
   resolved: boolean;
   readBy: string[];

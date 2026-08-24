@@ -17,9 +17,12 @@ import type { Booking, Room } from "@/lib/types";
 import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useAuth } from "@/context/auth-context";
+import { useFrontDesk } from "@/context/front-desk-context";
 import { isOwnerLikeRole } from "@/lib/roles";
 import { OrderPickerDialog } from "@/components/inventory/order-picker-dialog";
 import { ExtendStayDialog } from "@/components/rooms/extend-stay-dialog";
+import { VoidRequestDialog } from "@/components/rooms/void-request-dialog";
+import { VoidRequestReviewDialog } from "@/components/notifications/void-request-review-dialog";
 import { Loader2Icon, ShoppingCartIcon, TimerIcon, XIcon } from "lucide-react";
 
 interface RoomDetailDialogProps {
@@ -36,11 +39,14 @@ export function RoomDetailDialog({
   onRequestCheckout,
 }: RoomDetailDialogProps) {
   const { appUser } = useAuth();
+  const { pendingVoidRequestsByBookingId } = useFrontDesk();
   const now = useNowTick(1000);
   const [voiding, setVoiding] = useState(false);
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
   const [orderPickerOpen, setOrderPickerOpen] = useState(false);
   const [extendOpen, setExtendOpen] = useState(false);
+  const [voidRequestOpen, setVoidRequestOpen] = useState(false);
+  const [voidReviewOpen, setVoidReviewOpen] = useState(false);
 
   const elapsed = hoursElapsed(booking.checkInTime, now);
   const remaining = booking.hoursBooked - elapsed;
@@ -52,18 +58,17 @@ export function RoomDetailDialog({
   const { cash: cashPaid, gcash: gcashPaid } = paymentBreakdown(booking);
   const isOwnerLike = isOwnerLikeRole(appUser?.role);
   const canRemoveOrderItems = isOwnerLike;
+  const canDirectVoid = isOwnerLike || canCancel;
+  const pendingVoidRequest = pendingVoidRequestsByBookingId.get(booking.bookingId);
 
   async function handleVoid() {
-    if (!canCancel) {
-      toast.error("Cancel is only allowed in the first 5 minutes. Check out instead.");
-      return;
-    }
+    if (!canDirectVoid) return;
     if (!window.confirm(`Cancel this booking for Room ${room.roomNumber}? This frees up the room without checking out.`)) {
       return;
     }
     setVoiding(true);
     try {
-      await voidBooking(booking);
+      await voidBooking(booking, { bypassWindow: isOwnerLike });
       toast.success(`Booking for Room ${room.roomNumber} cancelled.`);
       onClose();
     } catch (error) {
@@ -228,21 +233,44 @@ export function RoomDetailDialog({
           </div>
 
           <DialogFooter className="sm:justify-between">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleVoid}
-              disabled={voiding || !canCancel}
-              className="text-muted-foreground"
-              title={
-                canCancel
-                  ? undefined
-                  : "More than 5 minutes in the room — check out instead"
-              }
-            >
-              {voiding && <Loader2Icon className="size-4 animate-spin" />}
-              Cancel booking
-            </Button>
+            {pendingVoidRequest ? (
+              <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                <span title={pendingVoidRequest.reason}>
+                  Void requested — pending Owner approval
+                </span>
+                {isOwnerLike && (
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    className="text-amber-700 dark:text-amber-400"
+                    onClick={() => setVoidReviewOpen(true)}
+                  >
+                    Review
+                  </Button>
+                )}
+              </div>
+            ) : canDirectVoid ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleVoid}
+                disabled={voiding}
+                className="text-muted-foreground"
+              >
+                {voiding && <Loader2Icon className="size-4 animate-spin" />}
+                Cancel booking
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setVoidRequestOpen(true)}
+                className="text-muted-foreground"
+                title="More than 7 minutes in the room — the Owner must approve a cancellation"
+              >
+                Request void
+              </Button>
+            )}
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -282,6 +310,17 @@ export function RoomDetailDialog({
 
       {extendOpen && (
         <ExtendStayDialog room={room} booking={booking} onClose={() => setExtendOpen(false)} />
+      )}
+
+      {voidRequestOpen && (
+        <VoidRequestDialog room={room} booking={booking} onClose={() => setVoidRequestOpen(false)} />
+      )}
+
+      {voidReviewOpen && pendingVoidRequest && (
+        <VoidRequestReviewDialog
+          requests={[pendingVoidRequest]}
+          onClose={() => setVoidReviewOpen(false)}
+        />
       )}
     </>
   );
