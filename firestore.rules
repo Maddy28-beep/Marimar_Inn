@@ -17,7 +17,9 @@ service cloud.firestore {
       return isAuthenticated() && getUserRole() == role;
     }
 
-    // Helper function: Check if user is owner or admin
+    // Helper function: Check if user is owner or admin. Deliberately does
+    // NOT include supervisor — this gates the two things Supervisor is
+    // explicitly excluded from: void approval and staff management.
     function isOwnerOrAdmin() {
       return isAuthenticated() && (getUserRole() in ['owner', 'admin', 'superadmin']);
     }
@@ -26,6 +28,19 @@ service cloud.firestore {
     function isStaff() {
       return isAuthenticated() &&
         (getUserRole() in ['owner', 'admin', 'superadmin', 'manager', 'supervisor', 'cashier']);
+    }
+
+    // Broad "elevated staff" check for everything Admin can do EXCEPT void
+    // approval and staff management (rooms/inventory/rate packages/reports
+    // cleanup/settings) — Supervisor gets all of this, same as Admin.
+    function isElevatedStaff() {
+      return isAuthenticated() && (getUserRole() in ['owner', 'admin', 'superadmin', 'supervisor']);
+    }
+
+    // Void is off-limits to Supervisor entirely — can't self-cancel past
+    // the window, can't submit a request, can't approve/deny one.
+    function canVoid() {
+      return isStaff() && getUserRole() != 'supervisor';
     }
 
     // ============================================
@@ -57,8 +72,8 @@ service cloud.firestore {
       // All authenticated users can read rooms
       allow read: if isAuthenticated();
 
-      // Owner/admin/manager: full room management (rate, type, room number, floor)
-      allow create: if (isOwnerOrAdmin() || hasRole('manager')) &&
+      // Owner/admin/supervisor/manager: full room management (rate, type, room number, floor)
+      allow create: if (isElevatedStaff() || hasRole('manager')) &&
         request.resource.data.keys().hasAll([
           'roomId', 'roomNumber', 'floor', 'type', 'status', 'lastUpdated'
         ]) &&
@@ -66,12 +81,12 @@ service cloud.firestore {
         request.resource.data.roomNumber is string &&
         request.resource.data.status in ['available', 'occupied', 'cleaning', 'maintenance', 'reserved'];
 
-      allow delete: if isOwnerOrAdmin() || hasRole('manager');
+      allow delete: if isElevatedStaff() || hasRole('manager');
 
       // Any staff (cashier included) can flip a room's status as part of
       // normal check-in/checkout/maintenance flows, but only owner/admin/
-      // manager can touch identity fields like roomNumber or floor.
-      allow update: if (isOwnerOrAdmin() || hasRole('manager')) ||
+      // supervisor/manager can touch identity fields like roomNumber or floor.
+      allow update: if (isElevatedStaff() || hasRole('manager')) ||
         (isStaff() &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastUpdated']));
 
@@ -103,15 +118,17 @@ service cloud.firestore {
           'specialRequests', 'updatedAt', 'extraPersonCount', 'towelCount', 'blanketCount'
         ]) &&
         // Setting status to "voided" requires owner/admin, OR the existing
-        // 7-minute self-serve window for any staff — closes the gap where a
-        // raw write could set status:'voided' at any time; only the UI's
+        // 7-minute self-serve window for staff who can void (Supervisor is
+        // excluded entirely, see canVoid()) — closes the gap where a raw
+        // write could set status:'voided' at any time; only the UI's
         // disabled button prevented it before. Past the window, staff must
         // go through a voidRequests approval instead.
         (
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status']) ||
           request.resource.data.status != 'voided' ||
           isOwnerOrAdmin() ||
-          (resource.data.status == 'active' &&
+          (canVoid() &&
+           resource.data.status == 'active' &&
            resource.data.checkInTime + duration.value(7, 'm') > request.time)
         );
 
@@ -126,9 +143,9 @@ service cloud.firestore {
       // All authenticated users can read inventory
       allow read: if isAuthenticated();
 
-      // Owner/admin/manager: full inventory management (name, category,
-      // price, min stock, deletes)
-      allow create: if (isOwnerOrAdmin() || hasRole('manager')) &&
+      // Owner/admin/supervisor/manager: full inventory management (name,
+      // category, price, min stock, deletes)
+      allow create: if (isElevatedStaff() || hasRole('manager')) &&
         request.resource.data.keys().hasAll([
           'itemId', 'name', 'category', 'sellingPrice', 'quantity', 'minStockLevel'
         ]) &&
@@ -137,13 +154,13 @@ service cloud.firestore {
         request.resource.data.sellingPrice is number &&
         request.resource.data.quantity is number;
 
-      allow delete: if isOwnerOrAdmin() || hasRole('manager');
+      allow delete: if isElevatedStaff() || hasRole('manager');
 
       // Any staff (cashier included) can *decrease* stock quantity as part
       // of placing an order. Increasing quantity — restocking, or reversing
-      // an order — is owner/admin/manager only; staff can't undo an order
-      // once it's rung up, only request the Owner do it.
-      allow update: if (isOwnerOrAdmin() || hasRole('manager')) ||
+      // an order — is owner/admin/supervisor/manager only; staff can't undo
+      // an order once it's rung up, only request the Owner do it.
+      allow update: if (isElevatedStaff() || hasRole('manager')) ||
         (isStaff() &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantity', 'lastUpdated']) &&
           request.resource.data.quantity < resource.data.quantity);
@@ -157,8 +174,8 @@ service cloud.firestore {
       // All authenticated users can read rate packages (needed by check-in)
       allow read: if isAuthenticated();
 
-      // Owner/admin/manager: create, update, and delete rate packages
-      allow create, update, delete: if isOwnerOrAdmin() || hasRole('manager');
+      // Owner/admin/supervisor/manager: create, update, and delete rate packages
+      allow create, update, delete: if isElevatedStaff() || hasRole('manager');
     }
 
     // ============================================
@@ -169,8 +186,8 @@ service cloud.firestore {
       // populate the category picker when adding/editing an item)
       allow read: if isAuthenticated();
 
-      // Owner/admin/manager: create and delete categories
-      allow create, delete: if isOwnerOrAdmin() || hasRole('manager');
+      // Owner/admin/supervisor/manager: create and delete categories
+      allow create, delete: if isElevatedStaff() || hasRole('manager');
     }
 
     // ============================================
@@ -186,9 +203,9 @@ service cloud.firestore {
           'transactionId', 'type', 'bookingId', 'roomNumber', 'amount', 'cashierId', 'timestamp'
         ]);
 
-      // Only owner and admin can update/delete transactions
-      allow update: if isOwnerOrAdmin();
-      allow delete: if isOwnerOrAdmin();
+      // Only owner/admin/supervisor can update/delete transactions
+      allow update: if isElevatedStaff();
+      allow delete: if isElevatedStaff();
     }
 
     // ============================================
@@ -211,7 +228,7 @@ service cloud.firestore {
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'resolved', 'message']);
 
       // Manual cleanup escape hatch — app logic never deletes, it resolves
-      allow delete: if isOwnerOrAdmin();
+      allow delete: if isElevatedStaff();
     }
 
     // ============================================
@@ -220,7 +237,7 @@ service cloud.firestore {
     match /voidRequests/{voidRequestId} {
       allow read: if isAuthenticated();
 
-      allow create: if isStaff() &&
+      allow create: if canVoid() &&
         request.resource.data.keys().hasOnly([
           'voidRequestId', 'bookingId', 'roomId', 'roomNumber', 'guestName',
           'totalAmount', 'amountPaid', 'checkInTime', 'reason', 'status',
@@ -267,10 +284,11 @@ service cloud.firestore {
         request.resource.data.cashierId == request.auth.uid &&
         request.resource.data.cashierName is string;
 
-      // Cashiers can't edit or erase a logged expense; only the owner can
-      // remove a mistaken entry so the daily report stays an audit trail.
+      // Cashiers can't edit or erase a logged expense; only owner/admin/
+      // supervisor can remove a mistaken entry so the daily report stays an
+      // audit trail.
       allow update: if false;
-      allow delete: if isOwnerOrAdmin();
+      allow delete: if isElevatedStaff();
     }
 
     // ============================================
@@ -291,7 +309,7 @@ service cloud.firestore {
         request.resource.data.cashierId == request.auth.uid;
 
       allow update: if false;
-      allow delete: if isOwnerOrAdmin();
+      allow delete: if isElevatedStaff();
     }
 
     // ============================================
@@ -301,8 +319,8 @@ service cloud.firestore {
       // All authenticated users can read settings
       allow read: if isAuthenticated();
 
-      // Only owner, admin can modify settings
-      allow write: if isOwnerOrAdmin();
+      // Owner/admin/supervisor can modify settings
+      allow write: if isElevatedStaff();
     }
 
     // ============================================

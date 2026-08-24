@@ -9,12 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { UserFormDialog } from "@/components/users/user-form-dialog";
 import { roleLabel } from "@/lib/roles";
-import { KeyRoundIcon, Loader2Icon, PlusIcon, TrashIcon } from "lucide-react";
+import { KeyRoundIcon, Loader2Icon, PencilIcon, PlusIcon, TrashIcon } from "lucide-react";
 
 function ManageStaffContent() {
   const { appUser } = useAuth();
   const [users, setUsers] = useState<StaffUser[] | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<StaffUser | null>(null);
   const [busyUid, setBusyUid] = useState<string | null>(null);
 
   useEffect(() => {
@@ -91,6 +92,16 @@ function ManageStaffContent() {
                     <Button
                       variant="ghost"
                       size="sm"
+                      onClick={() => setEditingUser(user)}
+                      disabled={busyUid === user.uid}
+                      title="Edit name or role"
+                    >
+                      <PencilIcon className="size-3.5" />
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => handleResetPassword(user)}
                       disabled={busyUid === user.uid}
                       title="Send password reset email"
@@ -130,6 +141,9 @@ function ManageStaffContent() {
       </div>
 
       {dialogOpen && <UserFormDialog onClose={() => setDialogOpen(false)} />}
+      {editingUser && (
+        <UserFormDialog user={editingUser} onClose={() => setEditingUser(null)} />
+      )}
     </div>
   );
 }

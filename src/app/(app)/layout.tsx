@@ -13,7 +13,7 @@ import { NotificationBell } from "@/components/notifications/notification-bell";
 import { PrinterStatus } from "@/components/printer-status";
 import { CashDrawerControl } from "@/components/cash-drawer-control";
 import { hoursElapsed, EXTEND_OVERDUE_CUTOFF_HOURS } from "@/lib/bookings";
-import { isOwnerLikeRole, roleLabel } from "@/lib/roles";
+import { canManageStaff, isOwnerLikeRole, roleLabel } from "@/lib/roles";
 import { FrontDeskProvider, useFrontDesk } from "@/context/front-desk-context";
 import {
   checkoutReminderBookingId,
@@ -128,6 +128,7 @@ interface NavLink {
   label: string;
   icon?: ComponentType<{ className?: string }>;
   ownerOnly?: boolean;
+  staffManagementOnly?: boolean;
 }
 
 const NAV_LINKS: NavLink[] = [
@@ -135,7 +136,7 @@ const NAV_LINKS: NavLink[] = [
   { href: "/rooms/manage", label: "Manage Rooms", icon: SettingsIcon, ownerOnly: true },
   { href: "/inventory", label: "Inventory", icon: PackageIcon, ownerOnly: true },
   { href: "/reports", label: "Reports", icon: BarChart3Icon },
-  { href: "/users", label: "Manage Staff", icon: UsersIcon, ownerOnly: true },
+  { href: "/users", label: "Manage Staff", icon: UsersIcon, staffManagementOnly: true },
 ];
 
 function CheckoutReminderHost() {
@@ -201,9 +202,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const visibleLinks = NAV_LINKS.filter(
-    (link) => !link.ownerOnly || isOwnerLikeRole(appUser?.role)
-  );
+  const visibleLinks = NAV_LINKS.filter((link) => {
+    if (link.staffManagementOnly) return canManageStaff(appUser?.role);
+    return !link.ownerOnly || isOwnerLikeRole(appUser?.role);
+  });
 
   return (
     <div className="flex min-h-screen flex-col">

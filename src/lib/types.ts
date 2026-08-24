@@ -1,6 +1,6 @@
 import type { Timestamp } from "firebase/firestore";
 
-export type UserRole = "owner" | "admin" | "superadmin" | "cashier";
+export type UserRole = "owner" | "admin" | "superadmin" | "supervisor" | "cashier";
 
 export interface AppUser {
   uid: string;
@@ -121,6 +121,12 @@ export interface Booking {
   checkOutTime?: Timestamp;
   specialRequests?: string;
   cashierId: string;
+  // Snapshot of who checked the guest in and their role at that time — lets
+  // the Owner tell who transacted a booking (Owner/Admin/Supervisor/
+  // Cashier) without joining against the users collection, which can change
+  // later. Bookings from before this field existed just won't show a name.
+  cashierName?: string;
+  cashierRole?: UserRole;
   updatedAt: Timestamp;
 }
 

@@ -69,6 +69,26 @@ export async function createStaffUser(input: CreateStaffInput) {
   return uid;
 }
 
+export interface UpdateStaffInput {
+  displayName: string;
+  role: UserRole;
+}
+
+/**
+ * Updates a staff member's name/role. Email is intentionally not editable
+ * here — it's the Firebase Auth login identity, and the client SDK can't
+ * change another user's Auth email without them being signed in themselves
+ * (same constraint documented on resetStaffPassword below). If an email is
+ * genuinely wrong, delete and recreate the account instead.
+ */
+export async function updateStaffUser(uid: string, input: UpdateStaffInput) {
+  const firestore = requireDb();
+  await updateDoc(doc(firestore, "users", uid), {
+    displayName: input.displayName,
+    role: input.role,
+  });
+}
+
 /**
  * Removes the staff member's `users/{uid}` doc. This is a client-SDK-only
  * app with no backend/Admin SDK, so it can't delete the underlying Firebase

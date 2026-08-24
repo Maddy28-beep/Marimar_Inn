@@ -212,6 +212,8 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
         splitQrphAmount: payload.splitQrphAmount,
         specialRequests: specialRequests.trim() || undefined,
         cashierId,
+        cashierName: appUser?.displayName ?? appUser?.email ?? undefined,
+        cashierRole: appUser?.role,
         cartItems: cartLines.map((line) => ({ itemId: line.item.itemId, quantity: line.qty })),
         extraPersonCount: extraPersons || undefined,
         towelCount: towels || undefined,

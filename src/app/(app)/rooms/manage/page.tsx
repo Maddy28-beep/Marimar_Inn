@@ -261,7 +261,7 @@ function ManageRoomsContent() {
 
 export default function ManageRoomsPage() {
   return (
-    <ProtectedRoute allowedRoles={["owner", "admin", "superadmin"]}>
+    <ProtectedRoute allowedRoles={["owner", "admin", "superadmin", "supervisor"]}>
       <ManageRoomsContent />
     </ProtectedRoute>
   );

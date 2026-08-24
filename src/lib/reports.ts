@@ -153,6 +153,8 @@ export interface DailySalesRow {
   splitCashAmount?: number;
   splitGcashAmount?: number;
   splitQrphAmount?: number;
+  cashierName?: string;
+  remarks?: string;
 }
 
 export interface DailySalesTotals {
@@ -183,7 +185,13 @@ export function computeDailySalesReport(
   storeSales: StoreSale[] = []
 ): DailySalesReport {
   const rows: DailySalesRow[] = bookings
-    .filter((b) => b.status !== "voided")
+    // Voiding only cancels the room — items/products bought are never
+    // reversed (see voidBooking()), so a voided booking that already
+    // collected payment for a room and/or items still needs to show up
+    // here for cash reconciliation. Only drop voided bookings that never
+    // collected anything (e.g. cancelled within the self-serve window
+    // before any payment).
+    .filter((b) => b.status !== "voided" || (b.amountPaid ?? 0) > 0)
     .sort((a, b) => a.checkInTime.toMillis() - b.checkInTime.toMillis())
     .map((booking) => {
       const extras = bookingExtras(booking);
@@ -227,6 +235,8 @@ export function computeDailySalesReport(
         splitCashAmount: booking.splitCashAmount,
         splitGcashAmount: booking.splitGcashAmount,
         splitQrphAmount: booking.splitQrphAmount,
+        cashierName: booking.cashierName,
+        remarks: booking.status === "voided" ? "Voided" : undefined,
       };
     });
 
@@ -256,6 +266,7 @@ export function computeDailySalesReport(
       splitCashAmount: sale.splitCashAmount,
       splitGcashAmount: sale.splitGcashAmount,
       splitQrphAmount: sale.splitQrphAmount,
+      cashierName: sale.cashierName,
     });
   }
 
@@ -389,7 +400,10 @@ export function computeRangeDailySeries(
   expenses: ShiftExpense[],
   storeSales: StoreSale[] = []
 ): RangeDayPoint[] {
-  bookings = bookings.filter((b) => b.status !== "voided");
+  // Same reasoning as computeDailySalesReport: voiding only cancels the
+  // room, never reverses payment already collected, so a voided booking
+  // that took money still needs to count for cash reconciliation.
+  bookings = bookings.filter((b) => b.status !== "voided" || (b.amountPaid ?? 0) > 0);
 
   const map = new Map<string, RangeDayPoint>();
   const cursor = startOfDay(from);
@@ -468,7 +482,10 @@ export function computeMonthlyReport(
   monthDate: Date,
   storeSales: StoreSale[] = []
 ): MonthlyReport {
-  bookings = bookings.filter((b) => b.status !== "voided");
+  // Same reasoning as computeDailySalesReport: voiding only cancels the
+  // room, never reverses payment already collected, so a voided booking
+  // that took money still needs to count for cash reconciliation.
+  bookings = bookings.filter((b) => b.status !== "voided" || (b.amountPaid ?? 0) > 0);
 
   const roomTypeById = new Map(rooms.map((r) => [r.roomId, r.type]));
   const numDays = daysInMonth(monthDate);

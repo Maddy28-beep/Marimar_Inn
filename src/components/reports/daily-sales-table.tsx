@@ -47,6 +47,7 @@ const HEADERS = [
   "Store total",
   "Paid",
   "Payment",
+  "Staff",
   "Others",
   "Remarks",
 ];
@@ -134,8 +135,9 @@ export function DailySalesTable({
                     {row.gcashReference ? ` (GCash ${row.gcashReference})` : ""}
                     {row.qrphReference ? ` (QRPh ${row.qrphReference})` : ""}
                   </td>
+                  <td className="border p-1 whitespace-nowrap">{row.cashierName ?? ""}</td>
                   <td className="border p-1" />
-                  <td className="border p-1" />
+                  <td className="border p-1 whitespace-nowrap">{row.remarks ?? ""}</td>
                 </tr>
               ))
             )}
@@ -155,7 +157,7 @@ export function DailySalesTable({
                 <td className="border p-1 text-right whitespace-nowrap">{peso(totals.totalRoomAmount)}</td>
                 <td className="border p-1 text-right whitespace-nowrap">{peso(totals.totalStoreAmount)}</td>
                 <td className="border p-1 text-right whitespace-nowrap">{peso(totals.totalPaid)}</td>
-                <td className="border p-1" colSpan={3} />
+                <td className="border p-1" colSpan={4} />
               </tr>
             </tfoot>
           )}

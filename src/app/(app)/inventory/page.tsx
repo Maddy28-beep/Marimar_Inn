@@ -183,7 +183,7 @@ function ManageInventoryContent() {
 
 export default function InventoryPage() {
   return (
-    <ProtectedRoute allowedRoles={["owner", "admin", "superadmin"]}>
+    <ProtectedRoute allowedRoles={["owner", "admin", "superadmin", "supervisor"]}>
       <ManageInventoryContent />
     </ProtectedRoute>
   );

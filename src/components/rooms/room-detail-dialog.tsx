@@ -18,7 +18,7 @@ import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useAuth } from "@/context/auth-context";
 import { useFrontDesk } from "@/context/front-desk-context";
-import { isOwnerLikeRole } from "@/lib/roles";
+import { canApproveVoid, isOwnerLikeRole, roleLabel } from "@/lib/roles";
 import { OrderPickerDialog } from "@/components/inventory/order-picker-dialog";
 import { ExtendStayDialog } from "@/components/rooms/extend-stay-dialog";
 import { VoidRequestDialog } from "@/components/rooms/void-request-dialog";
@@ -58,7 +58,11 @@ export function RoomDetailDialog({
   const { cash: cashPaid, gcash: gcashPaid } = paymentBreakdown(booking);
   const isOwnerLike = isOwnerLikeRole(appUser?.role);
   const canRemoveOrderItems = isOwnerLike;
-  const canDirectVoid = isOwnerLike || canCancel;
+  // Void is off-limits to Supervisor entirely — no self-cancel, no request,
+  // no approve — only Owner/Admin/Superadmin and (within the window) Cashier.
+  const canApproveVoidRole = canApproveVoid(appUser?.role);
+  const canTouchVoid = appUser?.role !== "supervisor";
+  const canDirectVoid = canApproveVoidRole || (canCancel && canTouchVoid);
   const pendingVoidRequest = pendingVoidRequestsByBookingId.get(booking.bookingId);
 
   async function handleVoid() {
@@ -68,7 +72,7 @@ export function RoomDetailDialog({
     }
     setVoiding(true);
     try {
-      await voidBooking(booking, { bypassWindow: isOwnerLike });
+      await voidBooking(booking, { bypassWindow: canApproveVoidRole });
       toast.success(`Booking for Room ${room.roomNumber} cancelled.`);
       onClose();
     } catch (error) {
@@ -98,6 +102,13 @@ export function RoomDetailDialog({
             <DialogTitle>Room {room.roomNumber} — {booking.guestName}</DialogTitle>
             <DialogDescription>
               Checked in {booking.checkInTime.toDate().toLocaleString()}
+              {isOwnerLike && booking.cashierName && (
+                <>
+                  {" "}
+                  by {booking.cashierName}
+                  {booking.cashierRole ? ` (${roleLabel(booking.cashierRole)})` : ""}
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
 
@@ -238,7 +249,7 @@ export function RoomDetailDialog({
                 <span title={pendingVoidRequest.reason}>
                   Void requested — pending Owner approval
                 </span>
-                {isOwnerLike && (
+                {canApproveVoidRole && (
                   <Button
                     variant="outline"
                     size="xs"
@@ -260,7 +271,7 @@ export function RoomDetailDialog({
                 {voiding && <Loader2Icon className="size-4 animate-spin" />}
                 Cancel booking
               </Button>
-            ) : (
+            ) : canTouchVoid ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -270,6 +281,8 @@ export function RoomDetailDialog({
               >
                 Request void
               </Button>
+            ) : (
+              <span />
             )}
             <div className="flex gap-2">
               <Button

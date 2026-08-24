@@ -1668,7 +1668,7 @@ function ReportsContent() {
 
 export default function ReportsPage() {
   return (
-    <ProtectedRoute allowedRoles={["owner", "admin", "superadmin", "cashier"]}>
+    <ProtectedRoute allowedRoles={["owner", "admin", "superadmin", "supervisor", "cashier"]}>
       <ReportsContent />
     </ProtectedRoute>
   );

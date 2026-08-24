@@ -12,7 +12,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Booking, InventoryItem, OrderItem, PaymentMethod, PaymentStatus } from "@/lib/types";
+import type { Booking, InventoryItem, OrderItem, PaymentMethod, PaymentStatus, UserRole } from "@/lib/types";
 import {
   AMENITY_BLANKET_ID,
   AMENITY_TOWEL_ID,
@@ -70,6 +70,8 @@ export interface CheckInInput {
   splitQrphAmount?: number;
   specialRequests?: string;
   cashierId: string;
+  cashierName?: string;
+  cashierRole?: UserRole;
   cartItems?: CheckInCartLine[];
   extraPersonCount?: number;
   towelCount?: number;
@@ -280,6 +282,8 @@ export async function checkIn(input: CheckInInput) {
       ...(input.gcashReference ? { gcashReference: input.gcashReference } : {}),
       ...(input.qrphReference ? { qrphReference: input.qrphReference } : {}),
       ...(input.openEnded ? { openEnded: true } : {}),
+      ...(input.cashierName ? { cashierName: input.cashierName } : {}),
+      ...(input.cashierRole ? { cashierRole: input.cashierRole } : {}),
       ...(extraPersonCount > 0 ? { extraPersonCount } : {}),
       ...(towelCount > 0 ? { towelCount } : {}),
       ...(blanketCount > 0 ? { blanketCount } : {}),
