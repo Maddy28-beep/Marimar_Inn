@@ -29,6 +29,19 @@ export function isAmenityItem(item: OrderItem): boolean {
   return item.itemId === AMENITY_TOWEL_ID || item.itemId === AMENITY_BLANKET_ID;
 }
 
+/**
+ * Label covering only towels/blankets (real physical products), leaving out
+ * the extra-person fee — used where the room charge itself is excluded
+ * (e.g. a voided booking) so the label doesn't reference a room-only fee
+ * that isn't being shown as revenue.
+ */
+export function amenityOnlyLabel(extras: Pick<BookingExtras, "towels" | "blankets">): string {
+  const parts: string[] = [];
+  if (extras.towels > 0) parts.push(`${extras.towels} towel${extras.towels === 1 ? "" : "s"}`);
+  if (extras.blankets > 0) parts.push(`${extras.blankets} blanket${extras.blankets === 1 ? "" : "s"}`);
+  return parts.join(", ");
+}
+
 export interface BookingExtras {
   extraPersons: number;
   towels: number;

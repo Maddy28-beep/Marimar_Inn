@@ -1,6 +1,6 @@
 import { collection, getDocs, query, Timestamp, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { bookingExtras } from "@/lib/booking-extras";
+import { amenityOnlyLabel, bookingExtras } from "@/lib/booking-extras";
 import { referenceNumberFor } from "@/lib/receipt-printer";
 import type { Booking, PaymentMethod, Room, RoomType, ShiftExpense, StoreSale } from "@/lib/types";
 
@@ -186,30 +186,39 @@ export function computeDailySalesReport(
 ): DailySalesReport {
   const rows: DailySalesRow[] = bookings
     // Voiding only cancels the room — items/products bought are never
-    // reversed (see voidBooking()), so a voided booking that already
-    // collected payment for a room and/or items still needs to show up
-    // here for cash reconciliation. Only drop voided bookings that never
-    // collected anything (e.g. cancelled within the self-serve window
-    // before any payment).
-    .filter((b) => b.status !== "voided" || (b.amountPaid ?? 0) > 0)
+    // reversed (see voidBooking()), so a voided booking that had items on
+    // it still needs to show up here (room revenue excluded below, see
+    // isVoided). Drop voided bookings that never had any items — nothing
+    // left to report once the room itself doesn't count.
+    .filter((b) => b.status !== "voided" || (b.totalFbCharge ?? 0) > 0)
     .sort((a, b) => a.checkInTime.toMillis() - b.checkInTime.toMillis())
     .map((booking) => {
+      const isVoided = booking.status === "voided";
       const extras = bookingExtras(booking);
       const packageHours = booking.originalPackageHours ?? booking.hoursBooked;
-      const packageAmount = booking.originalPackagePrice ?? booking.totalRoomCharge ?? 0;
-      const totalRoomAmount = booking.totalRoomCharge ?? 0;
+      // Voiding cancels the room only — the room charge (package, extension,
+      // extra-person fee) never happened as far as the report is concerned.
+      // Items/products bought (cart items, towels, blankets) are never
+      // reversed by voidBooking(), so they still count as real revenue.
+      const packageAmount = isVoided ? 0 : (booking.originalPackagePrice ?? booking.totalRoomCharge ?? 0);
+      const totalRoomAmount = isVoided ? 0 : (booking.totalRoomCharge ?? 0);
       const leftoverRoom = Math.max(0, totalRoomAmount - packageAmount);
-      const extensionHours = Math.max(0, (booking.hoursBooked ?? packageHours) - packageHours);
+      const extensionHours = isVoided ? 0 : Math.max(0, (booking.hoursBooked ?? packageHours) - packageHours);
+      const totalStoreAmount = Math.max(0, (booking.totalFbCharge ?? 0) - extras.amenityAmount);
       // Extra person is billed on the room, not as stay hours. Without this
       // split it lands in "Ext amt" with a blank Ext hrs column.
-      let extrasAmount = extras.extrasAmount;
-      let extrasLabel = extras.extrasLabel;
-      let extensionAmount = Math.max(0, leftoverRoom - extras.extraPersonAmount);
-      if (extras.extraPersonAmount === 0 && extensionHours === 0 && leftoverRoom > 0) {
+      let extrasAmount = isVoided ? extras.amenityAmount : extras.extrasAmount;
+      let extrasLabel = isVoided ? amenityOnlyLabel(extras) : extras.extrasLabel;
+      let extensionAmount = isVoided ? 0 : Math.max(0, leftoverRoom - extras.extraPersonAmount);
+      if (!isVoided && extras.extraPersonAmount === 0 && extensionHours === 0 && leftoverRoom > 0) {
         extrasAmount += leftoverRoom;
         extrasLabel = extrasLabel || "Extra/Request";
         extensionAmount = 0;
       }
+      // What's still owed for a voided booking is only the items/amenities
+      // — the room portion of amountPaid isn't tracked separately, so this
+      // is what "recorded revenue" means once the room itself is voided.
+      const totalPaid = isVoided ? totalStoreAmount + extras.amenityAmount : booking.amountPaid ?? 0;
       const checkInDate = booking.checkInTime.toDate();
       return {
         bookingId: booking.bookingId,
@@ -227,16 +236,19 @@ export function computeDailySalesReport(
         amenityAmount: extras.amenityAmount,
         actualCheckOutTime: booking.checkOutTime ? booking.checkOutTime.toDate() : null,
         totalRoomAmount,
-        totalStoreAmount: Math.max(0, (booking.totalFbCharge ?? 0) - extras.amenityAmount),
-        totalPaid: booking.amountPaid ?? 0,
+        totalStoreAmount,
+        totalPaid,
         paymentMethod: booking.paymentMethod,
         gcashReference: booking.gcashReference,
         qrphReference: booking.qrphReference,
-        splitCashAmount: booking.splitCashAmount,
-        splitGcashAmount: booking.splitGcashAmount,
-        splitQrphAmount: booking.splitQrphAmount,
+        // Voided rows fall back to the single-method totalPaid above
+        // instead of the booking's running split totals, which still
+        // include the (now-excluded) room portion.
+        splitCashAmount: isVoided ? undefined : booking.splitCashAmount,
+        splitGcashAmount: isVoided ? undefined : booking.splitGcashAmount,
+        splitQrphAmount: isVoided ? undefined : booking.splitQrphAmount,
         cashierName: booking.cashierName,
-        remarks: booking.status === "voided" ? "Voided" : undefined,
+        remarks: isVoided ? "Voided (room only)" : undefined,
       };
     });
 
@@ -400,10 +412,10 @@ export function computeRangeDailySeries(
   expenses: ShiftExpense[],
   storeSales: StoreSale[] = []
 ): RangeDayPoint[] {
-  // Same reasoning as computeDailySalesReport: voiding only cancels the
-  // room, never reverses payment already collected, so a voided booking
-  // that took money still needs to count for cash reconciliation.
-  bookings = bookings.filter((b) => b.status !== "voided" || (b.amountPaid ?? 0) > 0);
+  // Same reasoning as computeDailySalesReport: voiding cancels the room
+  // only — items/products bought are never reversed, so a voided booking
+  // that had items still needs to count (room revenue excluded below).
+  bookings = bookings.filter((b) => b.status !== "voided" || (b.totalFbCharge ?? 0) > 0);
 
   const map = new Map<string, RangeDayPoint>();
   const cursor = startOfDay(from);
@@ -425,7 +437,7 @@ export function computeRangeDailySeries(
   for (const booking of bookings) {
     const point = map.get(dateKey(booking.checkInTime.toDate()));
     if (!point) continue;
-    const room = booking.totalRoomCharge ?? 0;
+    const room = booking.status === "voided" ? 0 : booking.totalRoomCharge ?? 0;
     const store = booking.totalFbCharge ?? 0;
     point.checkIns += 1;
     point.roomRevenue += room;
@@ -482,10 +494,10 @@ export function computeMonthlyReport(
   monthDate: Date,
   storeSales: StoreSale[] = []
 ): MonthlyReport {
-  // Same reasoning as computeDailySalesReport: voiding only cancels the
-  // room, never reverses payment already collected, so a voided booking
-  // that took money still needs to count for cash reconciliation.
-  bookings = bookings.filter((b) => b.status !== "voided" || (b.amountPaid ?? 0) > 0);
+  // Same reasoning as computeDailySalesReport: voiding cancels the room
+  // only — items/products bought are never reversed, so a voided booking
+  // that had items still needs to count (room revenue excluded below).
+  bookings = bookings.filter((b) => b.status !== "voided" || (b.totalFbCharge ?? 0) > 0);
 
   const roomTypeById = new Map(rooms.map((r) => [r.roomId, r.type]));
   const numDays = daysInMonth(monthDate);
@@ -504,17 +516,23 @@ export function computeMonthlyReport(
   for (const booking of bookings) {
     // Same defensive-default reasoning as computeDailyReport: bookings from
     // before Phase 3/4 may be missing totalFbCharge, or (rarer) totalAmount.
-    const bookingRoomCharge = booking.totalRoomCharge ?? 0;
+    // A voided booking's room charge and hours don't count — the room
+    // itself was cancelled — but its items/products still do.
+    const isVoided = booking.status === "voided";
+    const bookingRoomCharge = isVoided ? 0 : booking.totalRoomCharge ?? 0;
     const bookingFbCharge = booking.totalFbCharge ?? 0;
     roomRevenue += bookingRoomCharge;
     fbRevenue += bookingFbCharge;
-    totalHoursBooked += booking.hoursBooked ?? 0;
+    totalHoursBooked += isVoided ? 0 : booking.hoursBooked ?? 0;
 
     const point = dailyMap.get(dateKey(booking.checkInTime.toDate()));
     if (point) {
       point.roomRevenue += bookingRoomCharge;
       point.fbRevenue += bookingFbCharge;
-      point.total += booking.totalAmount ?? bookingRoomCharge + bookingFbCharge;
+      // Recomputed from the (possibly-zeroed) room + item charges above,
+      // not booking.totalAmount — that field still includes the room
+      // charge for a voided booking since voidBooking() never touches it.
+      point.total += bookingRoomCharge + bookingFbCharge;
       point.checkIns += 1;
     }
 
