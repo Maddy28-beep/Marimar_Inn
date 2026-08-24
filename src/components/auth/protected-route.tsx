@@ -15,6 +15,7 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { user, appUser, loading } = useAuth();
   const router = useRouter();
+  const roleAllowed = Boolean(appUser && (!allowedRoles || allowedRoles.includes(appUser.role)));
 
   useEffect(() => {
     if (loading) return;
@@ -29,7 +30,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     }
   }, [loading, user, appUser, allowedRoles, router]);
 
-  if (loading || !user || !appUser) {
+  if ((loading && !roleAllowed) || (!loading && (!user || !appUser))) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4">
         <BrandLogo className="h-20 w-auto" />
@@ -38,7 +39,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     );
   }
 
-  if (allowedRoles && !allowedRoles.includes(appUser.role)) {
+  if (!roleAllowed) {
     return null;
   }
 

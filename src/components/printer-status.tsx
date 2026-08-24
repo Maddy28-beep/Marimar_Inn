@@ -84,6 +84,11 @@ export function PrinterStatus() {
     }
   }
 
+  function handleDisconnect() {
+    printer.disconnect();
+    toast.success("Printer disconnected.");
+  }
+
   async function handleForgetSaved() {
     try {
       await printer.forgetSavedPrinter();
@@ -145,7 +150,7 @@ export function PrinterStatus() {
                 <Button variant="outline" size="sm" onClick={handleTestPrint}>
                   Print test
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => printer.disconnect()}>
+                <Button variant="ghost" size="sm" onClick={handleDisconnect}>
                   Disconnect
                 </Button>
               </div>

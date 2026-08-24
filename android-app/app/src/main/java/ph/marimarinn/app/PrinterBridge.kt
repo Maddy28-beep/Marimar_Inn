@@ -195,24 +195,45 @@ class PrinterBridge {
 
     @JavascriptInterface
     fun disconnect(): String {
-        return runOnPrinterThread {
-            lastMac = null
-            disconnectLocked()
-            "ok"
-        }
+        // Same reasoning as connect() above: a JavascriptInterface method
+        // that returns a value blocks the calling WebView JS thread until it
+        // returns, freezing the whole page. Waiting here via
+        // runOnPrinterThread() used to make the button feel dead even though
+        // disconnectLocked() itself is fast now — nothing else could run
+        // (including painting a "disconnecting…" state) until the executor
+        // round-trip finished.
+        lastMac = null
+        executor.execute { disconnectLocked() }
+        return "ok"
     }
 
+    /**
+     * BluetoothSocket.close() has no timeout of its own — on a flaky
+     * connection (this printer's radio drops mid-handshake constantly, per
+     * its own logcat) it can block for the better part of a minute. Running
+     * it on the shared single-thread executor used for connect/write meant
+     * one stuck close() froze every later tap (reconnect, print, anything)
+     * behind it in the queue until the OS finally gave up. Detaching the
+     * socket/stream references immediately and closing them on their own
+     * disposable thread means the app considers itself disconnected right
+     * away, and a slow OS-level teardown can no longer block anything else.
+     */
     private fun disconnectLocked() {
-        try {
-            output?.close()
-        } catch (_: Exception) {
-        }
-        try {
-            socket?.close()
-        } catch (_: Exception) {
-        }
+        val closingSocket = socket
+        val closingOutput = output
         output = null
         socket = null
+        if (closingSocket == null && closingOutput == null) return
+        Thread {
+            try {
+                closingOutput?.close()
+            } catch (_: Exception) {
+            }
+            try {
+                closingSocket?.close()
+            } catch (_: Exception) {
+            }
+        }.start()
     }
 
     private fun runOnPrinterThread(block: () -> String): String {
