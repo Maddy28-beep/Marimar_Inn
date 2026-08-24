@@ -128,12 +128,19 @@ class EscPosBuilder {
     // RPP02N / Rongta: ASCII text is blank if the head is still in Chinese
     // mode. Density is ESC 7 (RPP heat), never DC2 # or GS ( K — those either
     // swallow the text as a bitmap or print as garbage.
+    //
+    // The JP58H doesn't recognize ESC 7 (heating/density) at all — instead
+    // of tuning the heat, it echoed one of the parameter bytes back as a
+    // stray character right at the very start of every printed slip (the
+    // dash before "Marimar Inn" on both the daily sales report and the
+    // guest receipt). Dropping it just means this printer uses its own
+    // default density, which is fine — legibility was never the issue,
+    // only this one leaked byte.
     this.alignment = "left";
     this.push(0x1b, 0x40); // reset
     this.push(0x1c, 0x2e); // FS . cancel Kanji/Chinese so "Marimar Inn" prints
     this.push(0x1b, 0x74, 0x00); // PC437
     this.push(0x1b, 0x4d, 0x00); // Font A
-    this.push(0x1b, 0x37, 9, 170, 20); // max dots, long heat, slower interval
     this.push(0x1b, 0x45, 0x01); // bold
     return this;
   }
