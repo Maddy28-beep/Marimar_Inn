@@ -252,6 +252,8 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
               // (1234 567 890123)" — up to ~52 chars with a full GCash
               // reference, so this needs real room, not the old 22.
               { header: "Payment", key: "payment", width: 55 },
+              { header: "Staff", key: "staff", width: 18 },
+              { header: "Remarks", key: "remarks", width: 18 },
             ],
             rows: [
               ...(salesReport?.rows ?? []).map((row) => ({
@@ -285,6 +287,8 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                   ].filter(Boolean);
                   return refs.length ? `${base} (${refs.join(", ")})` : base;
                 })(),
+                staff: row.cashierName ?? "",
+                remarks: row.remarks ?? "",
               })),
               ...(salesReport && salesReport.rows.length > 0
                 ? [
@@ -304,6 +308,8 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                       storeTotal: salesReport.totals.totalStoreAmount,
                       paid: salesReport.totals.totalPaid,
                       payment: "",
+                      staff: "",
+                      remarks: "",
                     },
                   ]
                 : []),
@@ -314,6 +320,10 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             ? [
                 {
                   heading: "Expenses",
+                  // Lands on the main table's already-wide "Store total"
+                  // through "Remarks" columns instead of the automatic col1
+                  // placement, which would force "Hrs" wide to fit "What for".
+                  startColOverride: 13,
                   columns: [
                     { header: "Time", key: "time", width: 12 },
                     { header: "Shift", key: "shift", width: 10 },
@@ -351,6 +361,10 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                 [
                   {
                     heading: "Payment breakdown",
+                    // Same reasoning as Summary/Expenses/Signatures below —
+                    // lands on "Extra/Request"/"Extra/Request amt" (already
+                    // 22/16 wide) instead of "Room"/"Ref #".
+                    startColOverride: 9,
                     columns: [
                       { header: "Metric", key: "metric", width: 24 },
                       { header: "Value", key: "value", width: 22, format: "currency" as const },
@@ -370,6 +384,13 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                   },
                   {
                     heading: "Summary",
+                    // Lands on the main table's "Paid"/"Payment" columns
+                    // (already 12/55 wide) instead of the automatic
+                    // placement, which would land this table's wide Value
+                    // column on "Check-in"/"Checkout" and force those wide
+                    // too — Excel gives one width per column for the whole
+                    // sheet, shared across every table stacked on it.
+                    startColOverride: 14,
                     columns: [
                       { header: "Metric", key: "metric", width: 28 },
                       // Wide enough for the longest date label, e.g.
@@ -395,6 +416,9 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                 ],
                 {
                   heading: "Signatures",
+                  // Same reasoning as Expenses/Summary above — lands on the
+                  // main table's already-wide trailing columns.
+                  startColOverride: 13,
                   columns: [
                     { header: "", key: "label", width: 14 },
                     { header: "Prepared by", key: "prepared", width: 24 },

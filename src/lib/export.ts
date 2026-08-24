@@ -15,6 +15,16 @@ export interface ExportTable {
   columns: ExportColumn[];
   rows: Record<string, unknown>[];
   emphasizeLastRow?: boolean;
+  /**
+   * Explicit starting column for this table within a side-by-side group,
+   * overriding the automatic cumulative placement. Excel gives a column one
+   * width for the whole sheet, so a wide column from one table bleeds into
+   * whatever unrelated table happens to share that column index elsewhere
+   * on the sheet — use this to land a table's wide columns on top of
+   * another table's already-wide columns instead of forcing a narrow one
+   * (like a time column) wider than it needs to be.
+   */
+  startColOverride?: number;
 }
 
 export interface ExportSheet {
@@ -203,12 +213,13 @@ export async function exportToExcel(filename: string, sheets: ExportSheet[]) {
         let col = 1;
         let nextRow = rowNumber;
         for (const table of entry) {
-          nextRow = Math.max(nextRow, renderTable(worksheet, table, rowNumber, col));
-          col += table.columns.length + 1;
+          const tableCol = table.startColOverride ?? col;
+          nextRow = Math.max(nextRow, renderTable(worksheet, table, rowNumber, tableCol));
+          col = tableCol + table.columns.length + 1;
         }
         rowNumber = nextRow;
       } else {
-        rowNumber = renderTable(worksheet, entry, rowNumber, 1);
+        rowNumber = renderTable(worksheet, entry, rowNumber, entry.startColOverride ?? 1);
       }
     }
 
