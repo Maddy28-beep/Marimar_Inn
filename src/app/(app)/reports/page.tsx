@@ -118,7 +118,14 @@ function shiftRange(dateValue: string, shift: ShiftFilter): [Date, Date] {
   if (shift === "night") {
     return [new Date(y, m - 1, d, 19, 0, 0, 0), new Date(y, m - 1, d + 1, 6, 59, 59, 999)];
   }
-  return [new Date(y, m - 1, d, 0, 0, 0, 0), new Date(y, m - 1, d, 23, 59, 59, 999)];
+  // "Full day" means the day shift plus the night shift that follows it —
+  // 7am through 7am the next morning — not calendar midnight-to-midnight.
+  // Those don't line up: a plain calendar-day range would cut off the
+  // night shift's post-midnight hours (its whole reason for crossing into
+  // the next date), silently dropping anything checked in between
+  // midnight and 7am from the "full day" total even though the day+night
+  // shift reports themselves both include it correctly.
+  return [new Date(y, m - 1, d, 7, 0, 0, 0), new Date(y, m - 1, d + 1, 6, 59, 59, 999)];
 }
 
 function peso(amount: number): string {
