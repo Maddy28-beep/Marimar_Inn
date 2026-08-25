@@ -1,4 +1,14 @@
-import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+} from "firebase/firestore";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth, db, createUserOnSecondaryApp } from "@/lib/firebase";
 import type { UserRole } from "@/lib/types";
@@ -20,7 +30,13 @@ export interface StaffUser {
 
 export function subscribeToUsers(onChange: (users: StaffUser[]) => void) {
   const firestore = requireDb();
-  return onSnapshot(collection(firestore, "users"), (snapshot) => {
+  // A collection listener with no orderBy has no guaranteed row order —
+  // Firestore can reshuffle the snapshot on any write, even to an
+  // unrelated field on one doc, which made the Manage Staff table
+  // visually shuffle rows around after every edit/deactivate/etc. and
+  // made it look like actions weren't taking effect.
+  const q = query(collection(firestore, "users"), orderBy("displayName"));
+  return onSnapshot(q, (snapshot) => {
     const users = snapshot.docs.map((d) => {
         const data = d.data();
         return {
