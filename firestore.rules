@@ -15,7 +15,11 @@ service cloud.firestore {
     // Client-side, AuthContext also signs a deactivated user out entirely.
     function getUserRole() {
       let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-      return userDoc.active == false ? 'deactivated' : userDoc.role;
+      // Accessing a map key that doesn't exist throws in rules — most
+      // accounts have never had `active` set at all (it's only written the
+      // first time someone is deactivated/reactivated), so this must check
+      // presence with `in` before reading it, not just compare directly.
+      return ('active' in userDoc) && userDoc.active == false ? 'deactivated' : userDoc.role;
     }
 
     // Helper function: Check if user has role
