@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { subscribeToInventory, subscribeToCategories, deleteItem, restockItem } from "@/lib/inventory";
@@ -64,6 +64,17 @@ function ManageInventoryContent() {
   useEffect(() => subscribeToInventory(setItems), []);
   useEffect(() => subscribeToCategories(setCategories), []);
 
+  // Grouped by category (then name within it) so the table reads as one
+  // category block at a time instead of interleaved alphabetically by item
+  // name — the Firestore query alone only orders by name.
+  const sortedItems = useMemo(() => {
+    if (!items) return items;
+    return [...items].sort((a, b) => {
+      const categoryCompare = a.category.localeCompare(b.category);
+      return categoryCompare !== 0 ? categoryCompare : a.name.localeCompare(b.name);
+    });
+  }, [items]);
+
   async function handleDelete(item: InventoryItem) {
     if (!window.confirm(`Delete ${item.name}? This can't be undone.`)) return;
     setDeletingId(item.itemId);
@@ -112,7 +123,7 @@ function ManageInventoryContent() {
             </tr>
           </thead>
           <tbody>
-            {items?.map((item) => {
+            {sortedItems?.map((item) => {
               const lowStock = item.quantity <= item.minStockLevel;
               return (
                 <tr key={item.itemId} className="border-t">
