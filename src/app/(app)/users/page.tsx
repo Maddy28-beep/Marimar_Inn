@@ -31,21 +31,26 @@ function ManageStaffContent() {
   const [users, setUsers] = useState<StaffUser[] | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<StaffUser | null>(null);
-  const [busyUid, setBusyUid] = useState<string | null>(null);
+  // Keyed by `${uid}:${action}` — a plain per-row busy flag made whichever
+  // button happens to render a loading icon (Reset password) spin no
+  // matter which action was actually running, which read as "I clicked
+  // Deactivate but Reset password is the one that's loading."
+  const [busyKey, setBusyKey] = useState<string | null>(null);
 
   useEffect(() => {
     return subscribeToUsers(setUsers);
   }, []);
 
   async function handleResetPassword(user: StaffUser) {
-    setBusyUid(user.uid);
+    const key = `${user.uid}:reset`;
+    setBusyKey(key);
     try {
       await resetStaffPassword(user.email);
       toast.success(`Password reset email sent to ${user.email}.`);
     } catch {
       toast.error("Couldn't send the reset email — please try again.");
     } finally {
-      setBusyUid(null);
+      setBusyKey((current) => (current === key ? null : current));
     }
   }
 
@@ -61,14 +66,19 @@ function ManageStaffContent() {
     ) {
       return;
     }
-    setBusyUid(user.uid);
+    const key = `${user.uid}:active`;
+    setBusyKey(key);
     try {
       await setStaffActive(user.uid, !isActive);
       toast.success(isActive ? `${user.displayName} deactivated.` : `${user.displayName} reactivated.`);
-    } catch {
-      toast.error("Couldn't update this account — please try again.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? `Couldn't update this account: ${error.message}`
+          : "Couldn't update this account — please try again."
+      );
     } finally {
-      setBusyUid(null);
+      setBusyKey((current) => (current === key ? null : current));
     }
   }
 
@@ -78,14 +88,15 @@ function ManageStaffContent() {
       return;
     }
     if (!window.confirm(`Delete ${user.displayName}'s account? This can't be undone.`)) return;
-    setBusyUid(user.uid);
+    const key = `${user.uid}:delete`;
+    setBusyKey(key);
     try {
       await deleteStaffUser(user.uid);
       toast.success(`${user.displayName} removed.`);
     } catch {
       toast.error("Couldn't delete the account — please try again.");
     } finally {
-      setBusyUid(null);
+      setBusyKey((current) => (current === key ? null : current));
     }
   }
 
@@ -119,6 +130,9 @@ function ManageStaffContent() {
           <tbody>
             {users?.map((user) => {
               const isActive = user.active !== false;
+              const isBusy = busyKey?.startsWith(`${user.uid}:`) ?? false;
+              const resetBusy = busyKey === `${user.uid}:reset`;
+              const toggleBusy = busyKey === `${user.uid}:active`;
               return (
               <tr key={user.uid} className={cn("border-t", !isActive && "opacity-60")}>
                 <td className="px-4 py-2 font-medium">{user.displayName}</td>
@@ -145,7 +159,7 @@ function ManageStaffContent() {
                       variant="ghost"
                       size="sm"
                       onClick={() => setEditingUser(user)}
-                      disabled={busyUid === user.uid}
+                      disabled={isBusy}
                       title="Edit name or role"
                     >
                       <PencilIcon className="size-3.5" />
@@ -155,10 +169,10 @@ function ManageStaffContent() {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleResetPassword(user)}
-                      disabled={busyUid === user.uid}
+                      disabled={isBusy}
                       title="Send password reset email"
                     >
-                      {busyUid === user.uid ? (
+                      {resetBusy ? (
                         <Loader2Icon className="size-3.5 animate-spin" />
                       ) : (
                         <KeyRoundIcon className="size-3.5" />
@@ -169,10 +183,12 @@ function ManageStaffContent() {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleToggleActive(user)}
-                      disabled={busyUid === user.uid || (isActive && user.uid === appUser?.uid)}
+                      disabled={isBusy || (isActive && user.uid === appUser?.uid)}
                       title={isActive ? "Deactivate — blocks sign-in until reactivated" : "Reactivate"}
                     >
-                      {isActive ? (
+                      {toggleBusy ? (
+                        <Loader2Icon className="size-3.5 animate-spin" />
+                      ) : isActive ? (
                         <PowerOffIcon className="size-3.5" />
                       ) : (
                         <PowerIcon className="size-3.5" />
@@ -183,7 +199,7 @@ function ManageStaffContent() {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleDelete(user)}
-                      disabled={busyUid === user.uid || user.uid === appUser?.uid}
+                      disabled={isBusy || user.uid === appUser?.uid}
                       className="text-destructive hover:text-destructive"
                       title="Delete account"
                     >
