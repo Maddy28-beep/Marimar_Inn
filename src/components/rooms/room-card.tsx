@@ -50,18 +50,25 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
   const { appUser } = useAuth();
   const isOwnerLike = isOwnerLikeRole(appUser?.role);
   const style = STATUS_STYLES[room.status];
-  const elapsed = booking ? hoursElapsed(booking.checkInTime, now) : 0;
-  const remaining = booking && !booking.openEnded ? booking.hoursBooked - elapsed : null;
+  // Rooms and bookings are two independent Firestore listeners — a void
+  // approval (or checkout) updates both docs in one transaction, but the
+  // two listeners can still deliver their snapshots a beat apart. Trusting
+  // `booking` alone here means that momentary lag shows a guest/countdown
+  // on a room the system already knows is free. room.status is the
+  // authoritative signal for what this card should show.
+  const showBooking = Boolean(booking) && room.status === "occupied";
+  const elapsed = showBooking ? hoursElapsed(booking!.checkInTime, now) : 0;
+  const remaining = showBooking && !booking!.openEnded ? booking!.hoursBooked - elapsed : null;
   // 15 minutes left is its own, more urgent tier than the general "running
   // low" 30-minute one — "running low" now only covers 15–30 minutes so the
   // two don't overlap.
   const isCritical = remaining !== null && remaining <= 0.25 && remaining > 0;
   const isRunningLow = remaining !== null && remaining <= 0.5 && remaining > 0.25;
   const isOverdue = remaining !== null && remaining <= 0;
-  const balance = booking ? Math.max(booking.totalAmount - booking.amountPaid, 0) : 0;
+  const balance = showBooking ? Math.max(booking!.totalAmount - booking!.amountPaid, 0) : 0;
   const usedFrac =
-    booking && !booking.openEnded && booking.hoursBooked > 0
-      ? Math.min(1, Math.max(0, elapsed / booking.hoursBooked))
+    showBooking && !booking!.openEnded && booking!.hoursBooked > 0
+      ? Math.min(1, Math.max(0, elapsed / booking!.hoursBooked))
       : 0;
 
   return (
@@ -103,16 +110,16 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
         <span className="truncate text-xs text-muted-foreground">{ROOM_TYPE_LABELS[room.type]}</span>
       </div>
 
-      {booking ? (
+      {showBooking ? (
         <div className="flex min-h-0 flex-1 flex-col gap-0.5">
           <div className="flex items-center gap-1 truncate text-sm font-medium">
             <UserIcon className="size-3.5 shrink-0" />
-            <span className="truncate">{booking.guestName}</span>
+            <span className="truncate">{booking!.guestName}</span>
           </div>
           <div
             className={cn(
               "text-xl leading-tight font-bold",
-              booking.openEnded
+              booking!.openEnded
                 ? "text-sky-600 dark:text-sky-400"
                 : isOverdue
                   ? "text-red-700 dark:text-red-400"
@@ -123,7 +130,7 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
                       : "text-foreground"
             )}
           >
-            {booking.openEnded
+            {booking!.openEnded
               ? `Open · ${formatHours(elapsed)}`
               : isOverdue
                 ? // Owner sees the exact overdue duration right on the card;
@@ -149,7 +156,7 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
         <div className="mt-auto text-sm font-medium text-muted-foreground">Tap to update</div>
       )}
 
-      {booking && !booking.openEnded && (
+      {showBooking && !booking!.openEnded && (
         <div className="absolute inset-x-0 bottom-0 h-1 bg-black/5 dark:bg-white/10">
           <div
             className={cn(

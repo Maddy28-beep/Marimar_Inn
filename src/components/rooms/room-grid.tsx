@@ -69,6 +69,10 @@ export function RoomGrid() {
     if (!rooms) return [];
     const list: { room: Room; booking: Booking; overdueBy: number }[] = [];
     for (const room of rooms) {
+      // room.status is authoritative — rooms and bookings are independent
+      // listeners, so a booking can briefly linger in bookingsByRoom after
+      // a void/checkout has already freed the room (see room-card.tsx).
+      if (room.status !== "occupied") continue;
       const booking = bookingsByRoom.get(room.roomId);
       if (!booking || booking.openEnded) continue;
       const remaining = booking.hoursBooked - hoursElapsed(booking.checkInTime, now);
