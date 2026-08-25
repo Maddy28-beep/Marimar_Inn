@@ -7,9 +7,15 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Helper function: Get user role
+    // Helper function: Get user role. A deactivated account (active ==
+    // false) returns a role that matches nothing below — this is the ONE
+    // place that needs to know about deactivation; every isStaff()/
+    // isOwnerOrAdmin()/isElevatedStaff()/canVoid()/hasRole() check downstream
+    // automatically stops passing for that account without further changes.
+    // Client-side, AuthContext also signs a deactivated user out entirely.
     function getUserRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return userDoc.active == false ? 'deactivated' : userDoc.role;
     }
 
     // Helper function: Check if user has role
@@ -57,10 +63,11 @@ service cloud.firestore {
       // role to "owner". The very first Owner is created via the Firebase
       // console instead, which bypasses these rules.
       allow create, update: if isOwnerOrAdmin() &&
-        request.resource.data.keys().hasOnly(['role', 'displayName', 'email', 'createdAt']) &&
+        request.resource.data.keys().hasOnly(['role', 'displayName', 'email', 'createdAt', 'active']) &&
         request.resource.data.role is string &&
         request.resource.data.displayName is string &&
-        request.resource.data.email is string;
+        request.resource.data.email is string &&
+        (!('active' in request.resource.data) || request.resource.data.active is bool);
 
       allow delete: if isOwnerOrAdmin();
     }

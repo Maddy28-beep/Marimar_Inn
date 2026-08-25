@@ -14,6 +14,8 @@ export interface StaffUser {
   email: string;
   displayName: string;
   role: UserRole;
+  // Absent/true = active — see AppUser.active in types.ts.
+  active?: boolean;
 }
 
 export function subscribeToUsers(onChange: (users: StaffUser[]) => void) {
@@ -26,6 +28,7 @@ export function subscribeToUsers(onChange: (users: StaffUser[]) => void) {
           email: data.email,
           displayName: data.displayName,
           role: data.role,
+          active: data.active,
         };
       });
     void syncReservedStaffRoles(users);
@@ -87,6 +90,16 @@ export async function updateStaffUser(uid: string, input: UpdateStaffInput) {
     displayName: input.displayName,
     role: input.role,
   });
+}
+
+/**
+ * Deactivating keeps the account and its role intact but blocks sign-in
+ * (see AuthContext) — reversible, unlike delete. Reactivating just flips
+ * the flag back.
+ */
+export async function setStaffActive(uid: string, active: boolean) {
+  const firestore = requireDb();
+  await updateDoc(doc(firestore, "users", uid), { active });
 }
 
 /**

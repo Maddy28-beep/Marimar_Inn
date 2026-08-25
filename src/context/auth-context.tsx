@@ -18,7 +18,8 @@ import { auth, db } from "@/lib/firebase";
 import type { AppUser, UserRole } from "@/lib/types";
 
 const APP_USER_CACHE_KEY = "marimar-app-user";
-const USER_ROLES = new Set<UserRole>(["owner", "admin", "superadmin", "cashier"]);
+const DEACTIVATED_NOTICE_KEY = "marimar-deactivated-notice";
+const USER_ROLES = new Set<UserRole>(["owner", "admin", "superadmin", "supervisor", "cashier"]);
 
 interface AuthContextValue {
   user: User | null;
@@ -76,8 +77,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     const firestore = db;
+    const authInstance = auth;
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(authInstance, async (firebaseUser) => {
       setUser(firebaseUser);
 
       if (!firebaseUser) {
@@ -97,6 +99,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const data = userDoc.data();
+
+      // Deactivated accounts keep their doc (role intact, reversible) but
+      // can't use the app — end the session outright rather than leaving
+      // them signed into Firebase Auth with nowhere to go, and leave a
+      // marker so the login page can explain why they got bounced.
+      if (data.active === false) {
+        setAppUser(null);
+        cacheAppUser(null);
+        setLoading(false);
+        try {
+          window.sessionStorage.setItem(DEACTIVATED_NOTICE_KEY, "1");
+        } catch {
+          // Some locked-down browser modes disable sessionStorage.
+        }
+        await firebaseSignOut(authInstance);
+        return;
+      }
+
       const nextAppUser: AppUser = {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
@@ -131,6 +151,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
+}
+
+/**
+ * Reads and clears the "you were signed out because this account was
+ * deactivated" marker — one-shot so it only shows once, right after the
+ * forced sign-out lands the user back on /login.
+ */
+export function consumeDeactivatedNotice(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const flagged = window.sessionStorage.getItem(DEACTIVATED_NOTICE_KEY) === "1";
+    if (flagged) window.sessionStorage.removeItem(DEACTIVATED_NOTICE_KEY);
+    return flagged;
+  } catch {
+    return false;
+  }
 }
 
 export function useAuth() {

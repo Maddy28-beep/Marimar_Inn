@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useAuth } from "@/context/auth-context";
+import { consumeDeactivatedNotice, useAuth } from "@/context/auth-context";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +51,12 @@ export default function LoginPage() {
       router.replace("/dashboard");
     }
   }, [loading, user, appUser, router]);
+
+  useEffect(() => {
+    if (consumeDeactivatedNotice()) {
+      toast.error("This account has been deactivated. Contact the Owner.");
+    }
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

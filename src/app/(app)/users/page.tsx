@@ -4,12 +4,27 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { useAuth } from "@/context/auth-context";
-import { deleteStaffUser, resetStaffPassword, subscribeToUsers, type StaffUser } from "@/lib/users";
+import {
+  deleteStaffUser,
+  resetStaffPassword,
+  setStaffActive,
+  subscribeToUsers,
+  type StaffUser,
+} from "@/lib/users";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { UserFormDialog } from "@/components/users/user-form-dialog";
 import { roleLabel } from "@/lib/roles";
-import { KeyRoundIcon, Loader2Icon, PencilIcon, PlusIcon, TrashIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  KeyRoundIcon,
+  Loader2Icon,
+  PencilIcon,
+  PlusIcon,
+  PowerIcon,
+  PowerOffIcon,
+  TrashIcon,
+} from "lucide-react";
 
 function ManageStaffContent() {
   const { appUser } = useAuth();
@@ -29,6 +44,29 @@ function ManageStaffContent() {
       toast.success(`Password reset email sent to ${user.email}.`);
     } catch {
       toast.error("Couldn't send the reset email — please try again.");
+    } finally {
+      setBusyUid(null);
+    }
+  }
+
+  async function handleToggleActive(user: StaffUser) {
+    const isActive = user.active !== false;
+    if (isActive && user.uid === appUser?.uid) {
+      toast.error("You can't deactivate your own account.");
+      return;
+    }
+    if (
+      isActive &&
+      !window.confirm(`Deactivate ${user.displayName}? They won't be able to sign in until reactivated.`)
+    ) {
+      return;
+    }
+    setBusyUid(user.uid);
+    try {
+      await setStaffActive(user.uid, !isActive);
+      toast.success(isActive ? `${user.displayName} deactivated.` : `${user.displayName} reactivated.`);
+    } catch {
+      toast.error("Couldn't update this account — please try again.");
     } finally {
       setBusyUid(null);
     }
@@ -74,18 +112,32 @@ function ManageStaffContent() {
               <th className="px-4 py-2 font-medium">Name</th>
               <th className="px-4 py-2 font-medium">Email</th>
               <th className="px-4 py-2 font-medium">Role</th>
+              <th className="px-4 py-2 font-medium">Status</th>
               <th className="px-4 py-2 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {users?.map((user) => (
-              <tr key={user.uid} className="border-t">
+            {users?.map((user) => {
+              const isActive = user.active !== false;
+              return (
+              <tr key={user.uid} className={cn("border-t", !isActive && "opacity-60")}>
                 <td className="px-4 py-2 font-medium">{user.displayName}</td>
                 <td className="px-4 py-2 text-muted-foreground">{user.email}</td>
                 <td className="px-4 py-2">
                   <Badge variant="secondary" className="capitalize">
                     {roleLabel(user.role)}
                   </Badge>
+                </td>
+                <td className="px-4 py-2">
+                  {isActive ? (
+                    <Badge variant="secondary" className="text-emerald-700 dark:text-emerald-400">
+                      Active
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-muted-foreground">
+                      Inactive
+                    </Badge>
+                  )}
                 </td>
                 <td className="px-4 py-2">
                   <div className="flex gap-1">
@@ -116,6 +168,20 @@ function ManageStaffContent() {
                     <Button
                       variant="ghost"
                       size="sm"
+                      onClick={() => handleToggleActive(user)}
+                      disabled={busyUid === user.uid || (isActive && user.uid === appUser?.uid)}
+                      title={isActive ? "Deactivate — blocks sign-in until reactivated" : "Reactivate"}
+                    >
+                      {isActive ? (
+                        <PowerOffIcon className="size-3.5" />
+                      ) : (
+                        <PowerIcon className="size-3.5" />
+                      )}
+                      {isActive ? "Deactivate" : "Activate"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => handleDelete(user)}
                       disabled={busyUid === user.uid || user.uid === appUser?.uid}
                       className="text-destructive hover:text-destructive"
@@ -127,10 +193,11 @@ function ManageStaffContent() {
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {users?.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                   No staff accounts yet.
                 </td>
               </tr>

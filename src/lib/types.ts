@@ -7,6 +7,9 @@ export interface AppUser {
   email: string | null;
   displayName: string | null;
   role: UserRole;
+  // Absent/true = active. Deactivating keeps the account and its role
+  // intact (unlike delete) but blocks sign-in until reactivated.
+  active?: boolean;
 }
 
 export type RoomStatus = "available" | "occupied" | "cleaning" | "maintenance";
