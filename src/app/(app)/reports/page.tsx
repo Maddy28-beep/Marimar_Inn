@@ -46,6 +46,7 @@ import {
   type InventoryItem,
   type Room,
   type ShiftExpense,
+  type Transaction,
 } from "@/lib/types";
 import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
@@ -138,6 +139,12 @@ function peso(amount: number): string {
   })}`;
 }
 
+const TRANSACTION_TYPE_LABELS: Record<Transaction["type"], string> = {
+  checkin: "Check-in",
+  extend: "Extend",
+  checkout: "Checkout",
+};
+
 // <input type="time"> gives 24h "HH:MM" — display it the way staff write it
 // on the paper form ("7:00 AM").
 function formatDutyTime(value: string): string {
@@ -173,6 +180,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   const [report, setReport] = useState<DailyReport | null>(null);
   const [salesReport, setSalesReport] = useState<DailySalesReport | null>(null);
   const [collected, setCollected] = useState<ShiftCollectedTotals | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [expenses, setExpenses] = useState<ShiftExpense[]>([]);
   const [frontDesk, setFrontDesk] = useState("");
   const [housekeeping, setHousekeeping] = useState("");
@@ -210,6 +218,9 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                   totalCollected: salesData.totals.totalPaid,
                 }
               : computeShiftCollectedTotals(transactions, storeSales)
+          );
+          setTransactions(
+            [...transactions].sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis())
           );
           setExpenses(shiftExpenses);
         }
@@ -344,6 +355,39 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             ],
             emphasizeLastRow: (salesReport?.rows.length ?? 0) > 0,
           },
+          ...(transactions.length > 0
+            ? [
+                {
+                  heading: "Transactions this shift",
+                  startColOverride: 13,
+                  columns: [
+                    { header: "Time", key: "time", width: 12 },
+                    { header: "Room", key: "room", width: 8, bold: true },
+                    { header: "Type", key: "type", width: 12 },
+                    { header: "Amount", key: "amount", width: 14, format: "currency" as const },
+                    { header: "Payment", key: "payment", width: 30 },
+                    { header: "Staff", key: "staff", width: 18 },
+                  ],
+                  rows: transactions.map((t) => {
+                    const when = t.timestamp?.toDate?.() ?? null;
+                    const parts: string[] = [];
+                    if (t.cashAmount > 0) parts.push(`Cash ${peso(t.cashAmount)}`);
+                    if (t.gcashAmount > 0) parts.push(`GCash ${peso(t.gcashAmount)}`);
+                    if (t.qrphAmount > 0) parts.push(`QRPh ${peso(t.qrphAmount)}`);
+                    return {
+                      time: when
+                        ? when.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })
+                        : "",
+                      room: t.roomNumber,
+                      type: TRANSACTION_TYPE_LABELS[t.type],
+                      amount: t.amount,
+                      payment: parts.join(" + "),
+                      staff: t.cashierName,
+                    };
+                  }),
+                },
+              ]
+            : []),
           ...(expenses.length > 0
             ? [
                 {
@@ -677,6 +721,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             <DailySalesTable
               report={salesReport}
               collected={collected}
+              transactions={transactions}
               expenses={expenses}
               canRemoveExpenses={isOwnerLike}
               onRemoveExpense={handleRemoveExpense}

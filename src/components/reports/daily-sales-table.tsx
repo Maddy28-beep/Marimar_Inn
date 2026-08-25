@@ -1,8 +1,24 @@
 "use client";
 
-import { PAYMENT_METHOD_LABELS, type ShiftExpense } from "@/lib/types";
+import { PAYMENT_METHOD_LABELS, type ShiftExpense, type Transaction, type TransactionType } from "@/lib/types";
 import { shiftLabelForTime, totalExpenses } from "@/lib/expenses";
 import type { DailySalesReport, DailySalesRow, ShiftCollectedTotals } from "@/lib/reports";
+
+const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
+  checkin: "Check-in",
+  extend: "Extend",
+  checkout: "Checkout",
+};
+
+// Mirrors paymentLabel() below but for a transaction's own cash/gcash/qrph
+// split instead of a booking row's running totals.
+function transactionPaymentLabel(t: Transaction): string {
+  const parts: string[] = [];
+  if (t.cashAmount > 0) parts.push(`Cash ${peso(t.cashAmount)}`);
+  if (t.gcashAmount > 0) parts.push(`GCash ${peso(t.gcashAmount)}`);
+  if (t.qrphAmount > 0) parts.push(`QRPh ${peso(t.qrphAmount)}`);
+  return parts.join(" + ") || peso(t.amount);
+}
 
 function peso(amount: number): string {
   return `₱${amount.toLocaleString("en-PH", {
@@ -64,6 +80,7 @@ const RIGHT_ALIGNED = new Set([
 export function DailySalesTable({
   report,
   collected,
+  transactions = [],
   expenses = [],
   canRemoveExpenses = false,
   onRemoveExpense,
@@ -76,6 +93,12 @@ export function DailySalesTable({
   // reconciliation even though the booking's row stays under the earlier
   // one. Falls back to totals-based figures if not provided.
   collected?: ShiftCollectedTotals | null;
+  // Line-item proof for `collected` above — every check-in/extend/checkout
+  // payment actually collected in this shift's window, so an extension
+  // collected by a different shift's cashier (for a booking that started
+  // elsewhere and therefore has no row of its own here) is still visible
+  // as its own line instead of just a mystery bump in the totals.
+  transactions?: Transaction[];
   expenses?: ShiftExpense[];
   canRemoveExpenses?: boolean;
   onRemoveExpense?: (expenseId: string) => void;
@@ -175,6 +198,43 @@ export function DailySalesTable({
           )}
         </table>
       </div>
+
+      {transactions.length > 0 && (
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="w-full border-collapse text-[11px] print:text-[8px]">
+            <thead>
+              <tr className="bg-muted">
+                <th className="border p-1 text-left font-medium" colSpan={6}>
+                  Transactions this shift — proof behind the Cash/GCash/QRPh collected totals below
+                </th>
+              </tr>
+              <tr className="bg-muted">
+                <th className="border p-1 text-left font-medium">Time</th>
+                <th className="border p-1 text-left font-medium">Room</th>
+                <th className="border p-1 text-left font-medium">Type</th>
+                <th className="border p-1 text-right font-medium">Amount</th>
+                <th className="border p-1 text-left font-medium">Payment</th>
+                <th className="border p-1 text-left font-medium">Staff</th>
+              </tr>
+            </thead>
+            <tbody>
+              {transactions.map((t) => {
+                const when = t.timestamp?.toDate?.() ?? null;
+                return (
+                  <tr key={t.transactionId}>
+                    <td className="border p-1 whitespace-nowrap">{time(when)}</td>
+                    <td className="border p-1 font-bold whitespace-nowrap">{t.roomNumber}</td>
+                    <td className="border p-1 whitespace-nowrap">{TRANSACTION_TYPE_LABELS[t.type]}</td>
+                    <td className="border p-1 text-right whitespace-nowrap">{peso(t.amount)}</td>
+                    <td className="border p-1 whitespace-nowrap">{transactionPaymentLabel(t)}</td>
+                    <td className="border p-1 whitespace-nowrap">{t.cashierName}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {expenses.length > 0 && (
         <div className="overflow-x-auto rounded-lg border">
