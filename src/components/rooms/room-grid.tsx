@@ -244,6 +244,7 @@ export function RoomGrid() {
           room={dialog.room}
           booking={dialog.booking}
           staffName={appUser.displayName ?? appUser.email ?? "Staff"}
+          cashierId={appUser.uid}
           onClose={() => setDialog(null)}
         />
       )}

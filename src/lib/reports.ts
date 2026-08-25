@@ -2,7 +2,8 @@ import { collection, getDocs, query, Timestamp, where } from "firebase/firestore
 import { db } from "@/lib/firebase";
 import { amenityOnlyLabel, bookingExtras } from "@/lib/booking-extras";
 import { referenceNumberFor } from "@/lib/receipt-printer";
-import type { Booking, PaymentMethod, Room, RoomType, ShiftExpense, StoreSale } from "@/lib/types";
+import { paymentBreakdown } from "@/lib/bookings";
+import type { Booking, PaymentMethod, Room, RoomType, ShiftExpense, StoreSale, Transaction } from "@/lib/types";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -333,6 +334,58 @@ export function computeDailySalesReport(
   );
 
   return { rows, totals };
+}
+
+export interface ShiftCollectedTotals {
+  cashCollected: number;
+  gcashCollected: number;
+  qrphCollected: number;
+  totalCollected: number;
+}
+
+/**
+ * How much cash/GCash/QRPh was actually collected during a shift's time
+ * window — distinct from DailySalesTotals.totalPaid, which sums each row's
+ * full running total attributed to whichever shift the booking *started*
+ * in. A booking that checks in during the day shift but gets extended
+ * during the night shift collects real cash from whichever cashier is on
+ * duty at that later moment; that cash belongs in the night shift's
+ * reconciliation, not the day shift's, even though the booking's own row
+ * still (correctly) shows under the day shift it started in. Transactions
+ * already carry the timestamp of when money actually changed hands, so
+ * this only needs the ones already fetched for the shift's range — no
+ * cross-shift bleed the way summing bookings by checkInTime would cause.
+ * Store sales are single-event (no extend/checkout to split across a
+ * shift boundary), so their own soldAt-based fetch already attributes them
+ * correctly — they're included here via the same paymentBreakdown() used
+ * for a booking's own split.
+ */
+export function computeShiftCollectedTotals(
+  transactions: Transaction[],
+  storeSales: StoreSale[]
+): ShiftCollectedTotals {
+  let cashCollected = 0;
+  let gcashCollected = 0;
+  let qrphCollected = 0;
+
+  for (const t of transactions) {
+    cashCollected += t.cashAmount;
+    gcashCollected += t.gcashAmount;
+    qrphCollected += t.qrphAmount;
+  }
+  for (const sale of storeSales) {
+    const portions = paymentBreakdown(sale);
+    cashCollected += portions.cash;
+    gcashCollected += portions.gcash;
+    qrphCollected += portions.qrph;
+  }
+
+  return {
+    cashCollected,
+    gcashCollected,
+    qrphCollected,
+    totalCollected: cashCollected + gcashCollected + qrphCollected,
+  };
 }
 
 export interface OverdueRecord {

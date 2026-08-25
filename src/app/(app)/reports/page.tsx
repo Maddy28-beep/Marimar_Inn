@@ -12,6 +12,7 @@ import {
   computeMonthlyReport,
   computeOverdueHistory,
   computeRangeDailySeries,
+  computeShiftCollectedTotals,
   endOfDay,
   endOfMonth,
   fetchActiveBookings,
@@ -23,8 +24,10 @@ import {
   type MonthlyReport,
   type OverdueRecord,
   type RangeDayPoint,
+  type ShiftCollectedTotals,
 } from "@/lib/reports";
 import { fetchStoreSalesInRange } from "@/lib/store-sales";
+import { fetchTransactionsInRange } from "@/lib/transactions";
 import { DailySalesTable } from "@/components/reports/daily-sales-table";
 import { AddExpenseForm } from "@/components/expenses/add-expense-form";
 import { OpenDrawerForm } from "@/components/cash-drawer-open";
@@ -169,6 +172,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   const [shift, setShift] = useState<ShiftFilter>("fullDay");
   const [report, setReport] = useState<DailyReport | null>(null);
   const [salesReport, setSalesReport] = useState<DailySalesReport | null>(null);
+  const [collected, setCollected] = useState<ShiftCollectedTotals | null>(null);
   const [expenses, setExpenses] = useState<ShiftExpense[]>([]);
   const [frontDesk, setFrontDesk] = useState("");
   const [housekeeping, setHousekeeping] = useState("");
@@ -181,15 +185,32 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
       setLoading(true);
       const [start, end] = shiftRange(dateValue, shift);
       try {
-        const [checkedIn, checkedOut, shiftExpenses, storeSales] = await Promise.all([
+        const [checkedIn, checkedOut, shiftExpenses, storeSales, transactions] = await Promise.all([
           fetchBookingsInRange("checkInTime", start, end),
           fetchBookingsInRange("checkOutTime", start, end),
           fetchExpensesInRange(start, end),
           fetchStoreSalesInRange(start, end),
+          fetchTransactionsInRange(start, end),
         ]);
         if (!cancelled) {
+          const salesData = computeDailySalesReport(checkedIn, storeSales);
           setReport(computeDailyReport(checkedIn, checkedOut.length, storeSales));
-          setSalesReport(computeDailySalesReport(checkedIn, storeSales));
+          setSalesReport(salesData);
+          // The transaction log only started recording once this feature
+          // shipped — a date/shift from before that has real bookings but
+          // zero logged transactions. Fall back to the old (check-in-shift)
+          // approximation for those instead of wrongly showing ₱0 collected.
+          const isPreTransactionLogPeriod = transactions.length === 0 && checkedIn.length > 0;
+          setCollected(
+            isPreTransactionLogPeriod
+              ? {
+                  cashCollected: salesData.totals.cashCollected,
+                  gcashCollected: salesData.totals.gcashCollected,
+                  qrphCollected: salesData.totals.qrphCollected,
+                  totalCollected: salesData.totals.totalPaid,
+                }
+              : computeShiftCollectedTotals(transactions, storeSales)
+          );
           setExpenses(shiftExpenses);
         }
       } catch {
@@ -217,8 +238,8 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
       salesReport.totals.totalStoreAmount +
       salesReport.totals.amenityAmount
     : 0;
-  const netCash = (salesReport?.totals.cashCollected ?? 0) - expenseTotal;
-  const netCollected = (salesReport?.totals.totalPaid ?? 0) - expenseTotal;
+  const netCash = (collected?.cashCollected ?? 0) - expenseTotal;
+  const netCollected = (collected?.totalCollected ?? 0) - expenseTotal;
   const netSales = overallSale - expenseTotal;
   const isOwnerLike = isOwnerLikeRole(appUser?.role);
 
@@ -377,12 +398,12 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                       { header: "Value", key: "value", width: 22, format: "currency" as const },
                     ],
                     rows: [
-                      { metric: "Cash collected", value: salesReport.totals.cashCollected },
+                      { metric: "Cash collected", value: collected?.cashCollected ?? 0 },
                       { metric: "Expenses", value: expenseTotal },
                       { metric: "Net cash", value: netCash },
-                      { metric: "GCash collected", value: salesReport.totals.gcashCollected },
-                      { metric: "QRPh collected", value: salesReport.totals.qrphCollected },
-                      { metric: "Total collected", value: salesReport.totals.totalPaid },
+                      { metric: "GCash collected", value: collected?.gcashCollected ?? 0 },
+                      { metric: "QRPh collected", value: collected?.qrphCollected ?? 0 },
+                      { metric: "Total collected", value: collected?.totalCollected ?? 0 },
                       { metric: "Net after expenses", value: netCollected },
                       { metric: "Overall Sale", value: overallSale },
                       { metric: "Net sales", value: netSales },
@@ -655,6 +676,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
           {salesReport && (
             <DailySalesTable
               report={salesReport}
+              collected={collected}
               expenses={expenses}
               canRemoveExpenses={isOwnerLike}
               onRemoveExpense={handleRemoveExpense}
@@ -674,7 +696,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                 <div className="flex flex-wrap gap-6 text-sm">
                   <div>
                     <span className="text-muted-foreground">Cash collected</span>
-                    <div className="font-medium">{peso(salesReport.totals.cashCollected)}</div>
+                    <div className="font-medium">{peso(collected?.cashCollected ?? 0)}</div>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Expenses</span>

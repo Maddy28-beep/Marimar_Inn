@@ -22,6 +22,7 @@ import {
 } from "@/lib/types";
 import { hoursElapsed } from "@/lib/time";
 import { resolveCheckoutReminder } from "@/lib/notifications";
+import { recordTransaction } from "@/lib/transactions";
 
 export { hoursElapsed };
 
@@ -294,6 +295,20 @@ export async function checkIn(input: CheckInInput) {
     itemRefs.forEach((ref, i) => {
       tx.update(ref, { quantity: increment(-cartItems[i].quantity), lastUpdated: serverTimestamp() });
     });
+    await recordTransaction(
+      {
+        type: "checkin",
+        bookingId: bookingRef.id,
+        roomNumber: input.roomNumber,
+        amount: input.amountPaid,
+        cashAmount: initialSplit.cash,
+        gcashAmount: initialSplit.gcash,
+        qrphAmount: initialSplit.qrph,
+        cashierId: input.cashierId,
+        cashierName: input.cashierName ?? "Staff",
+      },
+      tx
+    );
   });
 
   return bookingRef.id;
@@ -327,9 +342,15 @@ async function clearCheckoutReminder(bookingId: string) {
   }
 }
 
+export interface TransactionActor {
+  uid: string;
+  name: string;
+}
+
 export async function recordCheckout(
   booking: Booking,
   additionalPayment: number,
+  actor: TransactionActor,
   payment?: ExtendStayPayment,
   openTime?: { finalRoomCharge: number; actualHoursStayed: number }
 ) {
@@ -376,6 +397,17 @@ export async function recordCheckout(
   });
   await batch.commit();
   await clearCheckoutReminder(booking.bookingId);
+  await recordTransaction({
+    type: "checkout",
+    bookingId: booking.bookingId,
+    roomNumber: booking.roomNumber,
+    amount: additionalPayment,
+    cashAmount: thisSplit.cash,
+    gcashAmount: thisSplit.gcash,
+    qrphAmount: thisSplit.qrph,
+    cashierId: actor.uid,
+    cashierName: actor.name,
+  });
 }
 
 export async function voidBooking(booking: Booking, opts?: { bypassWindow?: boolean }) {
@@ -415,7 +447,8 @@ export async function extendStay(
   packageHours: number,
   packagePrice: number,
   additionalPayment: number,
-  payment: ExtendStayPayment
+  payment: ExtendStayPayment,
+  actor: TransactionActor
 ) {
   const firestore = requireDb();
   const newHoursBooked = booking.hoursBooked + packageHours;
@@ -448,6 +481,17 @@ export async function extendStay(
   // extension, otherwise it keeps ringing for a room that now has plenty
   // of time left.
   await clearCheckoutReminder(booking.bookingId);
+  await recordTransaction({
+    type: "extend",
+    bookingId: booking.bookingId,
+    roomNumber: booking.roomNumber,
+    amount: additionalPayment,
+    cashAmount: thisSplit.cash,
+    gcashAmount: thisSplit.gcash,
+    qrphAmount: thisSplit.qrph,
+    cashierId: actor.uid,
+    cashierName: actor.name,
+  });
 }
 
 /**

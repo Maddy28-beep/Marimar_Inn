@@ -2,7 +2,7 @@
 
 import { PAYMENT_METHOD_LABELS, type ShiftExpense } from "@/lib/types";
 import { shiftLabelForTime, totalExpenses } from "@/lib/expenses";
-import type { DailySalesReport, DailySalesRow } from "@/lib/reports";
+import type { DailySalesReport, DailySalesRow, ShiftCollectedTotals } from "@/lib/reports";
 
 function peso(amount: number): string {
   return `₱${amount.toLocaleString("en-PH", {
@@ -63,11 +63,19 @@ const RIGHT_ALIGNED = new Set([
 
 export function DailySalesTable({
   report,
+  collected,
   expenses = [],
   canRemoveExpenses = false,
   onRemoveExpense,
 }: {
   report: DailySalesReport;
+  // Cash/GCash/QRPh actually collected during this shift's time window —
+  // distinct from totals.totalPaid, which sums each row's full amount
+  // under whichever shift the booking *started* in. An extend/checkout
+  // payment collected by a later shift's cashier belongs in that shift's
+  // reconciliation even though the booking's row stays under the earlier
+  // one. Falls back to totals-based figures if not provided.
+  collected?: ShiftCollectedTotals | null;
   expenses?: ShiftExpense[];
   canRemoveExpenses?: boolean;
   onRemoveExpense?: (expenseId: string) => void;
@@ -76,8 +84,12 @@ export function DailySalesTable({
   const expenseTotal = totalExpenses(expenses);
   // Extra person stays inside Room total; towels/blankets are Extra, not Store.
   const overallSale = totals.totalRoomAmount + totals.totalStoreAmount + totals.amenityAmount;
-  const netCash = totals.cashCollected - expenseTotal;
-  const netCollected = totals.totalPaid - expenseTotal;
+  const cashCollected = collected?.cashCollected ?? totals.cashCollected;
+  const gcashCollected = collected?.gcashCollected ?? totals.gcashCollected;
+  const qrphCollected = collected?.qrphCollected ?? totals.qrphCollected;
+  const totalCollected = collected?.totalCollected ?? totals.totalPaid;
+  const netCash = cashCollected - expenseTotal;
+  const netCollected = totalCollected - expenseTotal;
   const netSales = overallSale - expenseTotal;
 
   return (
@@ -223,7 +235,7 @@ export function DailySalesTable({
       <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-lg border bg-muted/50 p-3 text-sm">
         <div>
           <span className="text-muted-foreground">Cash collected</span>{" "}
-          <span className="font-medium">{peso(totals.cashCollected)}</span>
+          <span className="font-medium">{peso(cashCollected)}</span>
         </div>
         <div>
           <span className="text-muted-foreground">Expenses</span>{" "}
@@ -235,15 +247,15 @@ export function DailySalesTable({
         </div>
         <div>
           <span className="text-muted-foreground">GCash collected</span>{" "}
-          <span className="font-medium">{peso(totals.gcashCollected)}</span>
+          <span className="font-medium">{peso(gcashCollected)}</span>
         </div>
         <div>
           <span className="text-muted-foreground">QRPh collected</span>{" "}
-          <span className="font-medium">{peso(totals.qrphCollected)}</span>
+          <span className="font-medium">{peso(qrphCollected)}</span>
         </div>
         <div>
           <span className="text-muted-foreground">Total collected</span>{" "}
-          <span className="font-medium">{peso(totals.totalPaid)}</span>
+          <span className="font-medium">{peso(totalCollected)}</span>
         </div>
         <div>
           <span className="text-muted-foreground">Net after expenses</span>{" "}

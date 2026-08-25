@@ -212,3 +212,26 @@ export interface StoreSale {
   cashierId: string;
   cashierName: string;
 }
+
+export type TransactionType = "checkin" | "extend" | "checkout";
+
+// One record per money-collecting event on a booking (check-in payment,
+// extend payment, checkout payment) — a booking's own checkInTime never
+// moves when it's later extended, so shift cash-reconciliation can't rely
+// on it alone: a booking that started in the day shift can still collect
+// real cash from the night shift's cashier at extend/checkout time. This
+// log is what shift reports use to attribute each peso to the shift it was
+// actually collected in.
+export interface Transaction {
+  transactionId: string;
+  type: TransactionType;
+  bookingId: string;
+  roomNumber: string;
+  amount: number;
+  cashAmount: number;
+  gcashAmount: number;
+  qrphAmount: number;
+  cashierId: string;
+  cashierName: string;
+  timestamp: Timestamp;
+}

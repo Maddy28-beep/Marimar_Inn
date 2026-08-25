@@ -121,17 +121,25 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
   }
 
   async function submitExtend() {
+    if (!appUser) return;
     const amountCollected = Math.min(paid, additionalCost);
     const payload = paymentPayload(payment, additionalCost);
     try {
-      await extendStay(booking, additionalHours, additionalCost, amountCollected, {
-        paymentMethod: payload.paymentMethod,
-        gcashReference: payload.gcashReference,
-        qrphReference: payload.qrphReference,
-        splitCashAmount: payload.splitCashAmount,
-        splitGcashAmount: payload.splitGcashAmount,
-        splitQrphAmount: payload.splitQrphAmount,
-      });
+      await extendStay(
+        booking,
+        additionalHours,
+        additionalCost,
+        amountCollected,
+        {
+          paymentMethod: payload.paymentMethod,
+          gcashReference: payload.gcashReference,
+          qrphReference: payload.qrphReference,
+          splitCashAmount: payload.splitCashAmount,
+          splitGcashAmount: payload.splitGcashAmount,
+          splitQrphAmount: payload.splitQrphAmount,
+        },
+        { uid: appUser.uid, name: staffName }
+      );
       toast.success(`Room ${room.roomNumber} extended by ${additionalHours}h.`);
       if (printer.connected) {
         try {
