@@ -191,7 +191,7 @@ export function computeDailySalesReport(
     // isVoided). Drop voided bookings that never had any items — nothing
     // left to report once the room itself doesn't count.
     .filter((b) => b.status !== "voided" || (b.totalFbCharge ?? 0) > 0)
-    .sort((a, b) => a.checkInTime.toMillis() - b.checkInTime.toMillis())
+    .sort((a, b) => b.checkInTime.toMillis() - a.checkInTime.toMillis())
     .map((booking) => {
       const isVoided = booking.status === "voided";
       const extras = bookingExtras(booking);
@@ -282,7 +282,9 @@ export function computeDailySalesReport(
     });
   }
 
-  rows.sort((a, b) => a.checkInTime.getTime() - b.checkInTime.getTime());
+  // Latest check-in first — so the most recent transaction is visible
+  // without scrolling, matching the order staff actually want to review in.
+  rows.sort((a, b) => b.checkInTime.getTime() - a.checkInTime.getTime());
 
   const totals = rows.reduce<DailySalesTotals>(
     (acc, row) => {
