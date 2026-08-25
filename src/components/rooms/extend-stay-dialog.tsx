@@ -25,6 +25,7 @@ import { subscribeToRatePackages } from "@/lib/rooms";
 import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
+import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { useAuth } from "@/context/auth-context";
 import { ReceiptBrandHeader } from "@/components/receipt-brand-header";
 import { ReceiptPreviewStrip } from "@/components/receipt-preview";
@@ -69,7 +70,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
     ...emptyPaymentDraft(),
     amountPaid: String(OPEN_TIME_RATE_PER_HOUR),
   }));
-  const [submitting, setSubmitting] = useState(false);
+  const { submitting, guard } = useSubmitGuard();
   const [phase, setPhase] = useState<"form" | "receipt">("form");
   const [receipt, setReceipt] = useState<{
     hours: number;
@@ -116,7 +117,10 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
       toast.error(mode === "hour" ? "Enter the price for the extra hour." : "Pick a rate package to extend.");
       return;
     }
-    setSubmitting(true);
+    await guard(submitExtend);
+  }
+
+  async function submitExtend() {
     const amountCollected = Math.min(paid, additionalCost);
     const payload = paymentPayload(payment, additionalCost);
     try {
@@ -152,8 +156,6 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
     } catch (error) {
       console.error(error);
       toast.error("Couldn't extend the stay — please try again.");
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -183,17 +185,16 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
       toast.error("Too overdue to extend — check out and start a new 3h booking.");
       return;
     }
-    setSubmitting(true);
-    try {
-      await convertToOpenTime(booking.bookingId);
-      toast.success(`Room ${room.roomNumber} switched to open time.`);
-      onClose();
-    } catch (error) {
-      console.error(error);
-      toast.error("Couldn't switch to open time — please try again.");
-    } finally {
-      setSubmitting(false);
-    }
+    await guard(async () => {
+      try {
+        await convertToOpenTime(booking.bookingId);
+        toast.success(`Room ${room.roomNumber} switched to open time.`);
+        onClose();
+      } catch (error) {
+        console.error(error);
+        toast.error("Couldn't switch to open time — please try again.");
+      }
+    });
   }
 
   if (booking.openEnded) {

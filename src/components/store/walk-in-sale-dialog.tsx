@@ -25,6 +25,7 @@ import { createStoreSale } from "@/lib/store-sales";
 import { methodContribution } from "@/lib/bookings";
 import { useAuth } from "@/context/auth-context";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
+import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import {
   previewStoreSaleReceipt,
   printStoreSaleReceipt,
@@ -44,7 +45,7 @@ import {
 } from "@/components/payments/payment-fields";
 import { ReceiptBrandHeader } from "@/components/receipt-brand-header";
 import { ReceiptPreviewStrip } from "@/components/receipt-preview";
-import type { InventoryItem, StoreSale } from "@/lib/types";
+import type { AppUser, InventoryItem, StoreSale } from "@/lib/types";
 import { Loader2Icon, MinusIcon, PlusIcon, PrinterIcon, SearchIcon } from "lucide-react";
 
 interface WalkInSaleDialogProps {
@@ -61,7 +62,7 @@ export function WalkInSaleDialog({ onClose }: WalkInSaleDialogProps) {
   const [cart, setCart] = useState<Record<string, number>>({});
   const [guestName, setGuestName] = useState("");
   const [payment, setPayment] = useState<PaymentDraft>(emptyPaymentDraft);
-  const [submitting, setSubmitting] = useState(false);
+  const { submitting, guard } = useSubmitGuard();
   const [phase, setPhase] = useState<"form" | "receipt">("form");
   const [receipt, setReceipt] = useState<{ sale: StoreSale; change: number } | null>(null);
 
@@ -114,7 +115,10 @@ export function WalkInSaleDialog({ onClose }: WalkInSaleDialogProps) {
       toast.error(`Collect ₱${(total - paid).toFixed(2)} before charging.`);
       return;
     }
-    setSubmitting(true);
+    await guard(() => submitCharge(appUser));
+  }
+
+  async function submitCharge(appUser: AppUser) {
     try {
       const payload = paymentPayload(payment, total);
       const sale = await createStoreSale({
@@ -135,8 +139,6 @@ export function WalkInSaleDialog({ onClose }: WalkInSaleDialogProps) {
       setPhase("receipt");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't complete the sale.");
-    } finally {
-      setSubmitting(false);
     }
   }
 

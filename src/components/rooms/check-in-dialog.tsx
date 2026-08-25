@@ -26,6 +26,7 @@ import { checkIn, methodContribution, OPEN_TIME_RATE_PER_HOUR } from "@/lib/book
 import { subscribeToRatePackages, updateRoomStatus } from "@/lib/rooms";
 import { subscribeToInventory } from "@/lib/inventory";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
+import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { useAuth } from "@/context/auth-context";
 import {
   printThermalReceipt,
@@ -119,7 +120,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
   const [openTimeMode, setOpenTimeMode] = useState(false);
   const [payment, setPayment] = useState<PaymentDraft>(emptyPaymentDraft);
   const [specialRequests, setSpecialRequests] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const { submitting, guard } = useSubmitGuard();
   const [inventory, setInventory] = useState<InventoryItem[] | null>(null);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [extraPersons, setExtraPersons] = useState(0);
@@ -182,7 +183,10 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
 
   async function handleSubmit() {
     if (!room || !selectedPackage || !canCheckIn) return;
+    await guard(() => submitCheckIn(room, selectedPackage));
+  }
 
+  async function submitCheckIn(room: Room, selectedPackage: RatePackage) {
     const finalGuestName = guestName.trim() || "Guest";
     const amountCollected = Math.min(paid, total);
     const payload = paymentPayload(payment, total);
@@ -192,7 +196,6 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
       qrph: payload.splitQrphAmount,
     });
 
-    setSubmitting(true);
     try {
       const newBookingId = await checkIn({
         roomId: room.roomId,
@@ -290,8 +293,6 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
           ? error.message
           : "Couldn't check in — please try again."
       );
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -310,30 +311,28 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
 
   async function handleMarkCleaning() {
     if (!room) return;
-    setSubmitting(true);
-    try {
-      await updateRoomStatus(room.roomId, "cleaning");
-      toast.success(`Room ${room.roomNumber} marked for cleaning.`);
-      onClose();
-    } catch {
-      toast.error("Couldn't update the room — please try again.");
-    } finally {
-      setSubmitting(false);
-    }
+    await guard(async () => {
+      try {
+        await updateRoomStatus(room.roomId, "cleaning");
+        toast.success(`Room ${room.roomNumber} marked for cleaning.`);
+        onClose();
+      } catch {
+        toast.error("Couldn't update the room — please try again.");
+      }
+    });
   }
 
   async function handleMarkMaintenance() {
     if (!room) return;
-    setSubmitting(true);
-    try {
-      await updateRoomStatus(room.roomId, "maintenance");
-      toast.success(`Room ${room.roomNumber} marked under maintenance.`);
-      onClose();
-    } catch {
-      toast.error("Couldn't update the room — please try again.");
-    } finally {
-      setSubmitting(false);
-    }
+    await guard(async () => {
+      try {
+        await updateRoomStatus(room.roomId, "maintenance");
+        toast.success(`Room ${room.roomNumber} marked under maintenance.`);
+        onClose();
+      } catch {
+        toast.error("Couldn't update the room — please try again.");
+      }
+    });
   }
 
   return (

@@ -24,6 +24,7 @@ import { type Booking, type Room } from "@/lib/types";
 import { bookingExtras, isAmenityItem } from "@/lib/booking-extras";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
+import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { ReceiptBrandHeader } from "@/components/receipt-brand-header";
 import { ReceiptPreviewStrip } from "@/components/receipt-preview";
 import { printThermalReceipt, previewGuestReceipt, printerErrorMessage, referenceNumberFor, kickDrawerForCashPayment, staffFirstName } from "@/lib/receipt-printer";
@@ -66,7 +67,7 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
     const extraHours = Math.max(0, hoursElapsed(booking.checkInTime, now) - packageHours);
     return String(packagePrice + extrasOnBooking.extraPersonAmount + computeOpenTimeCharge(extraHours));
   });
-  const [submitting, setSubmitting] = useState(false);
+  const { submitting, guard } = useSubmitGuard();
   const [checkOutTime, setCheckOutTime] = useState<Date | null>(null);
   const [settledBooking, setSettledBooking] = useState<Booking | null>(null);
 
@@ -124,7 +125,10 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
       toast.error("Enter the final room charge for this open-time stay.");
       return;
     }
-    setSubmitting(true);
+    await guard(submitCheckout);
+  }
+
+  async function submitCheckout() {
     const amountCollectedNow = Math.min(paid, balanceBefore);
     const payload = amountCollectedNow > 0 ? paymentPayload(payment, balanceBefore) : undefined;
     const priorSplit = paymentBreakdown(effectiveBooking);
@@ -186,8 +190,6 @@ export function CheckoutDialog({ room, booking, staffName, onClose }: CheckoutDi
           ? error.message
           : "Couldn't complete checkout — please try again.";
       toast.error(message);
-    } finally {
-      setSubmitting(false);
     }
   }
 

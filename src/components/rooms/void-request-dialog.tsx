@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { createVoidRequest } from "@/lib/void-requests";
 import { useAuth } from "@/context/auth-context";
+import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import type { Booking, Room } from "@/lib/types";
 import { Loader2Icon } from "lucide-react";
 
@@ -28,28 +29,27 @@ interface VoidRequestDialogProps {
 export function VoidRequestDialog({ room, booking, onClose }: VoidRequestDialogProps) {
   const { appUser } = useAuth();
   const [reason, setReason] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const { submitting, guard } = useSubmitGuard();
 
   async function handleSubmit() {
     const trimmed = reason.trim();
     if (!trimmed || !appUser) return;
-    setSubmitting(true);
-    try {
-      await createVoidRequest({
-        booking,
-        reason: trimmed,
-        requestedBy: appUser.uid,
-        requestedByName: appUser.displayName ?? appUser.email ?? "Cashier",
-      });
-      toast.success("Void request sent — waiting on Owner approval.");
-      onClose();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Couldn't send the void request — please try again."
-      );
-    } finally {
-      setSubmitting(false);
-    }
+    await guard(async () => {
+      try {
+        await createVoidRequest({
+          booking,
+          reason: trimmed,
+          requestedBy: appUser.uid,
+          requestedByName: appUser.displayName ?? appUser.email ?? "Cashier",
+        });
+        toast.success("Void request sent — waiting on Owner approval.");
+        onClose();
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Couldn't send the void request — please try again."
+        );
+      }
+    });
   }
 
   return (
