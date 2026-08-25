@@ -55,7 +55,7 @@ export function RoomDetailDialog({
   const isOverdue = !booking.openEnded && remaining <= 0;
   const isRunningLow = !booking.openEnded && !isOverdue && remaining <= 0.5;
   const balance = Math.max(booking.totalAmount - booking.amountPaid, 0);
-  const { cash: cashPaid, gcash: gcashPaid } = paymentBreakdown(booking);
+  const { cash: cashPaid, gcash: gcashPaid, qrph: qrphPaid } = paymentBreakdown(booking);
   const isOwnerLike = isOwnerLikeRole(appUser?.role);
   const canRemoveOrderItems = isOwnerLike;
   // Void is off-limits to Supervisor entirely — no self-cancel, no request,
@@ -212,10 +212,12 @@ export function RoomDetailDialog({
                 <span>Total</span>
                 <span>₱{booking.totalAmount.toFixed(2)}</span>
               </div>
-              {/* Cash/GCash shown as separate lines whenever both are
-                  nonzero — a booking can mix methods across check-in,
-                  extend, and checkout, so a single "Paid (method)" label
-                  would misrepresent the true breakdown. */}
+              {/* Cash/GCash/QRPh shown as separate lines whenever more than
+                  one is nonzero — a booking can mix methods across
+                  check-in, extend, and checkout, so a single "Paid
+                  (method)" label would misrepresent the true breakdown.
+                  Reference numbers aren't shown here — they're on the
+                  Daily Sales Report, this is just amount + method. */}
               {cashPaid > 0 && (
                 <div className="flex items-center justify-between text-muted-foreground">
                   <span>Paid (Cash)</span>
@@ -228,10 +230,10 @@ export function RoomDetailDialog({
                   <span>₱{gcashPaid.toFixed(2)}</span>
                 </div>
               )}
-              {booking.gcashReference && (
+              {qrphPaid > 0 && (
                 <div className="flex items-center justify-between text-muted-foreground">
-                  <span>GCash Ref</span>
-                  <span>{booking.gcashReference}</span>
+                  <span>Paid (QRPh)</span>
+                  <span>₱{qrphPaid.toFixed(2)}</span>
                 </div>
               )}
               {balance > 0 && (
