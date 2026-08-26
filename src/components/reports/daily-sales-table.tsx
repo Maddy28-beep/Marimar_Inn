@@ -105,12 +105,17 @@ export function DailySalesTable({
 }) {
   const { rows, totals } = report;
   const expenseTotal = totalExpenses(expenses);
-  // Extra person stays inside Room total; towels/blankets are Extra, not Store.
-  const overallSale = totals.totalRoomAmount + totals.totalStoreAmount + totals.amenityAmount;
   const cashCollected = collected?.cashCollected ?? totals.cashCollected;
   const gcashCollected = collected?.gcashCollected ?? totals.gcashCollected;
   const qrphCollected = collected?.qrphCollected ?? totals.qrphCollected;
   const totalCollected = collected?.totalCollected ?? totals.totalPaid;
+  // "Overall Sale" is the shift's headline total, shown right below Cash/
+  // GCash/QRPh/Total collected — it needs to be on that same transaction-
+  // collected basis, not the row-level revenue sum (totalRoomAmount +
+  // totalStoreAmount + amenityAmount), which only counts bookings that
+  // *started* this shift and would silently disagree with Total collected
+  // right above it whenever an earlier shift's booking gets extended here.
+  const overallSale = totalCollected;
   const netCash = cashCollected - expenseTotal;
   const netCollected = totalCollected - expenseTotal;
   const netSales = overallSale - expenseTotal;

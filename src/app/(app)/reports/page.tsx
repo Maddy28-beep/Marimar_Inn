@@ -244,11 +244,14 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   const reportTitle = shift === "fullDay" ? "Daily Sales Report — FULL DAY" : "Daily Sales Report";
   const timeLabel = shiftTimeLabel(shift);
   const expenseTotal = totalExpenses(expenses);
-  const overallSale = salesReport
-    ? salesReport.totals.totalRoomAmount +
-      salesReport.totals.totalStoreAmount +
-      salesReport.totals.amenityAmount
-    : 0;
+  // "Overall Sale" is the shift's headline total, shown in the same
+  // Payment breakdown panel as Cash/GCash/QRPh/Total collected — it needs
+  // to be on that same transaction-collected basis (not the row-level
+  // revenue sum, which only counts bookings that *started* this shift) or
+  // it silently contradicts "Total collected" sitting right above it, the
+  // way it did when Room 9's extension money showed in Total collected but
+  // not in Overall Sale.
+  const overallSale = collected?.totalCollected ?? 0;
   const netCash = (collected?.cashCollected ?? 0) - expenseTotal;
   const netCollected = (collected?.totalCollected ?? 0) - expenseTotal;
   const netSales = overallSale - expenseTotal;
