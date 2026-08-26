@@ -161,8 +161,10 @@ export async function exportToExcel(filename: string, sheets: ExportSheet[]) {
     const worksheet = workbook.addWorksheet(sheet.name, {
       views: [{ showGridLines: false }],
       pageSetup: {
-        // No paperSize = ExcelJS's own default, Letter (8.5x11 — "short"
-        // bond paper), not A4 or "long"/legal.
+        // ExcelJS's numeric paper-size codes follow the OOXML standard —
+        // 9 is A4. Without this it defaults to Letter (8.5x11, "short"
+        // bond paper), which isn't the paper size used here.
+        paperSize: 9,
         orientation: "landscape",
         fitToPage: true,
         fitToWidth: 1,

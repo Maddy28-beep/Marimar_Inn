@@ -371,13 +371,18 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             ? [
                 {
                   heading: "Payments from other shifts",
-                  startColOverride: 13,
+                  // Flush against the main table's left edge (col1) like
+                  // every other section, instead of floating at an offset
+                  // with nothing above or below it at that column — widths
+                  // kept modest specifically so they don't force Check-in/
+                  // Checkout wide the way an unconstrained Payment column
+                  // would (see export.ts's startColOverride notes).
                   columns: [
-                    { header: "Time", key: "time", width: 12 },
+                    { header: "Time", key: "time", width: 10 },
                     { header: "Room", key: "room", width: 8, bold: true },
-                    { header: "Type", key: "type", width: 12 },
-                    { header: "Amount", key: "amount", width: 14, format: "currency" as const },
-                    { header: "Payment", key: "payment", width: 30 },
+                    { header: "Type", key: "type", width: 10 },
+                    { header: "Amount", key: "amount", width: 12, format: "currency" as const },
+                    { header: "Payment", key: "payment", width: 16 },
                     { header: "Staff", key: "staff", width: 18 },
                   ],
                   rows: transactions.map((t) => {
