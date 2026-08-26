@@ -63,11 +63,20 @@ export async function markAllAsRead(notificationIds: string[], uid: string) {
  * else's get-then-skip is a no-op.
  */
 export async function syncLowStockNotification(
-  item: Pick<InventoryItem, "itemId" | "name" | "quantity" | "minStockLevel">
+  item: Pick<InventoryItem, "itemId" | "name" | "quantity" | "minStockLevel" | "unlimited">
 ) {
   const firestore = requireDb();
   const ref = doc(firestore, "notifications", `low-stock-${item.itemId}`);
   const snap = await getDoc(ref);
+
+  // An unlimited item (e.g. hot water) is never low stock by definition —
+  // resolve any stale notification from before it was marked unlimited.
+  if (item.unlimited) {
+    if (snap.exists() && !(snap.data() as AppNotification).resolved) {
+      await updateDoc(ref, { resolved: true });
+    }
+    return;
+  }
 
   if (item.quantity <= item.minStockLevel) {
     if (snap.exists()) return;

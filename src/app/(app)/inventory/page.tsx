@@ -124,7 +124,7 @@ function ManageInventoryContent() {
           </thead>
           <tbody>
             {sortedItems?.map((item) => {
-              const lowStock = item.quantity <= item.minStockLevel;
+              const lowStock = !item.unlimited && item.quantity <= item.minStockLevel;
               return (
                 <tr key={item.itemId} className="border-t">
                   <td className="px-4 py-2 font-medium">{item.name}</td>
@@ -132,16 +132,28 @@ function ManageInventoryContent() {
                   <td className="px-4 py-2">₱{item.sellingPrice.toFixed(2)}</td>
                   <td className="px-4 py-2">
                     <div className="flex items-center gap-2">
-                      {item.quantity}
-                      {lowStock && (
-                        <Badge variant="secondary" className="text-amber-600 dark:text-amber-400">
-                          Low stock
+                      {item.unlimited ? (
+                        <Badge variant="secondary" className="text-emerald-700 dark:text-emerald-400">
+                          Always available
                         </Badge>
+                      ) : (
+                        <>
+                          {item.quantity}
+                          {lowStock && (
+                            <Badge variant="secondary" className="text-amber-600 dark:text-amber-400">
+                              Low stock
+                            </Badge>
+                          )}
+                        </>
                       )}
                     </div>
                   </td>
                   <td className="px-4 py-2">
-                    <RestockControl item={item} />
+                    {item.unlimited ? (
+                      <span className="text-xs text-muted-foreground">Not tracked</span>
+                    ) : (
+                      <RestockControl item={item} />
+                    )}
                   </td>
                   <td className="px-4 py-2 text-right">
                     <div className="flex justify-end gap-1">

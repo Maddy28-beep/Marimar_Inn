@@ -146,6 +146,10 @@ export interface InventoryItem {
   sellingPrice: number;
   quantity: number;
   minStockLevel: number;
+  // For a genuinely unlimited resource (e.g. hot water) — never counted as
+  // low stock, never decremented when ordered, and quantity/minStockLevel
+  // are ignored everywhere this is true.
+  unlimited?: boolean;
   lastUpdated: Timestamp;
 }
 

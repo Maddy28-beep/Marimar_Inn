@@ -54,7 +54,7 @@ export async function createStoreSale(input: StoreSaleInput): Promise<StoreSale>
       if (!snap.exists()) throw new Error("An item is missing from inventory.");
       const item = snap.data() as InventoryItem;
       const quantity = cartItems[i].quantity;
-      if (item.quantity < quantity) {
+      if (!item.unlimited && item.quantity < quantity) {
         throw new Error(`Only ${item.quantity} ${item.name} left in stock.`);
       }
       items.push({
@@ -65,11 +65,13 @@ export async function createStoreSale(input: StoreSaleInput): Promise<StoreSale>
         subtotal: quantity * item.sellingPrice,
       });
       totalAmount += quantity * item.sellingPrice;
-      tx.update(itemRefs[i], {
-        quantity: increment(-quantity),
-        lastUpdated: serverTimestamp(),
-      });
-      lowStock.push({ ...item, quantity: item.quantity - quantity });
+      if (!item.unlimited) {
+        tx.update(itemRefs[i], {
+          quantity: increment(-quantity),
+          lastUpdated: serverTimestamp(),
+        });
+        lowStock.push({ ...item, quantity: item.quantity - quantity });
+      }
     }
 
     const sale: Omit<StoreSale, "soldAt"> & { soldAt: ReturnType<typeof serverTimestamp> } = {

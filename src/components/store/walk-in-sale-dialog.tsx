@@ -100,7 +100,8 @@ export function WalkInSaleDialog({ onClose }: WalkInSaleDialogProps) {
   function adjustCart(item: InventoryItem, delta: number) {
     setCart((prev) => {
       const current = prev[item.itemId] ?? 0;
-      const next = Math.max(0, Math.min(item.quantity, current + delta));
+      const cap = item.unlimited ? Infinity : item.quantity;
+      const next = Math.max(0, Math.min(cap, current + delta));
       return { ...prev, [item.itemId]: next };
     });
   }
@@ -290,14 +291,16 @@ export function WalkInSaleDialog({ onClose }: WalkInSaleDialogProps) {
                 )}
                 {filtered.map((item) => {
                   const qty = cart[item.itemId] ?? 0;
-                  const outOfStock = item.quantity <= 0;
+                  const outOfStock = !item.unlimited && item.quantity <= 0;
                   return (
                     <div key={item.itemId} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm">
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-medium">{item.name}</div>
                         <div className="text-xs text-muted-foreground">
                           ₱{item.sellingPrice.toFixed(2)}
-                          {outOfStock ? (
+                          {item.unlimited ? (
+                            <span className="text-emerald-700 dark:text-emerald-400"> · Always available</span>
+                          ) : outOfStock ? (
                             <span className="text-rose-600 dark:text-rose-400"> · Out of stock</span>
                           ) : (
                             ` · ${item.quantity} in stock`
@@ -318,7 +321,7 @@ export function WalkInSaleDialog({ onClose }: WalkInSaleDialogProps) {
                           variant="outline"
                           size="icon-sm"
                           onClick={() => adjustCart(item, 1)}
-                          disabled={outOfStock || qty >= item.quantity || submitting}
+                          disabled={outOfStock || (!item.unlimited && qty >= item.quantity) || submitting}
                         >
                           <PlusIcon className="size-3.5" />
                         </Button>

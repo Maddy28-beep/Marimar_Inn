@@ -57,7 +57,7 @@ import {
 } from "@/lib/types";
 import { ReceiptBrandHeader } from "@/components/receipt-brand-header";
 import { ReceiptPreviewStrip } from "@/components/receipt-preview";
-import { Loader2Icon, MinusIcon, PlusIcon, PrinterIcon, SparklesIcon, WrenchIcon } from "lucide-react";
+import { Loader2Icon, MinusIcon, PlusIcon, PrinterIcon, SearchIcon, SparklesIcon, WrenchIcon } from "lucide-react";
 
 function QtyRow({
   label,
@@ -122,6 +122,8 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
   const [specialRequests, setSpecialRequests] = useState("");
   const { submitting, guard } = useSubmitGuard();
   const [inventory, setInventory] = useState<InventoryItem[] | null>(null);
+  const [itemSearch, setItemSearch] = useState("");
+  const [itemCategory, setItemCategory] = useState("all");
   const [cart, setCart] = useState<Record<string, number>>({});
   const [extraPersons, setExtraPersons] = useState(0);
   const [towels, setTowels] = useState(0);
@@ -149,10 +151,25 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
 
   const fbTotal = cartLines.reduce((sum, line) => sum + line.qty * line.item.sellingPrice, 0);
 
+  const itemCategories = useMemo(() => {
+    if (!inventory) return [];
+    return Array.from(new Set(inventory.map((item) => item.category))).sort();
+  }, [inventory]);
+
+  const filteredInventory = useMemo(() => {
+    if (!inventory) return [];
+    return inventory.filter((item) => {
+      if (itemCategory !== "all" && item.category !== itemCategory) return false;
+      if (itemSearch && !item.name.toLowerCase().includes(itemSearch.trim().toLowerCase())) return false;
+      return true;
+    });
+  }, [inventory, itemCategory, itemSearch]);
+
   function adjustCart(item: InventoryItem, delta: number) {
     setCart((prev) => {
       const current = prev[item.itemId] ?? 0;
-      const next = Math.max(0, Math.min(item.quantity, current + delta));
+      const cap = item.unlimited ? Infinity : item.quantity;
+      const next = Math.max(0, Math.min(cap, current + delta));
       return { ...prev, [item.itemId]: next };
     });
   }
@@ -535,10 +552,38 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
           {inventory !== null && inventory.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <Label className="text-base font-bold">Store items (optional)</Label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search items"
+                    value={itemSearch}
+                    onChange={(e) => setItemSearch(e.target.value)}
+                    className="h-8 pl-8"
+                    disabled={submitting}
+                  />
+                </div>
+                <Select value={itemCategory} onValueChange={(v) => setItemCategory(v ?? "all")}>
+                  <SelectTrigger className="h-8 w-36">
+                    <SelectValue>{itemCategory === "all" ? "All categories" : itemCategory}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All categories</SelectItem>
+                    {itemCategories.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-lg border p-1.5">
-                {inventory.map((item) => {
+                {filteredInventory.length === 0 && (
+                  <p className="p-2 text-sm text-muted-foreground">No items found.</p>
+                )}
+                {filteredInventory.map((item) => {
                   const qty = cart[item.itemId] ?? 0;
-                  const outOfStock = item.quantity <= 0;
+                  const outOfStock = !item.unlimited && item.quantity <= 0;
                   return (
                     <div
                       key={item.itemId}
@@ -571,7 +616,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
                             variant="outline"
                             size="icon-xs"
                             onClick={() => adjustCart(item, 1)}
-                            disabled={qty >= item.quantity || submitting}
+                            disabled={(!item.unlimited && qty >= item.quantity) || submitting}
                           >
                             <PlusIcon className="size-3" />
                           </Button>

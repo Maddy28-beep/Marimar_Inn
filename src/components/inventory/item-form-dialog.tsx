@@ -40,6 +40,7 @@ export function ItemFormDialog({ mode, categories, onClose }: ItemFormDialogProp
   const [sellingPrice, setSellingPrice] = useState(String(editingItem?.sellingPrice ?? ""));
   const [quantity, setQuantity] = useState(String(editingItem?.quantity ?? "0"));
   const [minStockLevel, setMinStockLevel] = useState(String(editingItem?.minStockLevel ?? "5"));
+  const [unlimited, setUnlimited] = useState(editingItem?.unlimited ?? false);
   const [submitting, setSubmitting] = useState(false);
 
   // The item being edited might carry a category that predates the
@@ -73,6 +74,7 @@ export function ItemFormDialog({ mode, categories, onClose }: ItemFormDialogProp
       sellingPrice: Number(sellingPrice) || 0,
       quantity: Number(quantity) || 0,
       minStockLevel: Number(minStockLevel) || 0,
+      unlimited,
     };
 
     setSubmitting(true);
@@ -169,18 +171,37 @@ export function ItemFormDialog({ mode, categories, onClose }: ItemFormDialogProp
                 disabled={submitting}
               />
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="quantity">Quantity</Label>
-              <Input
-                id="quantity"
-                type="number"
-                min={0}
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                disabled={submitting}
-              />
-            </div>
+            {!unlimited && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="quantity">Quantity</Label>
+                <Input
+                  id="quantity"
+                  type="number"
+                  min={0}
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  disabled={submitting}
+                />
+              </div>
+            )}
           </div>
+          <label className="flex items-start gap-2 rounded-lg border p-3 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 shrink-0 accent-primary"
+              checked={unlimited}
+              onChange={(e) => setUnlimited(e.target.checked)}
+              disabled={submitting}
+            />
+            <span>
+              <span className="font-medium">Always available</span>
+              <span className="block text-xs text-muted-foreground">
+                For a resource that never runs out (e.g. hot water) — never flagged as low stock,
+                and quantity isn&apos;t tracked or reduced when ordered.
+              </span>
+            </span>
+          </label>
+          {!unlimited && (
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="minStockLevel">Low-stock threshold</Label>
             <Input
@@ -192,6 +213,7 @@ export function ItemFormDialog({ mode, categories, onClose }: ItemFormDialogProp
               disabled={submitting}
             />
           </div>
+          )}
         </div>
 
         <DialogFooter>

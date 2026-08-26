@@ -36,6 +36,7 @@ export interface NewItemInput {
   sellingPrice: number;
   quantity: number;
   minStockLevel: number;
+  unlimited?: boolean;
 }
 
 export async function createItem(input: NewItemInput) {
@@ -51,6 +52,7 @@ export async function createItem(input: NewItemInput) {
     quantity: input.quantity,
     minStockLevel: input.minStockLevel,
     lastUpdated: serverTimestamp(),
+    ...(input.unlimited ? { unlimited: true } : {}),
   };
   await setDoc(ref, item);
   await syncLowStockNotification(item);
@@ -65,12 +67,17 @@ export async function updateItem(itemId: string, input: NewItemInput) {
     quantity: input.quantity,
     minStockLevel: input.minStockLevel,
     lastUpdated: serverTimestamp(),
+    // Always written (not conditionally spread) so unchecking "Always
+    // available" on an existing item actually clears the flag instead of
+    // leaving the old value in place.
+    unlimited: input.unlimited ?? false,
   });
   await syncLowStockNotification({
     itemId,
     name: input.name,
     quantity: input.quantity,
     minStockLevel: input.minStockLevel,
+    unlimited: input.unlimited,
   });
 }
 

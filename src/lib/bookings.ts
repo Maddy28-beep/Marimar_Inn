@@ -225,7 +225,7 @@ export async function checkIn(input: CheckInInput) {
       const snap = itemSnaps[i];
       if (!snap.exists()) throw new Error("An item in the order no longer exists.");
       const data = snap.data() as InventoryItem;
-      if (data.quantity < line.quantity) {
+      if (!data.unlimited && data.quantity < line.quantity) {
         throw new Error(`Only ${data.quantity} ${data.name} left in stock.`);
       }
       return {
@@ -293,6 +293,8 @@ export async function checkIn(input: CheckInInput) {
     tx.set(bookingRef, booking);
     tx.update(roomRef, { status: "occupied", lastUpdated: serverTimestamp() });
     itemRefs.forEach((ref, i) => {
+      // An unlimited item's quantity is never tracked, so never decrement it.
+      if ((itemSnaps[i].data() as InventoryItem | undefined)?.unlimited) return;
       tx.update(ref, { quantity: increment(-cartItems[i].quantity), lastUpdated: serverTimestamp() });
     });
     await recordTransaction(

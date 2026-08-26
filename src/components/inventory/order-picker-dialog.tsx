@@ -68,7 +68,8 @@ export function OrderPickerDialog({ bookingId, onClose }: OrderPickerDialogProps
   function adjustCart(item: InventoryItem, delta: number) {
     setCart((prev) => {
       const current = prev[item.itemId] ?? 0;
-      const next = Math.max(0, Math.min(item.quantity, current + delta));
+      const cap = item.unlimited ? Infinity : item.quantity;
+      const next = Math.max(0, Math.min(cap, current + delta));
       return { ...prev, [item.itemId]: next };
     });
   }
@@ -135,8 +136,8 @@ export function OrderPickerDialog({ bookingId, onClose }: OrderPickerDialogProps
             )}
             {filtered.map((item) => {
               const qty = cart[item.itemId] ?? 0;
-              const outOfStock = item.quantity <= 0;
-              const lowStock = !outOfStock && item.quantity <= item.minStockLevel;
+              const outOfStock = !item.unlimited && item.quantity <= 0;
+              const lowStock = !item.unlimited && !outOfStock && item.quantity <= item.minStockLevel;
               return (
                 <div
                   key={item.itemId}
@@ -149,7 +150,11 @@ export function OrderPickerDialog({ bookingId, onClose }: OrderPickerDialogProps
                         ₱{item.sellingPrice.toFixed(2)}
                       </span>{" "}
                       ·{" "}
-                      {outOfStock ? (
+                      {item.unlimited ? (
+                        <span className="text-emerald-700 dark:text-emerald-400">
+                          Always available
+                        </span>
+                      ) : outOfStock ? (
                         <span className="text-rose-600 dark:text-rose-400">Out of stock</span>
                       ) : lowStock ? (
                         <span className="text-amber-600 dark:text-amber-400">
@@ -174,7 +179,7 @@ export function OrderPickerDialog({ bookingId, onClose }: OrderPickerDialogProps
                       variant="outline"
                       size="icon-sm"
                       onClick={() => adjustCart(item, 1)}
-                      disabled={qty >= item.quantity || submitting}
+                      disabled={(!item.unlimited && qty >= item.quantity) || submitting}
                     >
                       <PlusIcon className="size-3.5" />
                     </Button>

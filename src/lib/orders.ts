@@ -31,7 +31,7 @@ export async function addOrderItem(
     const booking = bookingSnap.data() as Booking;
     const item = itemSnap.data() as InventoryItem;
 
-    if (item.quantity < quantity) {
+    if (!item.unlimited && item.quantity < quantity) {
       throw new Error(`Only ${item.quantity} ${item.name} left in stock.`);
     }
 
@@ -57,7 +57,9 @@ export async function addOrderItem(
 
     const { totalFbCharge, totalAmount } = recalcTotals(items, booking.totalRoomCharge);
 
-    tx.update(itemRef, { quantity: increment(-quantity), lastUpdated: serverTimestamp() });
+    if (!item.unlimited) {
+      tx.update(itemRef, { quantity: increment(-quantity), lastUpdated: serverTimestamp() });
+    }
     tx.update(bookingRef, {
       items,
       totalFbCharge,
@@ -87,11 +89,16 @@ export async function removeOrderItem(bookingId: string, itemId: string) {
 
     const items = (booking.items ?? []).filter((line) => line.itemId !== itemId);
     const { totalFbCharge, totalAmount } = recalcTotals(items, booking.totalRoomCharge);
+    const isUnlimited = itemSnap.exists() && (itemSnap.data() as InventoryItem).unlimited;
 
-    tx.update(itemRef, {
-      quantity: increment(existing.quantity),
-      lastUpdated: serverTimestamp(),
-    });
+    // An unlimited item was never decremented when ordered, so removing it
+    // shouldn't restore anything either.
+    if (!isUnlimited) {
+      tx.update(itemRef, {
+        quantity: increment(existing.quantity),
+        lastUpdated: serverTimestamp(),
+      });
+    }
     tx.update(bookingRef, {
       items,
       totalFbCharge,
