@@ -210,7 +210,8 @@ export function DailySalesTable({
             <thead>
               <tr className="bg-muted">
                 <th className="border p-1 text-left font-medium" colSpan={6}>
-                  Transactions this shift — proof behind the Cash/GCash/QRPh collected totals below
+                  Payments from other shifts — collected this shift for a booking whose own row is
+                  in a different shift&apos;s report
                 </th>
               </tr>
               <tr className="bg-muted">

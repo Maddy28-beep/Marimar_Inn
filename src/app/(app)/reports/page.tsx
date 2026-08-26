@@ -219,8 +219,17 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                 }
               : computeShiftCollectedTotals(transactions, storeSales)
           );
+          // Only surface transactions whose booking's row lives in a
+          // *different* shift's table — a check-in transaction (or a
+          // same-shift extend/checkout) is already fully represented by
+          // its own row above, so listing it again here is just noise.
+          // This list exists specifically to explain the cases where
+          // collected money doesn't trace back to any row on screen.
+          const checkedInIds = new Set(checkedIn.map((b) => b.bookingId));
           setTransactions(
-            [...transactions].sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis())
+            transactions
+              .filter((t) => !checkedInIds.has(t.bookingId))
+              .sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis())
           );
           setExpenses(shiftExpenses);
         }
@@ -361,7 +370,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
           ...(transactions.length > 0
             ? [
                 {
-                  heading: "Transactions this shift",
+                  heading: "Payments from other shifts",
                   startColOverride: 13,
                   columns: [
                     { header: "Time", key: "time", width: 12 },
