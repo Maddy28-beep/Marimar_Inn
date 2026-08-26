@@ -21,7 +21,7 @@ import {
   TOWEL_FEE,
 } from "@/lib/types";
 import { hoursElapsed } from "@/lib/time";
-import { resolveCheckoutReminder } from "@/lib/notifications";
+import { resolveCheckoutReminder, syncLowStockNotification } from "@/lib/notifications";
 import { recordTransaction } from "@/lib/transactions";
 
 export { hoursElapsed };
@@ -494,6 +494,128 @@ export async function extendStay(
     cashierId: actor.uid,
     cashierName: actor.name,
   });
+}
+
+/**
+ * Adds store items to an active booking and — unlike the old fire-and-
+ * forget addOrderItem in orders.ts — collects payment for them right then,
+ * the same way extendStay() collects payment for the extra hours. Before
+ * this, a mid-stay order just raised the booking's totalAmount with no way
+ * to charge for it until checkout, forcing the cashier to remember and the
+ * guest to wait. Partial payment is allowed (mirrors extendStay) — anything
+ * short of the order's cost just adds to the balance due at checkout.
+ */
+export async function addOrderToBooking(
+  booking: Booking,
+  cartItems: CheckInCartLine[],
+  amountPaid: number,
+  payment: ExtendStayPayment,
+  actor: TransactionActor
+): Promise<{ items: OrderItem[]; cartTotal: number; amountCollected: number }> {
+  if (cartItems.length === 0) throw new Error("Add at least one item.");
+  const firestore = requireDb();
+  const bookingRef = doc(firestore, "bookings", booking.bookingId);
+  const itemRefs = cartItems.map((line) => doc(firestore, "inventory", line.itemId));
+
+  let resultItems: OrderItem[] = [];
+  let cartTotal = 0;
+  let amountCollected = 0;
+  const lowStockCandidates: InventoryItem[] = [];
+
+  await runTransaction(firestore, async (tx) => {
+    const bookingSnap = await tx.get(bookingRef);
+    const itemSnaps = await Promise.all(itemRefs.map((ref) => tx.get(ref)));
+    if (!bookingSnap.exists()) throw new Error("Booking not found.");
+    const liveBooking = bookingSnap.data() as Booking;
+    if (liveBooking.status !== "active") throw new Error("This booking is no longer active.");
+
+    const items = [...(liveBooking.items ?? [])];
+    cartTotal = 0;
+    cartItems.forEach((line, i) => {
+      const snap = itemSnaps[i];
+      if (!snap.exists()) throw new Error("An item in the order no longer exists.");
+      const data = snap.data() as InventoryItem;
+      if (!data.unlimited && data.quantity < line.quantity) {
+        throw new Error(`Only ${data.quantity} ${data.name} left in stock.`);
+      }
+      const subtotal = line.quantity * data.sellingPrice;
+      cartTotal += subtotal;
+      const existingIndex = items.findIndex((existing) => existing.itemId === line.itemId);
+      if (existingIndex >= 0) {
+        const existing = items[existingIndex];
+        const newQuantity = existing.quantity + line.quantity;
+        items[existingIndex] = {
+          ...existing,
+          quantity: newQuantity,
+          subtotal: newQuantity * existing.unitPrice,
+        };
+      } else {
+        items.push({
+          itemId: line.itemId,
+          name: data.name,
+          unitPrice: data.sellingPrice,
+          quantity: line.quantity,
+          subtotal,
+        });
+      }
+      if (!data.unlimited) {
+        lowStockCandidates.push({ ...data, quantity: data.quantity - line.quantity });
+      }
+    });
+
+    const totalFbCharge = items.reduce((sum, item) => sum + item.subtotal, 0);
+    const totalAmount = liveBooking.totalRoomCharge + totalFbCharge;
+    amountCollected = Math.max(0, Math.min(amountPaid, cartTotal));
+    const newAmountPaid = liveBooking.amountPaid + amountCollected;
+    const thisSplit =
+      amountCollected > 0
+        ? methodContribution(payment.paymentMethod, amountCollected, {
+            cash: payment.splitCashAmount,
+            gcash: payment.splitGcashAmount,
+            qrph: payment.splitQrphAmount,
+          })
+        : { cash: 0, gcash: 0, qrph: 0 };
+
+    tx.update(bookingRef, {
+      items,
+      totalFbCharge,
+      totalAmount,
+      amountPaid: newAmountPaid,
+      ...(amountCollected > 0 ? { paymentMethod: payment.paymentMethod } : {}),
+      ...runningSplitUpdates(liveBooking, thisSplit),
+      paymentStatus: paymentStatusFor(newAmountPaid, totalAmount),
+      updatedAt: serverTimestamp(),
+      ...(payment.gcashReference ? { gcashReference: payment.gcashReference } : {}),
+      ...(payment.qrphReference ? { qrphReference: payment.qrphReference } : {}),
+    });
+
+    itemRefs.forEach((ref, i) => {
+      // An unlimited item's quantity is never tracked, so never decrement it.
+      if ((itemSnaps[i].data() as InventoryItem | undefined)?.unlimited) return;
+      tx.update(ref, { quantity: increment(-cartItems[i].quantity), lastUpdated: serverTimestamp() });
+    });
+
+    resultItems = items;
+
+    await recordTransaction(
+      {
+        type: "order",
+        bookingId: booking.bookingId,
+        roomNumber: booking.roomNumber,
+        amount: amountCollected,
+        cashAmount: thisSplit.cash,
+        gcashAmount: thisSplit.gcash,
+        qrphAmount: thisSplit.qrph,
+        cashierId: actor.uid,
+        cashierName: actor.name,
+      },
+      tx
+    );
+  });
+
+  await Promise.all(lowStockCandidates.map((item) => syncLowStockNotification(item)));
+
+  return { items: resultItems, cartTotal, amountCollected };
 }
 
 /**

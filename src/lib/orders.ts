@@ -13,66 +13,6 @@ function recalcTotals(items: OrderItem[], totalRoomCharge: number) {
   return { totalFbCharge, totalAmount: totalRoomCharge + totalFbCharge };
 }
 
-export async function addOrderItem(
-  bookingId: string,
-  itemId: string,
-  quantity: number
-) {
-  const firestore = requireDb();
-  const bookingRef = doc(firestore, "bookings", bookingId);
-  const itemRef = doc(firestore, "inventory", itemId);
-  let resultingItem: InventoryItem | null = null;
-
-  await runTransaction(firestore, async (tx) => {
-    const [bookingSnap, itemSnap] = await Promise.all([tx.get(bookingRef), tx.get(itemRef)]);
-    if (!bookingSnap.exists()) throw new Error("Booking not found.");
-    if (!itemSnap.exists()) throw new Error("Item not found.");
-
-    const booking = bookingSnap.data() as Booking;
-    const item = itemSnap.data() as InventoryItem;
-
-    if (!item.unlimited && item.quantity < quantity) {
-      throw new Error(`Only ${item.quantity} ${item.name} left in stock.`);
-    }
-
-    const items = [...(booking.items ?? [])];
-    const existingIndex = items.findIndex((line) => line.itemId === itemId);
-    if (existingIndex >= 0) {
-      const existing = items[existingIndex];
-      const newQuantity = existing.quantity + quantity;
-      items[existingIndex] = {
-        ...existing,
-        quantity: newQuantity,
-        subtotal: newQuantity * existing.unitPrice,
-      };
-    } else {
-      items.push({
-        itemId,
-        name: item.name,
-        unitPrice: item.sellingPrice,
-        quantity,
-        subtotal: quantity * item.sellingPrice,
-      });
-    }
-
-    const { totalFbCharge, totalAmount } = recalcTotals(items, booking.totalRoomCharge);
-
-    if (!item.unlimited) {
-      tx.update(itemRef, { quantity: increment(-quantity), lastUpdated: serverTimestamp() });
-    }
-    tx.update(bookingRef, {
-      items,
-      totalFbCharge,
-      totalAmount,
-      updatedAt: serverTimestamp(),
-    });
-
-    resultingItem = { ...item, quantity: item.quantity - quantity };
-  });
-
-  if (resultingItem) await syncLowStockNotification(resultingItem);
-}
-
 export async function removeOrderItem(bookingId: string, itemId: string) {
   const firestore = requireDb();
   const bookingRef = doc(firestore, "bookings", bookingId);

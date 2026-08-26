@@ -20,21 +20,61 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { subscribeToInventory } from "@/lib/inventory";
-import { addOrderItem } from "@/lib/orders";
-import type { InventoryItem } from "@/lib/types";
-import { Loader2Icon, MinusIcon, PlusIcon, SearchIcon } from "lucide-react";
+import { addOrderToBooking } from "@/lib/bookings";
+import { useAuth } from "@/context/auth-context";
+import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
+import { useSubmitGuard } from "@/hooks/use-submit-guard";
+import {
+  printOrderReceipt,
+  previewOrderReceipt,
+  printerErrorMessage,
+  referenceNumberFor,
+  kickDrawerForCashPayment,
+  staffFirstName,
+} from "@/lib/receipt-printer";
+import {
+  cashCollectedNow,
+  collectedAmount,
+  emptyPaymentDraft,
+  PaymentBreakdownDisplay,
+  PaymentFields,
+  paymentPayload,
+  type PaymentDraft,
+} from "@/components/payments/payment-fields";
+import { ReceiptBrandHeader } from "@/components/receipt-brand-header";
+import { ReceiptPreviewStrip } from "@/components/receipt-preview";
+import type { Booking, InventoryItem, OrderItem, PaymentMethod, Room } from "@/lib/types";
+import { Loader2Icon, MinusIcon, PlusIcon, PrinterIcon, SearchIcon } from "lucide-react";
 
 interface OrderPickerDialogProps {
-  bookingId: string;
+  room: Room;
+  booking: Booking;
   onClose: () => void;
 }
 
-export function OrderPickerDialog({ bookingId, onClose }: OrderPickerDialogProps) {
+export function OrderPickerDialog({ room, booking, onClose }: OrderPickerDialogProps) {
+  const { appUser } = useAuth();
+  const printer = useReceiptPrinter();
+  const staffName = appUser?.displayName ?? appUser?.email ?? "Staff";
   const [inventory, setInventory] = useState<InventoryItem[] | null>(null);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [cart, setCart] = useState<Record<string, number>>({});
-  const [submitting, setSubmitting] = useState(false);
+  const [payment, setPayment] = useState<PaymentDraft>(emptyPaymentDraft);
+  const { submitting, guard } = useSubmitGuard();
+  const [phase, setPhase] = useState<"form" | "receipt">("form");
+  const [receipt, setReceipt] = useState<{
+    items: OrderItem[];
+    amountCharged: number;
+    amountPaid: number;
+    change: number;
+    paymentMethod: PaymentMethod;
+    gcashReference?: string;
+    qrphReference?: string;
+    splitCashAmount?: number;
+    splitGcashAmount?: number;
+    splitQrphAmount?: number;
+  } | null>(null);
 
   useEffect(() => subscribeToInventory(setInventory), []);
 
@@ -64,6 +104,8 @@ export function OrderPickerDialog({ bookingId, onClose }: OrderPickerDialogProps
   }, [cart, inventory]);
 
   const cartTotal = cartLines.reduce((sum, line) => sum + line.qty * line.item.sellingPrice, 0);
+  const paid = collectedAmount(payment, cartTotal);
+  const change = paid > cartTotal ? paid - cartTotal : 0;
 
   function adjustCart(item: InventoryItem, delta: number) {
     setCart((prev) => {
@@ -79,26 +121,195 @@ export function OrderPickerDialog({ bookingId, onClose }: OrderPickerDialogProps
       toast.error("Add at least one item.");
       return;
     }
-    setSubmitting(true);
+    await guard(submitOrder);
+  }
+
+  async function submitOrder() {
+    if (!appUser) return;
+    const payload = paymentPayload(payment, cartTotal);
     try {
-      for (const line of cartLines) {
-        await addOrderItem(bookingId, line.item.itemId, line.qty);
+      const result = await addOrderToBooking(
+        booking,
+        cartLines.map((line) => ({ itemId: line.item.itemId, quantity: line.qty })),
+        payload.amountPaid,
+        {
+          paymentMethod: payload.paymentMethod,
+          gcashReference: payload.gcashReference,
+          qrphReference: payload.qrphReference,
+          splitCashAmount: payload.splitCashAmount,
+          splitGcashAmount: payload.splitGcashAmount,
+          splitQrphAmount: payload.splitQrphAmount,
+        },
+        { uid: appUser.uid, name: staffName }
+      );
+      toast.success(
+        result.amountCollected > 0
+          ? `Order added and ₱${result.amountCollected.toFixed(2)} collected.`
+          : "Order added."
+      );
+      if (printer.connected && result.amountCollected > 0) {
+        try {
+          await kickDrawerForCashPayment(cashCollectedNow(payment, cartTotal));
+        } catch (error) {
+          toast.error(`Order added, but the drawer said: ${printerErrorMessage(error)}`);
+        }
       }
-      toast.success("Order added.");
-      onClose();
+      setReceipt({
+        items: cartLines.map((line) => ({
+          itemId: line.item.itemId,
+          name: line.item.name,
+          unitPrice: line.item.sellingPrice,
+          quantity: line.qty,
+          subtotal: line.qty * line.item.sellingPrice,
+        })),
+        amountCharged: result.cartTotal,
+        amountPaid: result.amountCollected,
+        change,
+        paymentMethod: payload.paymentMethod,
+        gcashReference: payload.gcashReference,
+        qrphReference: payload.qrphReference,
+        splitCashAmount: payload.splitCashAmount,
+        splitGcashAmount: payload.splitGcashAmount,
+        splitQrphAmount: payload.splitQrphAmount,
+      });
+      setPhase("receipt");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't add the order.");
-    } finally {
-      setSubmitting(false);
     }
+  }
+
+  async function printThermalCopy() {
+    if (!printer.connected || !receipt) return;
+    try {
+      await printOrderReceipt(booking, room, {
+        staffName,
+        items: receipt.items,
+        amountCharged: receipt.amountCharged,
+        amountPaid: receipt.amountPaid,
+        change: receipt.change,
+        paymentMethod: receipt.paymentMethod,
+        gcashReference: receipt.gcashReference,
+        qrphReference: receipt.qrphReference,
+        splitCashAmount: receipt.splitCashAmount,
+        splitGcashAmount: receipt.splitGcashAmount,
+        splitQrphAmount: receipt.splitQrphAmount,
+      });
+    } catch (error) {
+      toast.error(printerErrorMessage(error));
+    }
+  }
+
+  if (phase === "receipt" && receipt) {
+    return (
+      <Dialog open onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Order added</DialogTitle>
+            <DialogDescription>
+              Room {room.roomNumber} — hand this receipt to the guest.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="print-area flex flex-col gap-2 rounded-lg border p-4 text-sm">
+            <ReceiptBrandHeader
+              subtitle="Order Receipt"
+              reference={referenceNumberFor(booking.bookingId)}
+            />
+            <div className="my-1 border-t" />
+            <div className="flex justify-between">
+              <span>Room</span>
+              <span>{room.roomNumber}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Guest</span>
+              <span>{booking.guestName}</span>
+            </div>
+            <div className="my-1 border-t" />
+            {receipt.items.map((line) => (
+              <div key={line.itemId} className="flex justify-between">
+                <span>
+                  {line.quantity}× {line.name}
+                </span>
+                <span>₱{line.subtotal.toFixed(2)}</span>
+              </div>
+            ))}
+            <div className="flex justify-between font-medium">
+              <span>Total</span>
+              <span>₱{receipt.amountCharged.toFixed(2)}</span>
+            </div>
+            {receipt.amountPaid > 0 ? (
+              <PaymentBreakdownDisplay
+                portions={{
+                  cash: receipt.splitCashAmount ?? (receipt.paymentMethod === "cash" ? receipt.amountPaid : 0),
+                  gcash: receipt.splitGcashAmount ?? (receipt.paymentMethod === "gcash" ? receipt.amountPaid : 0),
+                  qrph: receipt.splitQrphAmount ?? (receipt.paymentMethod === "qrph" ? receipt.amountPaid : 0),
+                }}
+                method={receipt.paymentMethod}
+                amountPaid={receipt.amountPaid}
+                gcashReference={receipt.gcashReference}
+                qrphReference={receipt.qrphReference}
+                change={receipt.change}
+              />
+            ) : (
+              <p className="text-muted-foreground">Not paid yet — added to the room balance.</p>
+            )}
+            {receipt.amountPaid < receipt.amountCharged && (
+              <div className="flex justify-between font-medium text-amber-600 dark:text-amber-400">
+                <span>Balance due</span>
+                <span>₱{(receipt.amountCharged - receipt.amountPaid).toFixed(2)}</span>
+              </div>
+            )}
+            <div className="my-1 border-t" />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Staff</span>
+              <span>{staffFirstName(staffName)}</span>
+            </div>
+          </div>
+
+          <div className="print:hidden flex flex-col gap-2">
+            <p className="text-xs font-medium text-muted-foreground">Thermal printer preview</p>
+            <div className="max-h-72 overflow-y-auto rounded-md bg-muted/40 p-2">
+              <ReceiptPreviewStrip
+                lines={previewOrderReceipt(booking, room, {
+                  staffName,
+                  items: receipt.items,
+                  amountCharged: receipt.amountCharged,
+                  amountPaid: receipt.amountPaid,
+                  change: receipt.change,
+                  paymentMethod: receipt.paymentMethod,
+                  gcashReference: receipt.gcashReference,
+                  qrphReference: receipt.qrphReference,
+                  splitCashAmount: receipt.splitCashAmount,
+                  splitGcashAmount: receipt.splitGcashAmount,
+                  splitQrphAmount: receipt.splitQrphAmount,
+                })}
+                paperWidth={printer.paperWidth}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              Done
+            </Button>
+            {printer.connected && (
+              <Button variant="outline" onClick={printThermalCopy}>
+                <PrinterIcon className="size-4" />
+                Print Receipt
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
   }
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-xl md:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Add order</DialogTitle>
-          <DialogDescription>Search or browse by category.</DialogDescription>
+          <DialogTitle>Add order — Room {room.roomNumber}</DialogTitle>
+          <DialogDescription>Search or browse by category, then collect payment now.</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
@@ -110,6 +321,7 @@ export function OrderPickerDialog({ bookingId, onClose }: OrderPickerDialogProps
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-8"
+                disabled={submitting}
               />
             </div>
             <Select value={category} onValueChange={(v) => setCategory(v ?? "all")}>
@@ -193,6 +405,16 @@ export function OrderPickerDialog({ bookingId, onClose }: OrderPickerDialogProps
             <span>Cart total</span>
             <span>₱{cartTotal.toFixed(2)}</span>
           </div>
+
+          {cartTotal > 0 && (
+            <PaymentFields
+              draft={payment}
+              onChange={setPayment}
+              due={cartTotal}
+              disabled={submitting}
+              idPrefix="order"
+            />
+          )}
         </div>
 
         <DialogFooter>
@@ -201,7 +423,7 @@ export function OrderPickerDialog({ bookingId, onClose }: OrderPickerDialogProps
           </Button>
           <Button onClick={handleSubmit} disabled={submitting || cartLines.length === 0}>
             {submitting && <Loader2Icon className="size-4 animate-spin" />}
-            Add to order
+            {paid > 0 ? `Charge ₱${Math.min(paid, cartTotal).toFixed(2)}` : "Add to order"}
           </Button>
         </DialogFooter>
       </DialogContent>

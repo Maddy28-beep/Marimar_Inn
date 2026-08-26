@@ -217,7 +217,7 @@ export interface StoreSale {
   cashierName: string;
 }
 
-export type TransactionType = "checkin" | "extend" | "checkout";
+export type TransactionType = "checkin" | "extend" | "checkout" | "order";
 
 // One record per money-collecting event on a booking (check-in payment,
 // extend payment, checkout payment) — a booking's own checkInTime never

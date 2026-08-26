@@ -318,7 +318,8 @@ export function RoomDetailDialog({
 
       {orderPickerOpen && (
         <OrderPickerDialog
-          bookingId={booking.bookingId}
+          room={room}
+          booking={booking}
           onClose={() => setOrderPickerOpen(false)}
         />
       )}
