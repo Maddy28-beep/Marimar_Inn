@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ItemFormDialog } from "@/components/inventory/item-form-dialog";
 import { CategoryManagerDialog } from "@/components/inventory/category-manager-dialog";
+import { useAuth } from "@/context/auth-context";
+import { isOwnerLikeRole } from "@/lib/roles";
 import { Loader2Icon, PencilIcon, PlusIcon, TagIcon, Trash2Icon } from "lucide-react";
 
 type DialogState = "create" | { item: InventoryItem } | null;
@@ -55,6 +57,8 @@ function RestockControl({ item }: { item: InventoryItem }) {
 }
 
 function ManageInventoryContent() {
+  const { appUser } = useAuth();
+  const canManage = isOwnerLikeRole(appUser?.role);
   const [items, setItems] = useState<InventoryItem[] | null>(null);
   const [categories, setCategories] = useState<InventoryCategory[]>([]);
   const [dialog, setDialog] = useState<DialogState>(null);
@@ -94,19 +98,23 @@ function ManageInventoryContent() {
         <div>
           <h1 className="font-heading text-2xl font-semibold tracking-tight">Inventory</h1>
           <p className="text-sm text-muted-foreground">
-            Manage the store item catalog, prices, and stock levels.
+            {canManage
+              ? "Manage the store item catalog, prices, and stock levels."
+              : "Check current stock levels against the actual inventory."}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setCategoryManagerOpen(true)}>
-            <TagIcon className="size-4" />
-            Manage categories
-          </Button>
-          <Button onClick={() => setDialog("create")}>
-            <PlusIcon className="size-4" />
-            Add item
-          </Button>
-        </div>
+        {canManage && (
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setCategoryManagerOpen(true)}>
+              <TagIcon className="size-4" />
+              Manage categories
+            </Button>
+            <Button onClick={() => setDialog("create")}>
+              <PlusIcon className="size-4" />
+              Add item
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="rounded-xl border">
@@ -118,8 +126,8 @@ function ManageInventoryContent() {
               <th className="px-4 py-2 font-medium">Category</th>
               <th className="px-4 py-2 font-medium">Price</th>
               <th className="px-4 py-2 font-medium">Stock</th>
-              <th className="px-4 py-2 font-medium">Restock</th>
-              <th className="px-4 py-2" />
+              {canManage && <th className="px-4 py-2 font-medium">Restock</th>}
+              {canManage && <th className="px-4 py-2" />}
             </tr>
           </thead>
           <tbody>
@@ -148,34 +156,38 @@ function ManageInventoryContent() {
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-2">
-                    {item.unlimited ? (
-                      <span className="text-xs text-muted-foreground">Not tracked</span>
-                    ) : (
-                      <RestockControl item={item} />
-                    )}
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon-sm" onClick={() => setDialog({ item })}>
-                        <PencilIcon className="size-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => handleDelete(item)}
-                        disabled={deletingId === item.itemId}
-                      >
-                        <Trash2Icon className="size-4" />
-                      </Button>
-                    </div>
-                  </td>
+                  {canManage && (
+                    <td className="px-4 py-2">
+                      {item.unlimited ? (
+                        <span className="text-xs text-muted-foreground">Not tracked</span>
+                      ) : (
+                        <RestockControl item={item} />
+                      )}
+                    </td>
+                  )}
+                  {canManage && (
+                    <td className="px-4 py-2 text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon-sm" onClick={() => setDialog({ item })}>
+                          <PencilIcon className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleDelete(item)}
+                          disabled={deletingId === item.itemId}
+                        >
+                          <Trash2Icon className="size-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               );
             })}
             {items?.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={canManage ? 6 : 4} className="px-4 py-8 text-center text-muted-foreground">
                   No inventory items yet — add your first item to get started.
                 </td>
               </tr>
@@ -206,7 +218,7 @@ function ManageInventoryContent() {
 
 export default function InventoryPage() {
   return (
-    <ProtectedRoute allowedRoles={["owner", "admin", "superadmin", "supervisor"]}>
+    <ProtectedRoute allowedRoles={["owner", "admin", "superadmin", "supervisor", "cashier"]}>
       <ManageInventoryContent />
     </ProtectedRoute>
   );

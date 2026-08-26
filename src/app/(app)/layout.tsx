@@ -134,7 +134,7 @@ interface NavLink {
 const NAV_LINKS: NavLink[] = [
   { href: "/dashboard", label: "Rooms" },
   { href: "/rooms/manage", label: "Manage Rooms", icon: SettingsIcon, ownerOnly: true },
-  { href: "/inventory", label: "Inventory", icon: PackageIcon, ownerOnly: true },
+  { href: "/inventory", label: "Inventory", icon: PackageIcon },
   { href: "/reports", label: "Reports", icon: BarChart3Icon },
   { href: "/users", label: "Manage Staff", icon: UsersIcon, staffManagementOnly: true },
 ];
