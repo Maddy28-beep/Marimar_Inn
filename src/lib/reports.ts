@@ -39,6 +39,19 @@ function dateKey(d: Date): string {
 }
 
 /**
+ * A voided booking with no store items drops out of the Daily Sales Report
+ * table entirely (see computeDailySalesReport's row filter below) — but
+ * voidBooking() never reverses the payment transaction it collected before
+ * being voided, so that cash is still real money in the drawer. Shared here
+ * so computeShiftCollectedTotals can exclude the same bookings' transactions
+ * from "Cash/GCash/QRPh collected" — otherwise that total silently includes
+ * money for a booking nothing on screen explains.
+ */
+function isVoidedWithNoItems(booking: Booking): boolean {
+  return booking.status === "voided" && (booking.totalFbCharge ?? 0) <= 0;
+}
+
+/**
  * A single range filter on one field never needs a manual composite index —
  * Firestore auto-indexes every field individually. Deliberately avoiding
  * combining this with an extra `where`/`orderBy` on a different field, since
@@ -191,7 +204,7 @@ export function computeDailySalesReport(
     // it still needs to show up here (room revenue excluded below, see
     // isVoided). Drop voided bookings that never had any items — nothing
     // left to report once the room itself doesn't count.
-    .filter((b) => b.status !== "voided" || (b.totalFbCharge ?? 0) > 0)
+    .filter((b) => !isVoidedWithNoItems(b))
     .sort((a, b) => b.checkInTime.toMillis() - a.checkInTime.toMillis())
     .map((booking) => {
       const isVoided = booking.status === "voided";
@@ -359,16 +372,26 @@ export interface ShiftCollectedTotals {
  * shift boundary), so their own soldAt-based fetch already attributes them
  * correctly — they're included here via the same paymentBreakdown() used
  * for a booking's own split.
+ *
+ * `bookings` is whatever was fetched for this same shift by checkInTime
+ * (i.e. computeDailySalesReport's input) — used only to find bookings
+ * voided with no items, whose transactions get excluded so this total
+ * doesn't silently include cash nothing on screen explains.
  */
 export function computeShiftCollectedTotals(
   transactions: Transaction[],
-  storeSales: StoreSale[]
+  storeSales: StoreSale[],
+  bookings: Booking[] = []
 ): ShiftCollectedTotals {
+  const excludedBookingIds = new Set(
+    bookings.filter(isVoidedWithNoItems).map((b) => b.bookingId)
+  );
   let cashCollected = 0;
   let gcashCollected = 0;
   let qrphCollected = 0;
 
   for (const t of transactions) {
+    if (excludedBookingIds.has(t.bookingId)) continue;
     cashCollected += t.cashAmount;
     gcashCollected += t.gcashAmount;
     qrphCollected += t.qrphAmount;

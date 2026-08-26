@@ -218,7 +218,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                   qrphCollected: salesData.totals.qrphCollected,
                   totalCollected: salesData.totals.totalPaid,
                 }
-              : computeShiftCollectedTotals(transactions, storeSales)
+              : computeShiftCollectedTotals(transactions, storeSales, checkedIn)
           );
           // Only surface transactions whose booking's row lives in a
           // *different* shift's table — a check-in transaction (or a
