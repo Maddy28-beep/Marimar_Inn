@@ -1284,6 +1284,104 @@ export async function printOrderReceipt(booking: Booking, room: Room, extras: Or
   else await send(bytes);
 }
 
+export interface BalancePaymentReceiptExtras {
+  staffName: string;
+  amountCollected: number;
+  remainingBalance: number;
+  change: number;
+  paymentMethod: PaymentMethod;
+  gcashReference?: string;
+  qrphReference?: string;
+  splitCashAmount?: number;
+  splitGcashAmount?: number;
+  splitQrphAmount?: number;
+  kickDrawer?: boolean;
+}
+
+/**
+ * A short receipt for collecting an outstanding balance mid-stay — no
+ * items/room lines to print, just what was owed and what was just paid.
+ */
+function balancePaymentReceiptEncoder(booking: Booking, room: Room, extras: BalancePaymentReceiptExtras) {
+  const width = layoutWidth(state.paperWidth);
+  const encoder = createEncoder(width);
+
+  encoder
+    .initialize()
+    .align("center")
+    .line("Marimar Inn")
+    .line("Balance Payment")
+    .line(`Ref: ${referenceNumberFor(booking.bookingId)}`)
+    .newline()
+    .align("left")
+    .line(twoColumn("Room", room.roomNumber, width))
+    .line(twoColumn("Guest", booking.guestName, width))
+    .line(`Time: ${new Date().toLocaleString()}`)
+    .newline();
+
+  const portions = paymentPortionLines({
+    cash: extras.splitCashAmount ?? (extras.paymentMethod === "cash" ? extras.amountCollected : 0),
+    gcash: extras.splitGcashAmount ?? (extras.paymentMethod === "gcash" ? extras.amountCollected : 0),
+    qrph: extras.splitQrphAmount ?? (extras.paymentMethod === "qrph" ? extras.amountCollected : 0),
+  });
+  if (portions.length > 1) {
+    for (const line of portions) {
+      encoder.line(twoColumn(`Paid (${line.label})`, money(line.amount), width));
+    }
+  } else {
+    encoder.line(
+      twoColumn(`Paid (${PAYMENT_METHOD_LABELS[extras.paymentMethod]})`, money(extras.amountCollected), width)
+    );
+  }
+
+  if (extras.gcashReference) {
+    encoder.line(`GCash Ref: ${extras.gcashReference}`);
+  }
+  if (extras.qrphReference) {
+    encoder.line(`QRPh Ref: ${extras.qrphReference}`);
+  }
+
+  if (extras.change > 0) {
+    encoder.line(twoColumn("Change", money(extras.change), width));
+  }
+  if (extras.remainingBalance > 0) {
+    encoder.line(twoColumn("Remaining balance", money(extras.remainingBalance), width));
+  }
+
+  encoder
+    .newline()
+    .align("center")
+    .line(`Staff: ${staffFirstName(extras.staffName)}`)
+    .newline()
+    .line("Thank you for staying!");
+  if (extras.kickDrawer) encoder.kick();
+  encoder.finish();
+
+  return encoder;
+}
+
+export function buildBalancePaymentReceiptBytes(
+  booking: Booking,
+  room: Room,
+  extras: BalancePaymentReceiptExtras
+): Uint8Array {
+  return balancePaymentReceiptEncoder(booking, room, extras).encode();
+}
+
+export function previewBalancePaymentReceipt(
+  booking: Booking,
+  room: Room,
+  extras: BalancePaymentReceiptExtras
+): ReceiptPreviewLine[] {
+  return balancePaymentReceiptEncoder(booking, room, extras).getPreview();
+}
+
+export async function printBalancePaymentReceipt(booking: Booking, room: Room, extras: BalancePaymentReceiptExtras) {
+  const bytes = buildBalancePaymentReceiptBytes(booking, room, extras);
+  if (extras.kickDrawer) await sendDrawerKick(bytes);
+  else await send(bytes);
+}
+
 export interface DailySalesReceiptRow {
   roomNumber: string;
   refNumber: string;

@@ -243,7 +243,8 @@ service cloud.firestore {
     }
 
     // ============================================
-    // VOID REQUESTS (cashier-requested void, owner approval — room bookings only)
+    // VOID REQUESTS (cashier-requested void, owner approval — either the
+    // whole room booking, or one already-paid-for order item on it)
     // ============================================
     match /voidRequests/{voidRequestId} {
       allow read: if isAuthenticated();
@@ -251,8 +252,9 @@ service cloud.firestore {
       allow create: if canVoid() &&
         request.resource.data.keys().hasOnly([
           'voidRequestId', 'bookingId', 'roomId', 'roomNumber', 'guestName',
-          'totalAmount', 'amountPaid', 'checkInTime', 'reason', 'status',
-          'requestedBy', 'requestedByName', 'requestedAt'
+          'target', 'totalAmount', 'amountPaid', 'checkInTime',
+          'itemId', 'itemName', 'itemQuantity', 'itemSubtotal',
+          'reason', 'status', 'requestedBy', 'requestedByName', 'requestedAt'
         ]) &&
         request.resource.data.voidRequestId == voidRequestId &&
         request.resource.data.status == 'pending' &&

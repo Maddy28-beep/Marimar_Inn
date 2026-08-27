@@ -20,19 +20,32 @@ export type BookingStatus = "active" | "checked_out" | "voided";
 
 export type VoidRequestStatus = "pending" | "approved" | "denied";
 
-// A cashier-filed request to cancel a booking past the self-serve void
-// window — durable audit trail, resolved exactly once by an owner/admin.
-// Amounts/names are snapshotted at request time so the review UI and the
-// audit trail don't depend on the (possibly since-changed or gone) booking.
+// "booking" (the original) cancels the whole room booking. "order_item"
+// removes one already-paid-for store item a cashier added by mistake —
+// same request/approve flow, but scoped to a single line item instead of
+// the whole stay. Absent on older docs means "booking" (see the `?? "booking"`
+// fallbacks wherever this is read).
+export type VoidRequestTarget = "booking" | "order_item";
+
+// A cashier-filed request past the self-serve window — durable audit
+// trail, resolved exactly once by an owner/admin. Amounts/names are
+// snapshotted at request time so the review UI and the audit trail don't
+// depend on the (possibly since-changed or gone) booking.
 export interface VoidRequest {
   voidRequestId: string;
   bookingId: string;
   roomId: string;
   roomNumber: string;
   guestName: string;
+  target?: VoidRequestTarget;
   totalAmount: number;
   amountPaid: number;
   checkInTime: Timestamp;
+  // order_item only — the specific line item this request wants removed.
+  itemId?: string;
+  itemName?: string;
+  itemQuantity?: number;
+  itemSubtotal?: number;
   reason: string;
   status: VoidRequestStatus;
   requestedBy: string;
@@ -217,7 +230,7 @@ export interface StoreSale {
   cashierName: string;
 }
 
-export type TransactionType = "checkin" | "extend" | "checkout" | "order";
+export type TransactionType = "checkin" | "extend" | "checkout" | "order" | "payment";
 
 // One record per money-collecting event on a booking (check-in payment,
 // extend payment, checkout payment) — a booking's own checkInTime never

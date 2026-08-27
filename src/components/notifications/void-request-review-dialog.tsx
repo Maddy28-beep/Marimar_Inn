@@ -39,20 +39,18 @@ export function VoidRequestReviewDialog({ requests, onClose }: VoidRequestReview
 
   async function handleApprove(request: VoidRequest) {
     if (!appUser) return;
-    if (
-      !window.confirm(
-        `Approve voiding Room ${request.roomNumber} — ${request.guestName}? This frees up the room without checking out.`
-      )
-    ) {
-      return;
-    }
+    const isOrderItem = request.target === "order_item";
+    const confirmMessage = isOrderItem
+      ? `Remove ${request.itemQuantity}× ${request.itemName} (₱${(request.itemSubtotal ?? 0).toFixed(2)}) from Room ${request.roomNumber}'s order? This was already paid for — you'll need to hand that back to the guest.`
+      : `Approve voiding Room ${request.roomNumber} — ${request.guestName}? This frees up the room without checking out.`;
+    if (!window.confirm(confirmMessage)) return;
     setBusyId(request.voidRequestId);
     try {
       await approveVoidRequest(request, {
         uid: appUser.uid,
         name: appUser.displayName ?? appUser.email ?? "Owner",
       });
-      toast.success(`Room ${request.roomNumber} voided.`);
+      toast.success(isOrderItem ? `${request.itemName} removed from Room ${request.roomNumber}'s order.` : `Room ${request.roomNumber} voided.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't approve the void request.");
     } finally {
@@ -69,7 +67,11 @@ export function VoidRequestReviewDialog({ requests, onClose }: VoidRequestReview
         { uid: appUser.uid, name: appUser.displayName ?? appUser.email ?? "Owner" },
         denyNote.trim() || undefined
       );
-      toast.success(`Void request for Room ${request.roomNumber} denied.`);
+      toast.success(
+        request.target === "order_item"
+          ? `Request to remove ${request.itemName} from Room ${request.roomNumber} denied.`
+          : `Void request for Room ${request.roomNumber} denied.`
+      );
       setDenyingId(null);
       setDenyNote("");
     } catch (error) {
@@ -96,6 +98,7 @@ export function VoidRequestReviewDialog({ requests, onClose }: VoidRequestReview
             </p>
           )}
           {requests.map((request) => {
+            const isOrderItem = request.target === "order_item";
             const balance = Math.max(request.totalAmount - request.amountPaid, 0);
             const busy = busyId === request.voidRequestId;
             const denying = denyingId === request.voidRequestId;
@@ -109,10 +112,15 @@ export function VoidRequestReviewDialog({ requests, onClose }: VoidRequestReview
                     {timeAgo(request.requestedAt.toDate(), new Date())}
                   </span>
                 </div>
+                {isOrderItem && (
+                  <p className="font-medium text-amber-700 dark:text-amber-400">
+                    Remove {request.itemQuantity}× {request.itemName} — ₱{(request.itemSubtotal ?? 0).toFixed(2)} (already paid)
+                  </p>
+                )}
                 <p className="text-muted-foreground">&ldquo;{request.reason}&rdquo;</p>
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>Requested by {request.requestedByName}</span>
-                  <span>Balance ₱{balance.toFixed(2)}</span>
+                  {!isOrderItem && <span>Balance ₱{balance.toFixed(2)}</span>}
                 </div>
 
                 {denying ? (

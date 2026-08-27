@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  increment,
   onSnapshot,
   query,
   runTransaction,
@@ -10,8 +11,8 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { AppNotification, Booking, VoidRequest } from "@/lib/types";
-import { resolveCheckoutReminder } from "@/lib/notifications";
+import type { AppNotification, Booking, InventoryItem, OrderItem, VoidRequest } from "@/lib/types";
+import { resolveCheckoutReminder, syncLowStockNotification } from "@/lib/notifications";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -25,6 +26,14 @@ export interface VoidRequestActor {
 
 export interface CreateVoidRequestInput {
   booking: Booking;
+  reason: string;
+  requestedBy: string;
+  requestedByName: string;
+}
+
+export interface CreateOrderItemVoidRequestInput {
+  booking: Booking;
+  item: OrderItem;
   reason: string;
   requestedBy: string;
   requestedByName: string;
@@ -84,16 +93,81 @@ export async function createVoidRequest(input: CreateVoidRequestInput): Promise<
   return requestRef.id;
 }
 
+/**
+ * Same shape as createVoidRequest, but for one already-paid-for order item
+ * a cashier added by mistake — used when there's no unpaid balance left to
+ * cover it (a free self-remove would otherwise apply, see room-detail-dialog).
+ */
+export async function createOrderItemVoidRequest(input: CreateOrderItemVoidRequestInput): Promise<string> {
+  const firestore = requireDb();
+  const { booking, item } = input;
+  const requestRef = doc(collection(firestore, "voidRequests"));
+  const notificationRef = doc(firestore, "notifications", `void-request-${requestRef.id}`);
+
+  const request: Omit<VoidRequest, "requestedAt"> & {
+    requestedAt: ReturnType<typeof serverTimestamp>;
+  } = {
+    voidRequestId: requestRef.id,
+    bookingId: booking.bookingId,
+    roomId: booking.roomId,
+    roomNumber: booking.roomNumber,
+    guestName: booking.guestName,
+    target: "order_item",
+    totalAmount: booking.totalAmount,
+    amountPaid: booking.amountPaid,
+    checkInTime: booking.checkInTime,
+    itemId: item.itemId,
+    itemName: item.name,
+    itemQuantity: item.quantity,
+    itemSubtotal: item.subtotal,
+    reason: input.reason,
+    status: "pending",
+    requestedBy: input.requestedBy,
+    requestedByName: input.requestedByName,
+    requestedAt: serverTimestamp(),
+  };
+
+  const notification: Omit<AppNotification, "createdAt"> & {
+    createdAt: ReturnType<typeof serverTimestamp>;
+  } = {
+    notificationId: notificationRef.id,
+    type: "void_request",
+    message: `Room ${booking.roomNumber} — remove ${item.quantity}× ${item.name} (₱${item.subtotal.toFixed(2)}, already paid) needs approval.`,
+    roomId: booking.roomId,
+    roomNumber: booking.roomNumber,
+    bookingId: booking.bookingId,
+    voidRequestId: requestRef.id,
+    createdAt: serverTimestamp(),
+    resolved: false,
+    readBy: [],
+  };
+
+  const batch = writeBatch(firestore);
+  batch.set(requestRef, request);
+  batch.set(notificationRef, notification);
+  await batch.commit();
+
+  return requestRef.id;
+}
+
+/**
+ * Keyed by bookingId -> every pending request for that booking. A booking
+ * can have at most one pending "booking" void request, but can also have
+ * one pending "order_item" request per mistakenly-added paid item at the
+ * same time — a single request per booking isn't enough to represent that.
+ */
 export function subscribeToPendingVoidRequests(
-  onChange: (byBookingId: Map<string, VoidRequest>) => void
+  onChange: (byBookingId: Map<string, VoidRequest[]>) => void
 ) {
   const firestore = requireDb();
   const q = query(collection(firestore, "voidRequests"), where("status", "==", "pending"));
   return onSnapshot(q, (snapshot) => {
-    const byBookingId = new Map<string, VoidRequest>();
+    const byBookingId = new Map<string, VoidRequest[]>();
     for (const docSnap of snapshot.docs) {
       const request = docSnap.data({ serverTimestamps: "estimate" }) as VoidRequest;
-      byBookingId.set(request.bookingId, request);
+      const existing = byBookingId.get(request.bookingId) ?? [];
+      existing.push(request);
+      byBookingId.set(request.bookingId, existing);
     }
     onChange(byBookingId);
   });
@@ -117,6 +191,11 @@ async function resolveVoidRequestNotification(voidRequestId: string) {
  * the owner should deny the stale request instead.
  */
 export async function approveVoidRequest(request: VoidRequest, actor: VoidRequestActor) {
+  if (request.target === "order_item") {
+    await approveOrderItemVoidRequest(request, actor);
+    return;
+  }
+
   const firestore = requireDb();
   const requestRef = doc(firestore, "voidRequests", request.voidRequestId);
   const bookingRef = doc(firestore, "bookings", request.bookingId);
@@ -146,6 +225,72 @@ export async function approveVoidRequest(request: VoidRequest, actor: VoidReques
   } catch {
     // The void already succeeded; don't fail this action over the reminder doc.
   }
+}
+
+/**
+ * Approving an order_item request removes that one line item — same
+ * transaction shape as orders.ts's removeOrderItem (restock inventory
+ * unless the item is unlimited, recalc totals), plus resolving the
+ * request itself. Doesn't touch amountPaid: the item was already paid
+ * for, so removing it intentionally leaves the booking looking "overpaid"
+ * by that amount — a visible signal that cash is owed back to the guest,
+ * same as the existing owner-initiated removeOrderItem already behaves.
+ */
+async function approveOrderItemVoidRequest(request: VoidRequest, actor: VoidRequestActor) {
+  const firestore = requireDb();
+  const requestRef = doc(firestore, "voidRequests", request.voidRequestId);
+  const bookingRef = doc(firestore, "bookings", request.bookingId);
+  const itemId = request.itemId;
+  if (!itemId) throw new Error("This request is missing its item — deny it instead.");
+  const itemRef = doc(firestore, "inventory", itemId);
+  let resultingItem: InventoryItem | null = null;
+
+  await runTransaction(firestore, async (tx) => {
+    const [bookingSnap, itemSnap] = await Promise.all([tx.get(bookingRef), tx.get(itemRef)]);
+    if (!bookingSnap.exists() || (bookingSnap.data() as Booking).status !== "active") {
+      throw new Error(
+        "This booking was already checked out or voided — deny this request instead."
+      );
+    }
+
+    const booking = bookingSnap.data() as Booking;
+    const existing = (booking.items ?? []).find((line) => line.itemId === itemId);
+    if (!existing) {
+      throw new Error("That item is no longer on the booking — deny this request instead.");
+    }
+
+    const items = (booking.items ?? []).filter((line) => line.itemId !== itemId);
+    const totalFbCharge = items.reduce((sum, item) => sum + item.subtotal, 0);
+    const totalAmount = booking.totalRoomCharge + totalFbCharge;
+    const isUnlimited = itemSnap.exists() && (itemSnap.data() as InventoryItem).unlimited;
+
+    if (!isUnlimited) {
+      tx.update(itemRef, {
+        quantity: increment(existing.quantity),
+        lastUpdated: serverTimestamp(),
+      });
+    }
+    tx.update(bookingRef, {
+      items,
+      totalFbCharge,
+      totalAmount,
+      updatedAt: serverTimestamp(),
+    });
+    tx.update(requestRef, {
+      status: "approved",
+      resolvedBy: actor.uid,
+      resolvedByName: actor.name,
+      resolvedAt: serverTimestamp(),
+    });
+
+    if (itemSnap.exists()) {
+      const item = itemSnap.data() as InventoryItem;
+      resultingItem = { ...item, quantity: item.quantity + existing.quantity };
+    }
+  });
+
+  if (resultingItem) await syncLowStockNotification(resultingItem);
+  await resolveVoidRequestNotification(request.voidRequestId);
 }
 
 export async function denyVoidRequest(

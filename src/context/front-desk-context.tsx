@@ -10,7 +10,7 @@ interface FrontDeskValue {
   rooms: Room[] | null;
   bookingsByRoom: Map<string, Booking>;
   roomsLoaded: boolean;
-  pendingVoidRequestsByBookingId: Map<string, VoidRequest>;
+  pendingVoidRequestsByBookingId: Map<string, VoidRequest[]>;
 }
 
 const FrontDeskContext = createContext<FrontDeskValue | null>(null);
@@ -19,7 +19,7 @@ export function FrontDeskProvider({ children }: { children: ReactNode }) {
   const [rooms, setRooms] = useState<Room[] | null>(null);
   const [bookingsByRoom, setBookingsByRoom] = useState<Map<string, Booking>>(() => new Map());
   const [pendingVoidRequestsByBookingId, setPendingVoidRequestsByBookingId] = useState<
-    Map<string, VoidRequest>
+    Map<string, VoidRequest[]>
   >(() => new Map());
 
   useEffect(() => subscribeToRooms(setRooms), []);

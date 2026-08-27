@@ -44,9 +44,9 @@ export function NotificationBell() {
 
   const unread = notifications.filter((n) => !n.readBy.includes(appUser.uid));
   const canReviewVoidRequests = canApproveVoid(appUser.role);
-  const pendingVoidRequests = Array.from(pendingVoidRequestsByBookingId.values()).sort(
-    (a, b) => (a.requestedAt?.toMillis() ?? 0) - (b.requestedAt?.toMillis() ?? 0)
-  );
+  const pendingVoidRequests = Array.from(pendingVoidRequestsByBookingId.values())
+    .flat()
+    .sort((a, b) => (a.requestedAt?.toMillis() ?? 0) - (b.requestedAt?.toMillis() ?? 0));
 
   async function handleMarkRead(id: string) {
     try {

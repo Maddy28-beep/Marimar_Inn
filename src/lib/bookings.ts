@@ -619,6 +619,72 @@ export async function addOrderToBooking(
 }
 
 /**
+ * Collects payment toward an existing outstanding balance — e.g. a guest
+ * who paid partially at check-in, or skipped payment on a mid-stay order,
+ * now wants to settle up before checkout. Unlike addOrderToBooking, there's
+ * nothing new being added here, just money changing hands against the
+ * booking's current totalAmount, so it's logged as its own "payment"
+ * transaction type rather than "order".
+ */
+export async function collectBalance(
+  booking: Booking,
+  amountPaid: number,
+  payment: ExtendStayPayment,
+  actor: TransactionActor
+): Promise<{ balance: number; amountCollected: number }> {
+  const firestore = requireDb();
+  const bookingRef = doc(firestore, "bookings", booking.bookingId);
+
+  let balance = 0;
+  let amountCollected = 0;
+
+  await runTransaction(firestore, async (tx) => {
+    const bookingSnap = await tx.get(bookingRef);
+    if (!bookingSnap.exists()) throw new Error("Booking not found.");
+    const liveBooking = bookingSnap.data() as Booking;
+    if (liveBooking.status !== "active") throw new Error("This booking is no longer active.");
+
+    balance = Math.max(0, liveBooking.totalAmount - liveBooking.amountPaid);
+    amountCollected = Math.max(0, Math.min(amountPaid, balance));
+    if (amountCollected <= 0) throw new Error("There's no balance left to collect.");
+
+    const newAmountPaid = liveBooking.amountPaid + amountCollected;
+    const thisSplit = methodContribution(payment.paymentMethod, amountCollected, {
+      cash: payment.splitCashAmount,
+      gcash: payment.splitGcashAmount,
+      qrph: payment.splitQrphAmount,
+    });
+
+    tx.update(bookingRef, {
+      amountPaid: newAmountPaid,
+      paymentMethod: payment.paymentMethod,
+      ...runningSplitUpdates(liveBooking, thisSplit),
+      paymentStatus: paymentStatusFor(newAmountPaid, liveBooking.totalAmount),
+      updatedAt: serverTimestamp(),
+      ...(payment.gcashReference ? { gcashReference: payment.gcashReference } : {}),
+      ...(payment.qrphReference ? { qrphReference: payment.qrphReference } : {}),
+    });
+
+    await recordTransaction(
+      {
+        type: "payment",
+        bookingId: booking.bookingId,
+        roomNumber: booking.roomNumber,
+        amount: amountCollected,
+        cashAmount: thisSplit.cash,
+        gcashAmount: thisSplit.gcash,
+        qrphAmount: thisSplit.qrph,
+        cashierId: actor.uid,
+        cashierName: actor.name,
+      },
+      tx
+    );
+  });
+
+  return { balance: balance - amountCollected, amountCollected };
+}
+
+/**
  * Switches a booking to open time — no fixed end time. No charge is
  * collected here since there's no per-hour rate set yet; the final room
  * charge gets typed in by the cashier at checkout (settleOpenTimeCharge).

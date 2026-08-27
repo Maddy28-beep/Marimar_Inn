@@ -144,6 +144,7 @@ const TRANSACTION_TYPE_LABELS: Record<Transaction["type"], string> = {
   extend: "Extend",
   checkout: "Checkout",
   order: "Order",
+  payment: "Payment",
 };
 
 // <input type="time"> gives 24h "HH:MM" — display it the way staff write it

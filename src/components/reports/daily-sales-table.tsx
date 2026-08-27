@@ -9,6 +9,7 @@ const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   extend: "Extend",
   checkout: "Checkout",
   order: "Order",
+  payment: "Payment",
 };
 
 // Mirrors paymentLabel() below but for a transaction's own cash/gcash/qrph

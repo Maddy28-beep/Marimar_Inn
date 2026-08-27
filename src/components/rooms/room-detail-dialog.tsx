@@ -21,9 +21,12 @@ import { useFrontDesk } from "@/context/front-desk-context";
 import { canApproveVoid, isOwnerLikeRole, roleLabel } from "@/lib/roles";
 import { OrderPickerDialog } from "@/components/inventory/order-picker-dialog";
 import { ExtendStayDialog } from "@/components/rooms/extend-stay-dialog";
+import { CollectPaymentDialog } from "@/components/rooms/collect-payment-dialog";
 import { VoidRequestDialog } from "@/components/rooms/void-request-dialog";
+import { OrderItemVoidRequestDialog } from "@/components/rooms/order-item-void-request-dialog";
 import { VoidRequestReviewDialog } from "@/components/notifications/void-request-review-dialog";
-import { Loader2Icon, ShoppingCartIcon, TimerIcon, XIcon } from "lucide-react";
+import type { OrderItem } from "@/lib/types";
+import { Loader2Icon, ShoppingCartIcon, TimerIcon, WalletIcon, XIcon } from "lucide-react";
 
 interface RoomDetailDialogProps {
   room: Room;
@@ -45,8 +48,10 @@ export function RoomDetailDialog({
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
   const [orderPickerOpen, setOrderPickerOpen] = useState(false);
   const [extendOpen, setExtendOpen] = useState(false);
+  const [collectPaymentOpen, setCollectPaymentOpen] = useState(false);
   const [voidRequestOpen, setVoidRequestOpen] = useState(false);
   const [voidReviewOpen, setVoidReviewOpen] = useState(false);
+  const [itemVoidRequestTarget, setItemVoidRequestTarget] = useState<OrderItem | null>(null);
 
   const elapsed = hoursElapsed(booking.checkInTime, now);
   const remaining = booking.hoursBooked - elapsed;
@@ -57,13 +62,23 @@ export function RoomDetailDialog({
   const balance = Math.max(booking.totalAmount - booking.amountPaid, 0);
   const { cash: cashPaid, gcash: gcashPaid, qrph: qrphPaid } = paymentBreakdown(booking);
   const isOwnerLike = isOwnerLikeRole(appUser?.role);
-  const canRemoveOrderItems = isOwnerLike;
+  // Owner-like can always remove an item outright. Otherwise it's a free
+  // self-remove only when there's enough unpaid balance to cover it —
+  // nothing already collected changes hands. A paid item needs the same
+  // owner-approval flow as a room void.
+  function canFreeRemoveItem(item: OrderItem) {
+    return isOwnerLike || balance >= item.subtotal;
+  }
   // Void is off-limits to Supervisor entirely — no self-cancel, no request,
   // no approve — only Owner/Admin/Superadmin and (within the window) Cashier.
   const canApproveVoidRole = canApproveVoid(appUser?.role);
   const canTouchVoid = appUser?.role !== "supervisor";
   const canDirectVoid = canApproveVoidRole || (canCancel && canTouchVoid);
-  const pendingVoidRequest = pendingVoidRequestsByBookingId.get(booking.bookingId);
+  const pendingRequests = pendingVoidRequestsByBookingId.get(booking.bookingId) ?? [];
+  const pendingVoidRequest = pendingRequests.find((r) => (r.target ?? "booking") === "booking");
+  const pendingItemVoidRequestByItemId = new Map(
+    pendingRequests.filter((r) => r.target === "order_item").map((r) => [r.itemId, r])
+  );
 
   async function handleVoid() {
     if (!canDirectVoid) return;
@@ -169,14 +184,24 @@ export function RoomDetailDialog({
               </div>
               {booking.items.length > 0 && (
                 <div className="flex flex-col gap-1 rounded-lg border p-2 text-sm">
-                  {booking.items.map((line) => (
+                  {booking.items.map((line) => {
+                    const pendingItemRequest = pendingItemVoidRequestByItemId.get(line.itemId);
+                    const freeRemove = canFreeRemoveItem(line);
+                    return (
                     <div key={line.itemId} className="flex items-center justify-between gap-2">
                       <span className="truncate">
                         {line.quantity}× {line.name}
                       </span>
                       <div className="flex shrink-0 items-center gap-2">
                         <span>₱{line.subtotal.toFixed(2)}</span>
-                        {canRemoveOrderItems && (
+                        {pendingItemRequest ? (
+                          <span
+                            className="text-xs text-amber-600 dark:text-amber-400"
+                            title={pendingItemRequest.reason}
+                          >
+                            Pending
+                          </span>
+                        ) : freeRemove ? (
                           <Button
                             variant="ghost"
                             size="icon-xs"
@@ -189,10 +214,20 @@ export function RoomDetailDialog({
                               <XIcon className="size-3" />
                             )}
                           </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            title="Already paid — request Owner approval to remove"
+                            onClick={() => setItemVoidRequestTarget(line)}
+                          >
+                            <XIcon className="size-3 text-muted-foreground" />
+                          </Button>
                         )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -239,7 +274,19 @@ export function RoomDetailDialog({
               {balance > 0 && (
                 <div className="flex items-center justify-between text-amber-600 dark:text-amber-400">
                   <span>Balance</span>
-                  <span>₱{balance.toFixed(2)}</span>
+                  <div className="flex items-center gap-2">
+                    <span>₱{balance.toFixed(2)}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="xs"
+                      className="text-amber-700 dark:text-amber-400"
+                      onClick={() => setCollectPaymentOpen(true)}
+                    >
+                      <WalletIcon className="size-3.5" />
+                      Collect payment
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
@@ -328,8 +375,26 @@ export function RoomDetailDialog({
         <ExtendStayDialog room={room} booking={booking} onClose={() => setExtendOpen(false)} />
       )}
 
+      {collectPaymentOpen && (
+        <CollectPaymentDialog
+          room={room}
+          booking={booking}
+          balance={balance}
+          onClose={() => setCollectPaymentOpen(false)}
+        />
+      )}
+
       {voidRequestOpen && (
         <VoidRequestDialog room={room} booking={booking} onClose={() => setVoidRequestOpen(false)} />
+      )}
+
+      {itemVoidRequestTarget && (
+        <OrderItemVoidRequestDialog
+          room={room}
+          booking={booking}
+          item={itemVoidRequestTarget}
+          onClose={() => setItemVoidRequestTarget(null)}
+        />
       )}
 
       {voidReviewOpen && pendingVoidRequest && (
