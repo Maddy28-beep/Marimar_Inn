@@ -2,7 +2,7 @@ import { collection, getDocs, query, Timestamp, where } from "firebase/firestore
 import { db } from "@/lib/firebase";
 import { amenityOnlyLabel, bookingExtras } from "@/lib/booking-extras";
 import { referenceNumberFor } from "@/lib/receipt-printer";
-import { paymentBreakdown } from "@/lib/bookings";
+import { paymentBreakdown, type PaymentPortions } from "@/lib/bookings";
 import type { Booking, PaymentMethod, Room, RoomType, ShiftExpense, StoreSale, Transaction } from "@/lib/types";
 
 function requireDb() {
@@ -40,15 +40,40 @@ function dateKey(d: Date): string {
 
 /**
  * A voided booking with no store items drops out of the Daily Sales Report
- * table entirely (see computeDailySalesReport's row filter below) — but
- * voidBooking() never reverses the payment transaction it collected before
- * being voided, so that cash is still real money in the drawer. Shared here
- * so computeShiftCollectedTotals can exclude the same bookings' transactions
- * from "Cash/GCash/QRPh collected" — otherwise that total silently includes
- * money for a booking nothing on screen explains.
+ * table entirely (see computeDailySalesReport's row filter below).
  */
 function isVoidedWithNoItems(booking: Booking): boolean {
   return booking.status === "voided" && (booking.totalFbCharge ?? 0) <= 0;
+}
+
+/**
+ * voidBooking() zeroes out room revenue but never reverses the payment
+ * already collected — items/amenities still count (see
+ * computeDailySalesReport's isVoided branch), so a voided booking's row
+ * (or its total absence, if it had no items) only ever explains the
+ * item/amenity portion of amountPaid. This is the leftover room-charge
+ * portion that's real cash in the drawer but has nothing on screen
+ * accounting for it — split across cash/gcash/qrph the same way the
+ * booking's own running total already is, so computeShiftCollectedTotals
+ * can subtract exactly that, no more and no less. (A payment collected
+ * together at check-in for both room and items is one lump sum in the
+ * transaction log — there's no per-method "room vs item" split to read
+ * off directly, hence deriving it from the booking's own totals instead.)
+ */
+function voidedRoomPortionCollected(booking: Booking): PaymentPortions {
+  if (booking.status !== "voided" || !booking.amountPaid) {
+    return { cash: 0, gcash: 0, qrph: 0 };
+  }
+  const reportedPaid = booking.totalFbCharge ?? 0; // matches the row's totalPaid for a voided booking
+  const excludeAmount = Math.max(0, booking.amountPaid - reportedPaid);
+  if (excludeAmount <= 0) return { cash: 0, gcash: 0, qrph: 0 };
+  const fraction = excludeAmount / booking.amountPaid;
+  const portions = paymentBreakdown(booking);
+  return {
+    cash: portions.cash * fraction,
+    gcash: portions.gcash * fraction,
+    qrph: portions.qrph * fraction,
+  };
 }
 
 /**
@@ -374,24 +399,20 @@ export interface ShiftCollectedTotals {
  * for a booking's own split.
  *
  * `bookings` is whatever was fetched for this same shift by checkInTime
- * (i.e. computeDailySalesReport's input) — used only to find bookings
- * voided with no items, whose transactions get excluded so this total
- * doesn't silently include cash nothing on screen explains.
+ * (i.e. computeDailySalesReport's input) — used only to subtract the
+ * unreported room-charge portion of any voided booking's collected
+ * payment (see voidedRoomPortionCollected).
  */
 export function computeShiftCollectedTotals(
   transactions: Transaction[],
   storeSales: StoreSale[],
   bookings: Booking[] = []
 ): ShiftCollectedTotals {
-  const excludedBookingIds = new Set(
-    bookings.filter(isVoidedWithNoItems).map((b) => b.bookingId)
-  );
   let cashCollected = 0;
   let gcashCollected = 0;
   let qrphCollected = 0;
 
   for (const t of transactions) {
-    if (excludedBookingIds.has(t.bookingId)) continue;
     cashCollected += t.cashAmount;
     gcashCollected += t.gcashAmount;
     qrphCollected += t.qrphAmount;
@@ -401,6 +422,12 @@ export function computeShiftCollectedTotals(
     cashCollected += portions.cash;
     gcashCollected += portions.gcash;
     qrphCollected += portions.qrph;
+  }
+  for (const booking of bookings) {
+    const excluded = voidedRoomPortionCollected(booking);
+    cashCollected -= excluded.cash;
+    gcashCollected -= excluded.gcash;
+    qrphCollected -= excluded.qrph;
   }
 
   return {
