@@ -411,11 +411,24 @@ export function computeShiftCollectedTotals(
   let cashCollected = 0;
   let gcashCollected = 0;
   let qrphCollected = 0;
+  // Per-booking totals actually present in `transactions` — the void
+  // exclusion below is derived from the booking doc's own saved amounts,
+  // which can outlive its transaction record (e.g. a corrected/removed
+  // transaction, or recordTransaction's best-effort write never landing).
+  // Capping the exclusion at what this booking actually contributed keeps
+  // the shift total from ever going negative because of a mismatch here.
+  const perBooking = new Map<string, PaymentPortions>();
 
   for (const t of transactions) {
     cashCollected += t.cashAmount;
     gcashCollected += t.gcashAmount;
     qrphCollected += t.qrphAmount;
+    const prior = perBooking.get(t.bookingId) ?? { cash: 0, gcash: 0, qrph: 0 };
+    perBooking.set(t.bookingId, {
+      cash: prior.cash + t.cashAmount,
+      gcash: prior.gcash + t.gcashAmount,
+      qrph: prior.qrph + t.qrphAmount,
+    });
   }
   for (const sale of storeSales) {
     const portions = paymentBreakdown(sale);
@@ -425,9 +438,10 @@ export function computeShiftCollectedTotals(
   }
   for (const booking of bookings) {
     const excluded = voidedRoomPortionCollected(booking);
-    cashCollected -= excluded.cash;
-    gcashCollected -= excluded.gcash;
-    qrphCollected -= excluded.qrph;
+    const contributed = perBooking.get(booking.bookingId) ?? { cash: 0, gcash: 0, qrph: 0 };
+    cashCollected -= Math.min(excluded.cash, contributed.cash);
+    gcashCollected -= Math.min(excluded.gcash, contributed.gcash);
+    qrphCollected -= Math.min(excluded.qrph, contributed.qrph);
   }
 
   return {
