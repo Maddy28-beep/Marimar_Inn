@@ -688,9 +688,32 @@ const BLE_CHUNK_DELAY_MS = 20;
 // old 8s JS timeout raced that wait, aborted the promise, and kicked off a
 // second drawer job that tore the socket down mid-print — no paper, no drawer.
 const PRINT_TIMEOUT_MS = 45_000;
+// "GATT operation failed for unknown reason" is Android Chrome's generic
+// error for a transient BLE hiccup on a single characteristic write —
+// notoriously common on cheap ESC/POS clones and usually gone on the very
+// next attempt a few hundred ms later. There used to be zero retry here, so
+// any one bad chunk failed the whole receipt even though the connection
+// itself was fine.
+const BLE_WRITE_RETRIES = 3;
+const BLE_WRITE_RETRY_DELAY_MS = 200;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withBleWriteRetry(write: () => Promise<void>): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= BLE_WRITE_RETRIES; attempt++) {
+    try {
+      await write();
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt === BLE_WRITE_RETRIES) break;
+      await sleep(BLE_WRITE_RETRY_DELAY_MS * (attempt + 1));
+    }
+  }
+  throw lastError;
 }
 
 async function writeBleData(printer: ConnectedBlePrinter, data: Uint8Array): Promise<void> {
@@ -708,12 +731,13 @@ async function writeBleData(printer: ConnectedBlePrinter, data: Uint8Array): Pro
   for (let offset = 0; offset < data.length; offset += BLE_CHUNK_SIZE) {
     const chunk = data.subarray(offset, offset + BLE_CHUNK_SIZE);
     if (printer.writeWithoutResponse && hasWithoutResponse) {
-      await characteristic.writeValueWithoutResponse(chunk);
+      await withBleWriteRetry(() => characteristic.writeValueWithoutResponse(chunk));
       await sleep(BLE_CHUNK_DELAY_MS);
     } else if (!printer.writeWithoutResponse && hasWithResponse) {
-      await characteristic.writeValueWithResponse(chunk);
+      await withBleWriteRetry(() => characteristic.writeValueWithResponse(chunk));
     } else if (characteristic.writeValue) {
-      await characteristic.writeValue(chunk);
+      const writeValue = characteristic.writeValue.bind(characteristic);
+      await withBleWriteRetry(() => writeValue(chunk));
       await sleep(BLE_CHUNK_DELAY_MS);
     } else {
       throw new Error("This browser's Bluetooth support is too old to print.");
