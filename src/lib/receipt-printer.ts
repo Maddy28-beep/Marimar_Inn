@@ -1481,37 +1481,54 @@ function dailySalesReceiptEncoder(data: DailySalesReceiptData) {
   if (data.rows.length === 0) {
     encoder.align("center").line("No check-ins that day.").align("left");
   } else {
+    // Grouped by room — a room that turned over more than once in the shift
+    // (e.g. two separate guests) used to print "Rm X" again as its own
+    // whole block each time, scattered whenever its bookings fell in the
+    // list. One header per room now, with every one of its bookings' ref/
+    // hours/payment/amount still printed underneath as its own lines.
+    // Map preserves first-seen order, so room blocks still print in roughly
+    // the same order the original rows did.
+    const rowsByRoom = new Map<string, DailySalesReceiptRow[]>();
     for (const row of data.rows) {
-      // Room/ref/hours line is bounded by construction: ref numbers are a
-      // fixed 9 chars and room numbers/hours are always 1-3 digits, so this
-      // never risks overflowing even 32-char paper.
-      encoder.line(`Rm ${row.roomNumber}  ${row.refNumber}  ${row.packageHours}h`);
-      if (row.extensionAmount > 0) {
-        encoder.line(twoColumn(`  +${row.extensionHours}h ext`, money(row.extensionAmount), width));
-      }
-      if (row.extrasAmount > 0) {
-        encoder.line(
-          twoColumn(
-            `  Extra/Request${row.extrasLabel ? ` ${row.extrasLabel}` : ""}`,
-            money(row.extrasAmount),
-            width
-          )
-        );
-      }
-      if (row.totalStoreAmount > 0) {
-        encoder.line(twoColumn("  Store items", money(row.totalStoreAmount), width));
-      }
-      encoder.line(twoColumn(`Paid (${row.paymentMethodLabel})`, money(row.totalPaid), width));
-      // GCash reference numbers get their own line rather than being
-      // appended to the Paid line — appended, a 13-digit reference pushes
-      // the line past 32-char (58mm) paper's width; unlike a label, a
-      // reference number can't be safely clipped, since a shortened one is
-      // useless for the Owner to verify against GCash later.
-      if (row.gcashReference) {
-        encoder.line(clampLine(`  GCash: ${row.gcashReference}`, width));
-      }
-      if (row.qrphReference) {
-        encoder.line(clampLine(`  QRPh: ${row.qrphReference}`, width));
+      const existing = rowsByRoom.get(row.roomNumber);
+      if (existing) existing.push(row);
+      else rowsByRoom.set(row.roomNumber, [row]);
+    }
+
+    for (const [roomNumber, roomRows] of rowsByRoom) {
+      encoder.line(`Rm ${roomNumber}`);
+      for (const row of roomRows) {
+        // Ref/hours line is bounded by construction: ref numbers are a
+        // fixed 9 chars and hours are always 1-2 digits, so this never
+        // risks overflowing even 32-char paper.
+        encoder.line(`  ${row.refNumber}  ${row.packageHours}h`);
+        if (row.extensionAmount > 0) {
+          encoder.line(twoColumn(`    +${row.extensionHours}h ext`, money(row.extensionAmount), width));
+        }
+        if (row.extrasAmount > 0) {
+          encoder.line(
+            twoColumn(
+              `    Extra/Request${row.extrasLabel ? ` ${row.extrasLabel}` : ""}`,
+              money(row.extrasAmount),
+              width
+            )
+          );
+        }
+        if (row.totalStoreAmount > 0) {
+          encoder.line(twoColumn("    Store items", money(row.totalStoreAmount), width));
+        }
+        encoder.line(twoColumn(`  Paid (${row.paymentMethodLabel})`, money(row.totalPaid), width));
+        // GCash reference numbers get their own line rather than being
+        // appended to the Paid line — appended, a 13-digit reference pushes
+        // the line past 32-char (58mm) paper's width; unlike a label, a
+        // reference number can't be safely clipped, since a shortened one is
+        // useless for the Owner to verify against GCash later.
+        if (row.gcashReference) {
+          encoder.line(clampLine(`    GCash: ${row.gcashReference}`, width));
+        }
+        if (row.qrphReference) {
+          encoder.line(clampLine(`    QRPh: ${row.qrphReference}`, width));
+        }
       }
       encoder.line(rule);
     }
