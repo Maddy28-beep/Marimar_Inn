@@ -127,6 +127,7 @@ export function WalkInSaleDialog({ onClose }: WalkInSaleDialogProps) {
         cartItems: cartLines.map((line) => ({ itemId: line.item.itemId, quantity: line.qty })),
         cashierId: appUser.uid,
         cashierName: staffName,
+        cashierRole: appUser.role,
         ...payload,
       });
       if (printer.connected) {

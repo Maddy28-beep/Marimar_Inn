@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { approveVoidRequest, denyVoidRequest } from "@/lib/void-requests";
 import { useAuth } from "@/context/auth-context";
+import { visibleStaffName } from "@/lib/roles";
 import type { VoidRequest } from "@/lib/types";
 import { Loader2Icon } from "lucide-react";
 
@@ -119,7 +120,7 @@ export function VoidRequestReviewDialog({ requests, onClose }: VoidRequestReview
                 )}
                 <p className="text-muted-foreground">&ldquo;{request.reason}&rdquo;</p>
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Requested by {request.requestedByName}</span>
+                  <span>Requested by {visibleStaffName(request.requestedByName, request.requestedByRole) || "Staff"}</span>
                   {!isOrderItem && <span>Balance ₱{balance.toFixed(2)}</span>}
                 </div>
 

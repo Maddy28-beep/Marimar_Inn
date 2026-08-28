@@ -65,6 +65,7 @@ export function AddExpenseForm({
         items: complete,
         cashierId: appUser.uid,
         cashierName: appUser.displayName || appUser.email || "Staff",
+        cashierRole: appUser.role,
       });
       setLines([newLine(), newLine(), newLine()]);
       toast.success(

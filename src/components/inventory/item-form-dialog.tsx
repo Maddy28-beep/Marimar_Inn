@@ -88,6 +88,7 @@ export function ItemFormDialog({ mode, categories, onClose }: ItemFormDialogProp
         await createItem(input, {
           uid: appUser?.uid ?? "",
           name: appUser?.displayName ?? appUser?.email ?? "Staff",
+          role: appUser?.role,
         });
         toast.success(`${input.name} added.`);
       }

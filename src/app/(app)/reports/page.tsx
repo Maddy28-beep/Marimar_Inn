@@ -32,7 +32,7 @@ import { DailySalesTable } from "@/components/reports/daily-sales-table";
 import { AddExpenseForm } from "@/components/expenses/add-expense-form";
 import { OpenDrawerForm } from "@/components/cash-drawer-open";
 import { exportToExcel, formatReportDate, formatReportMonth } from "@/lib/export";
-import { isOwnerLikeRole } from "@/lib/roles";
+import { isOwnerLikeRole, visibleStaffName } from "@/lib/roles";
 import {
   deleteShiftExpense,
   fetchExpensesInRange,
@@ -340,7 +340,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                   ].filter(Boolean);
                   return refs.length ? `${base} (${refs.join(", ")})` : base;
                 })(),
-                staff: row.cashierName ?? "",
+                staff: visibleStaffName(row.cashierName, row.cashierRole),
                 remarks: row.remarks ?? "",
               })),
               ...(salesReport && salesReport.rows.length > 0
@@ -401,7 +401,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                       type: TRANSACTION_TYPE_LABELS[t.type],
                       amount: t.amount,
                       payment: parts.join(" + "),
-                      staff: t.cashierName,
+                      staff: visibleStaffName(t.cashierName, t.cashierRole),
                     };
                   }),
                 },
@@ -431,7 +431,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                           : "",
                         shift: when ? shiftLabelForTime(when) : "",
                         description: expense.description,
-                        staff: expense.cashierName,
+                        staff: visibleStaffName(expense.cashierName, expense.cashierRole),
                         amount: expense.amount,
                       };
                     }),
@@ -567,7 +567,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
             : "",
           shiftLabel: when ? shiftLabelForTime(when) : "",
           description: expense.description,
-          cashierName: expense.cashierName,
+          cashierName: visibleStaffName(expense.cashierName, expense.cashierRole),
           amount: expense.amount,
         };
       }),
@@ -1250,7 +1250,7 @@ function RangeReportTab() {
                           : "",
                         shift: when ? shiftLabelForTime(when) : "",
                         description: expense.description,
-                        staff: expense.cashierName,
+                        staff: visibleStaffName(expense.cashierName, expense.cashierRole),
                         amount: expense.amount,
                       };
                     }),
@@ -1447,7 +1447,9 @@ function RangeReportTab() {
                             </td>
                             <td className="py-1.5">{when ? shiftLabelForTime(when) : "—"}</td>
                             <td className="py-1.5">{expense.description}</td>
-                            <td className="py-1.5 whitespace-nowrap">{expense.cashierName}</td>
+                            <td className="py-1.5 whitespace-nowrap">
+                              {visibleStaffName(expense.cashierName, expense.cashierRole)}
+                            </td>
                             <td className="py-1.5 text-right whitespace-nowrap">{peso(expense.amount)}</td>
                           </tr>
                         );

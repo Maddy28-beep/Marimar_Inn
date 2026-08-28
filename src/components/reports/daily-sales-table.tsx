@@ -2,6 +2,7 @@
 
 import { PAYMENT_METHOD_LABELS, type ShiftExpense, type Transaction, type TransactionType } from "@/lib/types";
 import { shiftLabelForTime, totalExpenses } from "@/lib/expenses";
+import { visibleStaffName } from "@/lib/roles";
 import type { DailySalesReport, DailySalesRow, ShiftCollectedTotals } from "@/lib/reports";
 
 const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
@@ -177,7 +178,9 @@ export function DailySalesTable({
                     {row.gcashReference ? ` (GCash ${row.gcashReference})` : ""}
                     {row.qrphReference ? ` (QRPh ${row.qrphReference})` : ""}
                   </td>
-                  <td className="border p-1 whitespace-nowrap">{row.cashierName ?? ""}</td>
+                  <td className="border p-1 whitespace-nowrap">
+                    {visibleStaffName(row.cashierName, row.cashierRole)}
+                  </td>
                   <td className="border p-1" />
                   <td className="border p-1 whitespace-nowrap">{row.remarks ?? ""}</td>
                 </tr>
@@ -235,7 +238,9 @@ export function DailySalesTable({
                     <td className="border p-1 whitespace-nowrap">{TRANSACTION_TYPE_LABELS[t.type]}</td>
                     <td className="border p-1 text-right whitespace-nowrap">{peso(t.amount)}</td>
                     <td className="border p-1 whitespace-nowrap">{transactionPaymentLabel(t)}</td>
-                    <td className="border p-1 whitespace-nowrap">{t.cashierName}</td>
+                    <td className="border p-1 whitespace-nowrap">
+                      {visibleStaffName(t.cashierName, t.cashierRole)}
+                    </td>
                   </tr>
                 );
               })}
@@ -270,7 +275,9 @@ export function DailySalesTable({
                     <td className="border p-1 whitespace-nowrap">{time(when)}</td>
                     <td className="border p-1 whitespace-nowrap">{when ? shiftLabelForTime(when) : "—"}</td>
                     <td className="border p-1">{expense.description}</td>
-                    <td className="border p-1 whitespace-nowrap">{expense.cashierName}</td>
+                    <td className="border p-1 whitespace-nowrap">
+                      {visibleStaffName(expense.cashierName, expense.cashierRole)}
+                    </td>
                     <td className="border p-1 text-right whitespace-nowrap">{peso(expense.amount)}</td>
                     {canRemoveExpenses && (
                       <td className="border p-1 print:hidden">

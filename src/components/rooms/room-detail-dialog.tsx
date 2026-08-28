@@ -18,7 +18,7 @@ import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useAuth } from "@/context/auth-context";
 import { useFrontDesk } from "@/context/front-desk-context";
-import { canApproveVoid, isOwnerLikeRole, roleLabel } from "@/lib/roles";
+import { canApproveVoid, isHiddenSuperadminRole, isOwnerLikeRole, roleLabel } from "@/lib/roles";
 import { OrderPickerDialog } from "@/components/inventory/order-picker-dialog";
 import { ExtendStayDialog } from "@/components/rooms/extend-stay-dialog";
 import { CollectPaymentDialog } from "@/components/rooms/collect-payment-dialog";
@@ -117,7 +117,7 @@ export function RoomDetailDialog({
             <DialogTitle>Room {room.roomNumber} — {booking.guestName}</DialogTitle>
             <DialogDescription>
               Checked in {booking.checkInTime.toDate().toLocaleString()}
-              {isOwnerLike && booking.cashierName && (
+              {isOwnerLike && booking.cashierName && !isHiddenSuperadminRole(booking.cashierRole) && (
                 <>
                   {" "}
                   by {booking.cashierName}

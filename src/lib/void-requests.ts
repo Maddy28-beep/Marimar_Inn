@@ -11,7 +11,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { AppNotification, Booking, InventoryItem, OrderItem, VoidRequest } from "@/lib/types";
+import type { AppNotification, Booking, InventoryItem, OrderItem, UserRole, VoidRequest } from "@/lib/types";
 import { resolveCheckoutReminder, syncLowStockNotification } from "@/lib/notifications";
 
 function requireDb() {
@@ -29,6 +29,7 @@ export interface CreateVoidRequestInput {
   reason: string;
   requestedBy: string;
   requestedByName: string;
+  requestedByRole?: UserRole;
 }
 
 export interface CreateOrderItemVoidRequestInput {
@@ -37,6 +38,7 @@ export interface CreateOrderItemVoidRequestInput {
   reason: string;
   requestedBy: string;
   requestedByName: string;
+  requestedByRole?: UserRole;
 }
 
 /**
@@ -67,6 +69,7 @@ export async function createVoidRequest(input: CreateVoidRequestInput): Promise<
     status: "pending",
     requestedBy: input.requestedBy,
     requestedByName: input.requestedByName,
+    ...(input.requestedByRole ? { requestedByRole: input.requestedByRole } : {}),
     requestedAt: serverTimestamp(),
   };
 
@@ -124,6 +127,7 @@ export async function createOrderItemVoidRequest(input: CreateOrderItemVoidReque
     status: "pending",
     requestedBy: input.requestedBy,
     requestedByName: input.requestedByName,
+    ...(input.requestedByRole ? { requestedByRole: input.requestedByRole } : {}),
     requestedAt: serverTimestamp(),
   };
 

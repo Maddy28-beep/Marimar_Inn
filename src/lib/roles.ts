@@ -58,6 +58,32 @@ export function isHiddenSuperadminEmail(email: string | null | undefined): boole
   return normalizeStaffEmail(email) === HIDDEN_SUPERADMIN_EMAIL;
 }
 
+/**
+ * "superadmin" is only ever assigned to the one hidden account (see
+ * reservedRoleForStaff below — it's never offered as a pickable role for
+ * anyone else), so checking the role alone is enough to scrub that
+ * account's identity from any "who did this" UI — inventory "Added by",
+ * booking "Checked in by", reports' Staff column, void-request/expense
+ * attribution, etc. — the same way isHiddenSuperadminEmail() already keeps
+ * them out of the Manage Staff list.
+ */
+export function isHiddenSuperadminRole(role: UserRole | null | undefined): boolean {
+  return role === "superadmin";
+}
+
+/**
+ * The name to actually show for a "who did this" attribution — blank
+ * whenever the role is the hidden superadmin, so every such spot (table
+ * cell, "Checked in by", "Requested by", printed report, etc.) just
+ * renders nothing instead of leaking that account's name.
+ */
+export function visibleStaffName(
+  name: string | null | undefined,
+  role: UserRole | null | undefined
+): string {
+  return isHiddenSuperadminRole(role) ? "" : (name ?? "");
+}
+
 export function reservedRoleForStaff(displayName: string, email: string): UserRole | null {
   if (isHiddenSuperadminEmail(email)) return "superadmin";
   if (RESERVED_ADMIN_NAMES.has(displayName.trim().toLowerCase())) return "admin";

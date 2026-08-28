@@ -138,7 +138,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
           splitGcashAmount: payload.splitGcashAmount,
           splitQrphAmount: payload.splitQrphAmount,
         },
-        { uid: appUser.uid, name: staffName }
+        { uid: appUser.uid, name: staffName, role: appUser.role }
       );
       toast.success(`Room ${room.roomNumber} extended by ${additionalHours}h.`);
       if (printer.connected) {

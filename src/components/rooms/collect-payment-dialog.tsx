@@ -92,7 +92,7 @@ export function CollectPaymentDialog({ room, booking, balance, onClose }: Collec
           splitGcashAmount: payload.splitGcashAmount,
           splitQrphAmount: payload.splitQrphAmount,
         },
-        { uid: appUser.uid, name: staffName }
+        { uid: appUser.uid, name: staffName, role: appUser.role }
       );
       toast.success(`₱${result.amountCollected.toFixed(2)} collected.`);
       if (printer.connected) {

@@ -43,6 +43,7 @@ export function OrderItemVoidRequestDialog({ room, booking, item, onClose }: Ord
           reason: trimmed,
           requestedBy: appUser.uid,
           requestedByName: appUser.displayName ?? appUser.email ?? "Cashier",
+          requestedByRole: appUser.role,
         });
         toast.success("Request sent — waiting on Owner approval.");
         onClose();

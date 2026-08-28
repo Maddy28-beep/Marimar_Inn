@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { ItemFormDialog } from "@/components/inventory/item-form-dialog";
 import { CategoryManagerDialog } from "@/components/inventory/category-manager-dialog";
 import { useAuth } from "@/context/auth-context";
-import { isOwnerLikeRole } from "@/lib/roles";
+import { isHiddenSuperadminRole, isOwnerLikeRole } from "@/lib/roles";
 import { Loader2Icon, PencilIcon, PlusIcon, TagIcon, Trash2Icon } from "lucide-react";
 
 type DialogState = "create" | { item: InventoryItem } | null;
@@ -137,7 +137,7 @@ function ManageInventoryContent() {
                 <tr key={item.itemId} className="border-t">
                   <td className="px-4 py-2 font-medium">
                     {item.name}
-                    {item.createdAt && (
+                    {item.createdAt && !isHiddenSuperadminRole(item.createdByRole) && (
                       <div className="text-xs font-normal text-muted-foreground">
                         Added {item.createdAt.toDate().toLocaleDateString()}
                         {item.createdByName ? ` by ${item.createdByName}` : ""}

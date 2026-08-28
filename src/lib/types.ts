@@ -50,6 +50,7 @@ export interface VoidRequest {
   status: VoidRequestStatus;
   requestedBy: string;
   requestedByName: string;
+  requestedByRole?: UserRole;
   requestedAt: Timestamp;
   resolvedBy?: string;
   resolvedByName?: string;
@@ -168,6 +169,7 @@ export interface InventoryItem {
   createdAt?: Timestamp;
   createdBy?: string;
   createdByName?: string;
+  createdByRole?: UserRole;
 }
 
 export type NotificationType = "checkout_reminder" | "low_stock" | "void_request";
@@ -215,6 +217,7 @@ export interface ShiftExpense {
   recordedAt: Timestamp;
   cashierId: string;
   cashierName: string;
+  cashierRole?: UserRole;
 }
 
 export interface StoreSale {
@@ -232,6 +235,7 @@ export interface StoreSale {
   splitQrphAmount?: number;
   cashierId: string;
   cashierName: string;
+  cashierRole?: UserRole;
 }
 
 export type TransactionType = "checkin" | "extend" | "checkout" | "order" | "payment";
@@ -254,5 +258,6 @@ export interface Transaction {
   qrphAmount: number;
   cashierId: string;
   cashierName: string;
+  cashierRole?: UserRole;
   timestamp: Timestamp;
 }

@@ -12,7 +12,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { InventoryCategory, InventoryItem } from "@/lib/types";
+import type { InventoryCategory, InventoryItem, UserRole } from "@/lib/types";
 import { syncLowStockNotification } from "@/lib/notifications";
 
 function requireDb() {
@@ -42,6 +42,7 @@ export interface NewItemInput {
 export interface ItemActor {
   uid: string;
   name: string;
+  role?: UserRole;
 }
 
 export async function createItem(input: NewItemInput, actor: ItemActor) {
@@ -61,6 +62,7 @@ export async function createItem(input: NewItemInput, actor: ItemActor) {
     createdAt: serverTimestamp(),
     createdBy: actor.uid,
     createdByName: actor.name,
+    ...(actor.role ? { createdByRole: actor.role } : {}),
     ...(input.unlimited ? { unlimited: true } : {}),
   };
   await setDoc(ref, item);

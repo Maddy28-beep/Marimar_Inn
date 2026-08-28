@@ -12,7 +12,7 @@ import {
 import { db } from "@/lib/firebase";
 import { methodContribution } from "@/lib/bookings";
 import { syncLowStockNotification } from "@/lib/notifications";
-import type { InventoryItem, OrderItem, PaymentMethod, StoreSale } from "@/lib/types";
+import type { InventoryItem, OrderItem, PaymentMethod, StoreSale, UserRole } from "@/lib/types";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -31,6 +31,7 @@ export interface StoreSaleInput {
   splitQrphAmount?: number;
   cashierId: string;
   cashierName: string;
+  cashierRole?: UserRole;
 }
 
 export async function createStoreSale(input: StoreSaleInput): Promise<StoreSale> {
@@ -84,6 +85,7 @@ export async function createStoreSale(input: StoreSaleInput): Promise<StoreSale>
       paymentMethod: input.paymentMethod,
       cashierId: input.cashierId,
       cashierName: input.cashierName,
+      ...(input.cashierRole ? { cashierRole: input.cashierRole } : {}),
       ...(input.gcashReference ? { gcashReference: input.gcashReference } : {}),
       ...(input.qrphReference ? { qrphReference: input.qrphReference } : {}),
       ...(input.splitCashAmount !== undefined ? { splitCashAmount: input.splitCashAmount } : {}),
@@ -116,6 +118,7 @@ export async function createStoreSale(input: StoreSaleInput): Promise<StoreSale>
     splitQrphAmount: portions.qrph || input.splitQrphAmount,
     cashierId: input.cashierId,
     cashierName: input.cashierName,
+    cashierRole: input.cashierRole,
   };
 }
 

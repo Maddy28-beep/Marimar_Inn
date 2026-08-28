@@ -41,6 +41,7 @@ export function VoidRequestDialog({ room, booking, onClose }: VoidRequestDialogP
           reason: trimmed,
           requestedBy: appUser.uid,
           requestedByName: appUser.displayName ?? appUser.email ?? "Cashier",
+          requestedByRole: appUser.role,
         });
         toast.success("Void request sent — waiting on Owner approval.");
         onClose();

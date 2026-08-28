@@ -308,6 +308,7 @@ export async function checkIn(input: CheckInInput) {
         qrphAmount: initialSplit.qrph,
         cashierId: input.cashierId,
         cashierName: input.cashierName ?? "Staff",
+        cashierRole: input.cashierRole,
       },
       tx
     );
@@ -347,6 +348,7 @@ async function clearCheckoutReminder(bookingId: string) {
 export interface TransactionActor {
   uid: string;
   name: string;
+  role?: UserRole;
 }
 
 export async function recordCheckout(
@@ -409,6 +411,7 @@ export async function recordCheckout(
     qrphAmount: thisSplit.qrph,
     cashierId: actor.uid,
     cashierName: actor.name,
+    cashierRole: actor.role,
   });
 }
 
@@ -493,6 +496,7 @@ export async function extendStay(
     qrphAmount: thisSplit.qrph,
     cashierId: actor.uid,
     cashierName: actor.name,
+    cashierRole: actor.role,
   });
 }
 
@@ -608,6 +612,7 @@ export async function addOrderToBooking(
         qrphAmount: thisSplit.qrph,
         cashierId: actor.uid,
         cashierName: actor.name,
+        cashierRole: actor.role,
       },
       tx
     );
@@ -676,6 +681,7 @@ export async function collectBalance(
         qrphAmount: thisSplit.qrph,
         cashierId: actor.uid,
         cashierName: actor.name,
+        cashierRole: actor.role,
       },
       tx
     );

@@ -10,7 +10,7 @@ import {
   type Transaction as FirestoreTransaction,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Transaction, TransactionType } from "@/lib/types";
+import type { Transaction, TransactionType, UserRole } from "@/lib/types";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -27,6 +27,7 @@ export interface RecordTransactionInput {
   qrphAmount: number;
   cashierId: string;
   cashierName: string;
+  cashierRole?: UserRole;
 }
 
 /**
@@ -55,6 +56,7 @@ export async function recordTransaction(
     qrphAmount: input.qrphAmount,
     cashierId: input.cashierId,
     cashierName: input.cashierName,
+    ...(input.cashierRole ? { cashierRole: input.cashierRole } : {}),
     timestamp: serverTimestamp(),
   };
   if (tx) {

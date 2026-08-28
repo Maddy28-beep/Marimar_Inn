@@ -23,6 +23,7 @@ import {
 import { type Booking, type Room } from "@/lib/types";
 import { bookingExtras, isAmenityItem } from "@/lib/booking-extras";
 import { useNowTick } from "@/hooks/use-now-tick";
+import { useAuth } from "@/context/auth-context";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { ReceiptBrandHeader } from "@/components/receipt-brand-header";
@@ -48,6 +49,7 @@ interface CheckoutDialogProps {
 }
 
 export function CheckoutDialog({ room, booking, staffName, cashierId, onClose }: CheckoutDialogProps) {
+  const { appUser } = useAuth();
   const now = useNowTick(1000);
   const printer = useReceiptPrinter();
   const [phase, setPhase] = useState<"confirm" | "receipt">("confirm");
@@ -154,7 +156,7 @@ export function CheckoutDialog({ room, booking, staffName, cashierId, onClose }:
       await recordCheckout(
         booking,
         amountCollectedNow,
-        { uid: cashierId, name: staffName },
+        { uid: cashierId, name: staffName, role: appUser?.role },
         payload
           ? {
               paymentMethod: payload.paymentMethod,

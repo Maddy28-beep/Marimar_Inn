@@ -140,7 +140,7 @@ export function OrderPickerDialog({ room, booking, onClose }: OrderPickerDialogP
           splitGcashAmount: payload.splitGcashAmount,
           splitQrphAmount: payload.splitQrphAmount,
         },
-        { uid: appUser.uid, name: staffName }
+        { uid: appUser.uid, name: staffName, role: appUser.role }
       );
       toast.success(
         result.amountCollected > 0

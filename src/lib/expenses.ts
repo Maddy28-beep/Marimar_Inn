@@ -10,7 +10,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { ShiftExpense } from "@/lib/types";
+import type { ShiftExpense, UserRole } from "@/lib/types";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -45,11 +45,13 @@ export async function recordShiftExpense(input: {
   description: string;
   cashierId: string;
   cashierName: string;
+  cashierRole?: UserRole;
 }): Promise<void> {
   await recordShiftExpenses({
     items: [{ amount: input.amount, description: input.description }],
     cashierId: input.cashierId,
     cashierName: input.cashierName,
+    cashierRole: input.cashierRole,
   });
 }
 
@@ -57,6 +59,7 @@ export async function recordShiftExpenses(input: {
   items: { amount: number; description: string }[];
   cashierId: string;
   cashierName: string;
+  cashierRole?: UserRole;
 }): Promise<number> {
   const items = input.items.map((item) => ({
     amount: Number(item.amount),
@@ -86,6 +89,7 @@ export async function recordShiftExpenses(input: {
       recordedAt: serverTimestamp(),
       cashierId: input.cashierId,
       cashierName,
+      ...(input.cashierRole ? { cashierRole: input.cashierRole } : {}),
     });
   }
   await batch.commit();

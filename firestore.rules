@@ -254,7 +254,7 @@ service cloud.firestore {
           'voidRequestId', 'bookingId', 'roomId', 'roomNumber', 'guestName',
           'target', 'totalAmount', 'amountPaid', 'checkInTime',
           'itemId', 'itemName', 'itemQuantity', 'itemSubtotal',
-          'reason', 'status', 'requestedBy', 'requestedByName', 'requestedAt'
+          'reason', 'status', 'requestedBy', 'requestedByName', 'requestedByRole', 'requestedAt'
         ]) &&
         request.resource.data.voidRequestId == voidRequestId &&
         request.resource.data.status == 'pending' &&
@@ -286,7 +286,7 @@ service cloud.firestore {
       // description, stamped with server time so it lands on the right shift.
       allow create: if isStaff() &&
         request.resource.data.keys().hasOnly([
-          'expenseId', 'amount', 'description', 'recordedAt', 'cashierId', 'cashierName'
+          'expenseId', 'amount', 'description', 'recordedAt', 'cashierId', 'cashierName', 'cashierRole'
         ]) &&
         request.resource.data.expenseId == expenseId &&
         request.resource.data.amount is number &&

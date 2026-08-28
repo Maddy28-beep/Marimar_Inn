@@ -3,7 +3,7 @@ import { db } from "@/lib/firebase";
 import { amenityOnlyLabel, bookingExtras } from "@/lib/booking-extras";
 import { referenceNumberFor } from "@/lib/receipt-printer";
 import { paymentBreakdown, type PaymentPortions } from "@/lib/bookings";
-import type { Booking, PaymentMethod, Room, RoomType, ShiftExpense, StoreSale, Transaction } from "@/lib/types";
+import type { Booking, PaymentMethod, Room, RoomType, ShiftExpense, StoreSale, Transaction, UserRole } from "@/lib/types";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -193,6 +193,7 @@ export interface DailySalesRow {
   splitGcashAmount?: number;
   splitQrphAmount?: number;
   cashierName?: string;
+  cashierRole?: UserRole;
   remarks?: string;
 }
 
@@ -287,6 +288,7 @@ export function computeDailySalesReport(
         splitGcashAmount: isVoided ? undefined : booking.splitGcashAmount,
         splitQrphAmount: isVoided ? undefined : booking.splitQrphAmount,
         cashierName: booking.cashierName,
+        cashierRole: booking.cashierRole,
         remarks: isVoided ? "Voided (room only)" : undefined,
       };
     });
@@ -318,6 +320,7 @@ export function computeDailySalesReport(
       splitGcashAmount: sale.splitGcashAmount,
       splitQrphAmount: sale.splitQrphAmount,
       cashierName: sale.cashierName,
+      cashierRole: sale.cashierRole,
     });
   }
 
