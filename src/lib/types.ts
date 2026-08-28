@@ -164,6 +164,10 @@ export interface InventoryItem {
   // are ignored everywhere this is true.
   unlimited?: boolean;
   lastUpdated: Timestamp;
+  // Absent on items created before this was tracked.
+  createdAt?: Timestamp;
+  createdBy?: string;
+  createdByName?: string;
 }
 
 export type NotificationType = "checkout_reminder" | "low_stock" | "void_request";

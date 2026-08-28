@@ -135,7 +135,15 @@ function ManageInventoryContent() {
               const lowStock = !item.unlimited && item.quantity <= item.minStockLevel;
               return (
                 <tr key={item.itemId} className="border-t">
-                  <td className="px-4 py-2 font-medium">{item.name}</td>
+                  <td className="px-4 py-2 font-medium">
+                    {item.name}
+                    {item.createdAt && (
+                      <div className="text-xs font-normal text-muted-foreground">
+                        Added {item.createdAt.toDate().toLocaleDateString()}
+                        {item.createdByName ? ` by ${item.createdByName}` : ""}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-2 text-muted-foreground">{item.category}</td>
                   <td className="px-4 py-2">₱{item.sellingPrice.toFixed(2)}</td>
                   <td className="px-4 py-2">

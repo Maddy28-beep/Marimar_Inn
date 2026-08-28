@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createCategory, createItem, updateItem, type NewItemInput } from "@/lib/inventory";
+import { useAuth } from "@/context/auth-context";
 import type { InventoryCategory, InventoryItem } from "@/lib/types";
 import { Loader2Icon } from "lucide-react";
 
@@ -32,6 +33,7 @@ interface ItemFormDialogProps {
 }
 
 export function ItemFormDialog({ mode, categories, onClose }: ItemFormDialogProps) {
+  const { appUser } = useAuth();
   const editingItem = mode === "create" ? null : mode.item;
   const [name, setName] = useState(editingItem?.name ?? "");
   const [category, setCategory] = useState(editingItem?.category ?? "");
@@ -83,7 +85,10 @@ export function ItemFormDialog({ mode, categories, onClose }: ItemFormDialogProp
         await updateItem(editingItem.itemId, input);
         toast.success(`${input.name} updated.`);
       } else {
-        await createItem(input);
+        await createItem(input, {
+          uid: appUser?.uid ?? "",
+          name: appUser?.displayName ?? appUser?.email ?? "Staff",
+        });
         toast.success(`${input.name} added.`);
       }
       onClose();

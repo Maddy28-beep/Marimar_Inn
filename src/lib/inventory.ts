@@ -39,11 +39,17 @@ export interface NewItemInput {
   unlimited?: boolean;
 }
 
-export async function createItem(input: NewItemInput) {
+export interface ItemActor {
+  uid: string;
+  name: string;
+}
+
+export async function createItem(input: NewItemInput, actor: ItemActor) {
   const firestore = requireDb();
   const ref = doc(collection(firestore, "inventory"));
-  const item: Omit<InventoryItem, "lastUpdated"> & {
+  const item: Omit<InventoryItem, "lastUpdated" | "createdAt"> & {
     lastUpdated: ReturnType<typeof serverTimestamp>;
+    createdAt: ReturnType<typeof serverTimestamp>;
   } = {
     itemId: ref.id,
     name: input.name,
@@ -52,6 +58,9 @@ export async function createItem(input: NewItemInput) {
     quantity: input.quantity,
     minStockLevel: input.minStockLevel,
     lastUpdated: serverTimestamp(),
+    createdAt: serverTimestamp(),
+    createdBy: actor.uid,
+    createdByName: actor.name,
     ...(input.unlimited ? { unlimited: true } : {}),
   };
   await setDoc(ref, item);
