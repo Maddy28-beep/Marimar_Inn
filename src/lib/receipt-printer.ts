@@ -1497,7 +1497,10 @@ function dailySalesReceiptEncoder(data: DailySalesReceiptData) {
 
     for (const [roomNumber, roomRows] of rowsByRoom) {
       encoder.line(`Rm ${roomNumber}`);
-      for (const row of roomRows) {
+      roomRows.forEach((row) => {
+        // A blank line before every booking's ref/hours line so each
+        // transaction reads as its own entry instead of one run-on block.
+        encoder.newline();
         // Ref/hours line is bounded by construction: ref numbers are a
         // fixed 9 chars and hours are always 1-2 digits, so this never
         // risks overflowing even 32-char paper.
@@ -1529,7 +1532,7 @@ function dailySalesReceiptEncoder(data: DailySalesReceiptData) {
         if (row.qrphReference) {
           encoder.line(clampLine(`    QRPh: ${row.qrphReference}`, width));
         }
-      }
+      });
       encoder.line(rule);
     }
   }
