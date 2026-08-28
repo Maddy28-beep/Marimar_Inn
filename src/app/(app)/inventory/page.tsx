@@ -12,7 +12,7 @@ import { ItemFormDialog } from "@/components/inventory/item-form-dialog";
 import { CategoryManagerDialog } from "@/components/inventory/category-manager-dialog";
 import { useAuth } from "@/context/auth-context";
 import { isHiddenSuperadminRole, isOwnerLikeRole } from "@/lib/roles";
-import { Loader2Icon, PencilIcon, PlusIcon, TagIcon, Trash2Icon } from "lucide-react";
+import { Loader2Icon, PencilIcon, PlusIcon, SearchIcon, TagIcon, Trash2Icon } from "lucide-react";
 
 type DialogState = "create" | { item: InventoryItem } | null;
 
@@ -64,6 +64,7 @@ function ManageInventoryContent() {
   const [dialog, setDialog] = useState<DialogState>(null);
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => subscribeToInventory(setItems), []);
   useEffect(() => subscribeToCategories(setCategories), []);
@@ -78,6 +79,16 @@ function ManageInventoryContent() {
       return categoryCompare !== 0 ? categoryCompare : a.name.localeCompare(b.name);
     });
   }, [items]);
+
+  const filteredItems = useMemo(() => {
+    if (!sortedItems) return sortedItems;
+    const trimmed = search.trim().toLowerCase();
+    if (!trimmed) return sortedItems;
+    return sortedItems.filter(
+      (item) =>
+        item.name.toLowerCase().includes(trimmed) || item.category.toLowerCase().includes(trimmed)
+    );
+  }, [sortedItems, search]);
 
   async function handleDelete(item: InventoryItem) {
     if (!window.confirm(`Delete ${item.name}? This can't be undone.`)) return;
@@ -117,6 +128,16 @@ function ManageInventoryContent() {
         )}
       </div>
 
+      <div className="relative max-w-sm">
+        <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search items or category"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-8"
+        />
+      </div>
+
       <div className="rounded-xl border">
         <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -131,7 +152,7 @@ function ManageInventoryContent() {
             </tr>
           </thead>
           <tbody>
-            {sortedItems?.map((item) => {
+            {filteredItems?.map((item) => {
               const lowStock = !item.unlimited && item.quantity <= item.minStockLevel;
               return (
                 <tr key={item.itemId} className="border-t">
@@ -197,6 +218,13 @@ function ManageInventoryContent() {
               <tr>
                 <td colSpan={canManage ? 6 : 4} className="px-4 py-8 text-center text-muted-foreground">
                   No inventory items yet — add your first item to get started.
+                </td>
+              </tr>
+            )}
+            {items && items.length > 0 && filteredItems?.length === 0 && (
+              <tr>
+                <td colSpan={canManage ? 6 : 4} className="px-4 py-8 text-center text-muted-foreground">
+                  No items match &ldquo;{search}&rdquo;.
                 </td>
               </tr>
             )}
