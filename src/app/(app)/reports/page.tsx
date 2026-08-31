@@ -571,6 +571,23 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
         qrphCollected: collected?.qrphCollected ?? salesReport.totals.qrphCollected,
         totalPaid: collected?.totalCollected ?? salesReport.totals.totalPaid,
       },
+      otherShiftPayments: transactions.map((t) => {
+        const when = t.timestamp?.toDate?.() ?? null;
+        const parts: string[] = [];
+        if (t.cashAmount > 0) parts.push(`Cash ${peso(t.cashAmount)}`);
+        if (t.gcashAmount > 0) parts.push(`GCash ${peso(t.gcashAmount)}`);
+        if (t.qrphAmount > 0) parts.push(`QRPh ${peso(t.qrphAmount)}`);
+        return {
+          timeLabel: when
+            ? when.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })
+            : "",
+          roomNumber: t.roomNumber,
+          typeLabel: TRANSACTION_TYPE_LABELS[t.type],
+          amount: t.amount,
+          paymentLabel: parts.join(" + "),
+          staffName: visibleStaffName(t.cashierName, t.cashierRole),
+        };
+      }),
       expenses: expenses.map((expense) => {
         const when = expense.recordedAt?.toDate?.() ?? null;
         return {

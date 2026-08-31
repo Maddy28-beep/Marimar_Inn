@@ -1441,6 +1441,19 @@ export interface DailySalesReceiptExpense {
   amount: number;
 }
 
+// A payment collected this shift for a booking whose own row belongs to a
+// *different* shift's report (e.g. an extend/checkout paid tonight for a
+// booking that checked in this morning) — same "Payments from other
+// shifts" data already shown on-screen and in the Excel export.
+export interface DailySalesReceiptOtherShiftPayment {
+  timeLabel: string;
+  roomNumber: string;
+  typeLabel: string;
+  amount: number;
+  paymentLabel: string;
+  staffName: string;
+}
+
 export interface DailySalesReceiptData {
   dateLabel: string;
   frontDesk?: string;
@@ -1448,6 +1461,7 @@ export interface DailySalesReceiptData {
   dutyTime?: string;
   rows: DailySalesReceiptRow[];
   totals: DailySalesReceiptTotals;
+  otherShiftPayments?: DailySalesReceiptOtherShiftPayment[];
   expenses?: DailySalesReceiptExpense[];
 }
 
@@ -1535,6 +1549,20 @@ function dailySalesReceiptEncoder(data: DailySalesReceiptData) {
       });
       encoder.line(rule);
     }
+  }
+
+  if (data.otherShiftPayments && data.otherShiftPayments.length > 0) {
+    encoder.align("center").line("Payments from other shifts").align("left");
+    for (const payment of data.otherShiftPayments) {
+      encoder.newline();
+      encoder.line(`  ${clampLine(`Rm ${payment.roomNumber} ${payment.typeLabel}`, width - 2)}`);
+      encoder.line(twoColumn(`  ${payment.timeLabel}`, money(payment.amount), width));
+      encoder.line(clampLine(`    ${payment.paymentLabel}`, width));
+      if (payment.staffName) {
+        encoder.line(clampLine(`    ${payment.staffName}`, width));
+      }
+    }
+    encoder.line(rule);
   }
 
   const expenseTotal = (data.expenses ?? []).reduce((sum, expense) => sum + expense.amount, 0);
