@@ -1538,8 +1538,11 @@ function dailySalesReceiptEncoder(data: DailySalesReceiptData) {
   }
 
   const expenseTotal = (data.expenses ?? []).reduce((sum, expense) => sum + expense.amount, 0);
-  const overallSale =
-    data.totals.totalRoomAmount + data.totals.totalStoreAmount + (data.totals.amenityAmount ?? 0);
+  // Matches "Total collected" (transaction-based, includes cash collected
+  // this shift for a booking that started in a different one) rather than
+  // recomputing from room+store revenue, which only counts bookings that
+  // *started* this shift — same reasoning as the on-screen Overall Sale.
+  const overallSale = data.totals.totalPaid;
 
   encoder
     .bold(true)

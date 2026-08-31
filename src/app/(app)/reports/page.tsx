@@ -558,7 +558,19 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
         gcashReference: row.gcashReference,
         qrphReference: row.qrphReference,
       })),
-      totals: salesReport.totals,
+      // Room/store/extras/amenity stay row-based (this shift's own revenue),
+      // but cash/gcash/qrph/total collected must come from `collected` — the
+      // same transaction-based figures the on-screen panel uses — or the
+      // print silently drops cross-shift money (an extend/checkout paid
+      // this shift for a booking that started in a different one), same
+      // root cause as the Room 9 Overall Sale bug fixed earlier.
+      totals: {
+        ...salesReport.totals,
+        cashCollected: collected?.cashCollected ?? salesReport.totals.cashCollected,
+        gcashCollected: collected?.gcashCollected ?? salesReport.totals.gcashCollected,
+        qrphCollected: collected?.qrphCollected ?? salesReport.totals.qrphCollected,
+        totalPaid: collected?.totalCollected ?? salesReport.totals.totalPaid,
+      },
       expenses: expenses.map((expense) => {
         const when = expense.recordedAt?.toDate?.() ?? null;
         return {
