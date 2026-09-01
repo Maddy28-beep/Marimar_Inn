@@ -7,7 +7,7 @@ import { hoursElapsed } from "@/lib/bookings";
 import { formatHours } from "@/lib/time";
 import { useAuth } from "@/context/auth-context";
 import { isOwnerLikeRole } from "@/lib/roles";
-import { UserIcon } from "lucide-react";
+import { BedDoubleIcon, BroomIcon, UserIcon, WrenchIcon } from "lucide-react";
 
 const CARD_SHELL =
   "relative flex h-36 w-full flex-col gap-1 overflow-hidden rounded-2xl border p-3 pl-3.5 text-left shadow-sm before:absolute before:inset-y-0 before:left-0 before:w-1.5";
@@ -89,12 +89,31 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
         <span className="font-heading text-xl leading-none font-semibold tracking-tight">
           {room.roomNumber}
         </span>
-        <span
-          className={cn(
-            "mt-1 size-2.5 shrink-0 rounded-full",
-            isCritical || isOverdue ? "bg-red-700 ring-2 ring-red-700/30 dark:bg-red-500" : style.dot
+        <div className="mt-1 flex items-center gap-1">
+          {showBooking && (
+            <BedDoubleIcon
+              className={cn(
+                "size-3.5 shrink-0 animate-bed-sway",
+                isCritical || isOverdue ? "text-red-700 dark:text-red-400" : "text-rose-500/70 dark:text-rose-400/70"
+              )}
+            />
           )}
-        />
+          {room.status === "available" && (
+            <BedDoubleIcon className="size-3.5 shrink-0 text-emerald-600/70 dark:text-emerald-400/70" />
+          )}
+          {room.status === "cleaning" && (
+            <BroomIcon className="size-3.5 shrink-0 animate-broom-sweep text-amber-600/70 dark:text-amber-400/70" />
+          )}
+          {room.status === "maintenance" && (
+            <WrenchIcon className="size-3.5 shrink-0 animate-wrench-turn text-muted-foreground/70" />
+          )}
+          <span
+            className={cn(
+              "size-2.5 shrink-0 rounded-full",
+              isCritical || isOverdue ? "bg-red-700 ring-2 ring-red-700/30 dark:bg-red-500" : style.dot
+            )}
+          />
+        </div>
       </div>
       <div className="flex items-center gap-1.5">
         <span
@@ -149,7 +168,10 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
           )}
         </div>
       ) : room.status === "available" ? (
-        <div className="mt-auto text-sm font-medium text-emerald-800 dark:text-emerald-300">Tap to check in</div>
+        <div className="mt-auto flex items-center gap-1.5 text-sm font-medium text-emerald-800 dark:text-emerald-300">
+          <BedDoubleIcon className="size-4 shrink-0" />
+          Tap to check in
+        </div>
       ) : room.status === "cleaning" ? (
         <div className="mt-auto text-sm font-medium text-amber-800 dark:text-amber-300">Tap when ready</div>
       ) : (
