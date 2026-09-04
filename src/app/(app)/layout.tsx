@@ -12,6 +12,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { PrinterStatus } from "@/components/printer-status";
 import { CashDrawerControl } from "@/components/cash-drawer-control";
+import { OnlineStatus } from "@/components/online-status";
 import { hoursElapsed, EXTEND_OVERDUE_CUTOFF_HOURS } from "@/lib/bookings";
 import { canManageStaff, isOwnerLikeRole, roleLabel } from "@/lib/roles";
 import { FrontDeskProvider, useFrontDesk } from "@/context/front-desk-context";
@@ -240,6 +241,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
           <HeaderClock />
           <Separator orientation="vertical" className="h-5" />
           <div className="flex items-center gap-3">
+            <OnlineStatus />
             <PrinterStatus />
             <CashDrawerControl />
             <NotificationBell />
@@ -259,6 +261,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2 xl:hidden">
+          <OnlineStatus />
           <PrinterStatus />
           <CashDrawerControl />
           <NotificationBell />

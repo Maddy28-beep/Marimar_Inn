@@ -89,7 +89,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const userDoc = await getDoc(doc(firestore, "users", firebaseUser.uid));
+      let userDoc;
+      try {
+        userDoc = await getDoc(doc(firestore, "users", firebaseUser.uid));
+      } catch {
+        // Offline with nothing cached yet for this doc (e.g. a fresh page
+        // load with no network) — getDoc() throws instead of the usual
+        // fromCache:true fallback. Fall back to whatever role/name was
+        // cached from the last successful sign-in on this device rather
+        // than hanging on the loading screen forever. This means a role
+        // change or deactivation made elsewhere won't take effect on this
+        // device until it's back online and gets a fresh read — an
+        // accepted tradeoff for a single-tablet deployment, and it
+        // self-corrects the next time this listener runs with connectivity.
+        const cached = readCachedAppUser();
+        if (cached && cached.uid === firebaseUser.uid) {
+          setAppUser(cached);
+          setLoading(false);
+          return;
+        }
+        setAppUser(null);
+        cacheAppUser(null);
+        setLoading(false);
+        return;
+      }
 
       if (!userDoc.exists()) {
         setAppUser(null);

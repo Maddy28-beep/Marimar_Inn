@@ -26,6 +26,7 @@ import { formatHours } from "@/lib/time";
 import { useNowTick } from "@/hooks/use-now-tick";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
+import { syncNote, useOnlineStatus } from "@/hooks/use-online-status";
 import { useAuth } from "@/context/auth-context";
 import { ReceiptBrandHeader } from "@/components/receipt-brand-header";
 import { ReceiptPreviewStrip } from "@/components/receipt-preview";
@@ -60,6 +61,7 @@ type ExtendMode = "hour" | "package" | "open";
 export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogProps) {
   const now = useNowTick(1000);
   const printer = useReceiptPrinter();
+  const isOnline = useOnlineStatus();
   const { appUser } = useAuth();
   const staffName = appUser?.displayName ?? appUser?.email ?? "Staff";
   const [mode, setMode] = useState<ExtendMode>("hour");
@@ -140,7 +142,7 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
         },
         { uid: appUser.uid, name: staffName, role: appUser.role }
       );
-      toast.success(`Room ${room.roomNumber} extended by ${additionalHours}h.`);
+      toast.success(`Room ${room.roomNumber} extended by ${additionalHours}h.${syncNote(isOnline)}`);
       if (printer.connected) {
         try {
           await kickDrawerForCashPayment(cashCollectedNow(payment, additionalCost));

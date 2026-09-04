@@ -1,6 +1,12 @@
 import { getApps, initializeApp, type FirebaseOptions } from "firebase/app";
 import { getAuth, signOut, type Auth } from "firebase/auth";
-import { getFirestore, type Firestore } from "firebase/firestore";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  type Firestore,
+} from "firebase/firestore";
 
 const firebaseConfig: FirebaseOptions = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -27,7 +33,25 @@ let db: Firestore | null = null;
 if (isFirebaseConfigured) {
   const app = getApps().length ? getApps()[0]! : initializeApp(firebaseConfig);
   auth = getAuth(app);
-  db = getFirestore(app);
+  // Persistent (IndexedDB-backed) offline cache — the front desk runs on a
+  // single tablet with occasional multi-hour internet outages, and needs to
+  // keep checking guests in/out and taking payments through them. This is
+  // what lets every onSnapshot listener keep serving from cache and every
+  // plain write (setDoc/updateDoc/writeBatch) queue locally and flush once
+  // reconnected. persistentMultipleTabManager covers the case where staff
+  // open the app in a second browser tab on the same tablet — not a
+  // multi-device scenario, just cheap insurance.
+  try {
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    });
+  } catch {
+    // initializeFirestore() can only run once per app instance — a dev-mode
+    // hot reload of this module re-executes it against the same already-
+    // initialized app and throws. Fall back to the existing instance rather
+    // than crashing; the persistence config from the first run still stands.
+    db = getFirestore(app);
+  }
 }
 
 export { auth, db };

@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { collectBalance } from "@/lib/bookings";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
+import { syncNote, useOnlineStatus } from "@/hooks/use-online-status";
 import { useAuth } from "@/context/auth-context";
 import {
   printBalancePaymentReceipt,
@@ -47,6 +48,7 @@ interface CollectPaymentDialogProps {
 export function CollectPaymentDialog({ room, booking, balance, onClose }: CollectPaymentDialogProps) {
   const { appUser } = useAuth();
   const printer = useReceiptPrinter();
+  const isOnline = useOnlineStatus();
   const staffName = appUser?.displayName ?? appUser?.email ?? "Staff";
   const [payment, setPayment] = useState<PaymentDraft>(() => ({
     ...emptyPaymentDraft(),
@@ -94,7 +96,7 @@ export function CollectPaymentDialog({ room, booking, balance, onClose }: Collec
         },
         { uid: appUser.uid, name: staffName, role: appUser.role }
       );
-      toast.success(`₱${result.amountCollected.toFixed(2)} collected.`);
+      toast.success(`₱${result.amountCollected.toFixed(2)} collected.${syncNote(isOnline)}`);
       if (printer.connected) {
         try {
           await kickDrawerForCashPayment(cashCollectedNow(payment, balance));

@@ -7,7 +7,6 @@ import {
   setDoc,
   Timestamp,
   where,
-  type Transaction as FirestoreTransaction,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Transaction, TransactionType, UserRole } from "@/lib/types";
@@ -33,15 +32,12 @@ export interface RecordTransactionInput {
 /**
  * Writes one transaction doc — best-effort, doesn't block or roll back the
  * booking write it accompanies (a missing transaction log entry is a minor
- * reporting gap, not worth failing check-in/extend/checkout over). Pass a
- * Firestore transaction `tx` to write atomically alongside a booking write
- * that's itself inside a runTransaction (checkIn); otherwise it's a plain
- * best-effort setDoc.
+ * reporting gap, not worth failing check-in/extend/checkout over). A plain
+ * setDoc rather than part of a Firestore transaction — every caller runs
+ * standalone now (see bookings.ts/orders.ts/store-sales.ts/void-requests.ts,
+ * which all moved off runTransaction so their writes can queue offline).
  */
-export async function recordTransaction(
-  input: RecordTransactionInput,
-  tx?: FirestoreTransaction
-): Promise<void> {
+export async function recordTransaction(input: RecordTransactionInput): Promise<void> {
   if (input.amount <= 0) return;
   const firestore = requireDb();
   const ref = doc(collection(firestore, "transactions"));
@@ -59,10 +55,6 @@ export async function recordTransaction(
     ...(input.cashierRole ? { cashierRole: input.cashierRole } : {}),
     timestamp: serverTimestamp(),
   };
-  if (tx) {
-    tx.set(ref, record);
-    return;
-  }
   try {
     await setDoc(ref, record);
   } catch {

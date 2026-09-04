@@ -24,6 +24,7 @@ import { addOrderToBooking } from "@/lib/bookings";
 import { useAuth } from "@/context/auth-context";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
+import { syncNote, useOnlineStatus } from "@/hooks/use-online-status";
 import {
   printOrderReceipt,
   previewOrderReceipt,
@@ -55,6 +56,7 @@ interface OrderPickerDialogProps {
 export function OrderPickerDialog({ room, booking, onClose }: OrderPickerDialogProps) {
   const { appUser } = useAuth();
   const printer = useReceiptPrinter();
+  const isOnline = useOnlineStatus();
   const staffName = appUser?.displayName ?? appUser?.email ?? "Staff";
   const [inventory, setInventory] = useState<InventoryItem[] | null>(null);
   const [search, setSearch] = useState("");
@@ -143,9 +145,9 @@ export function OrderPickerDialog({ room, booking, onClose }: OrderPickerDialogP
         { uid: appUser.uid, name: staffName, role: appUser.role }
       );
       toast.success(
-        result.amountCollected > 0
+        (result.amountCollected > 0
           ? `Order added and ₱${result.amountCollected.toFixed(2)} collected.`
-          : "Order added."
+          : "Order added.") + syncNote(isOnline)
       );
       if (printer.connected && result.amountCollected > 0) {
         try {

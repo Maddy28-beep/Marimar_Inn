@@ -2,10 +2,10 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   increment,
   onSnapshot,
   query,
-  runTransaction,
   serverTimestamp,
   updateDoc,
   where,
@@ -216,102 +216,104 @@ export async function checkIn(input: CheckInInput) {
   const roomRef = doc(firestore, "rooms", input.roomId);
   const itemRefs = cartItems.map((line) => doc(firestore, "inventory", line.itemId));
 
-  await runTransaction(firestore, async (tx) => {
-    // All reads must happen before any writes in a Firestore transaction.
-    const itemSnaps = await Promise.all(itemRefs.map((ref) => tx.get(ref)));
+  // Plain getDoc (not tx.get) + writeBatch (not runTransaction) — this used
+  // to be one runTransaction, but transactions require a live round-trip
+  // and can't run while offline. getDoc serves cached data offline instead
+  // of failing, and writeBatch queues locally and flushes on reconnect.
+  // Safe to drop the atomicity guarantee here since this app runs on a
+  // single front-desk tablet — there's no concurrent writer to race against.
+  const itemSnaps = await Promise.all(itemRefs.map((ref) => getDoc(ref)));
 
-    const orderItems: OrderItem[] = [
-      ...cartItems.map((line, i) => {
-      const snap = itemSnaps[i];
-      if (!snap.exists()) throw new Error("An item in the order no longer exists.");
-      const data = snap.data() as InventoryItem;
-      if (!data.unlimited && data.quantity < line.quantity) {
-        throw new Error(`Only ${data.quantity} ${data.name} left in stock.`);
-      }
-      return {
-        itemId: line.itemId,
-        name: data.name,
-        unitPrice: data.sellingPrice,
-        quantity: line.quantity,
-        subtotal: line.quantity * data.sellingPrice,
-      };
-      }),
-      ...amenityLineItems(towelCount, blanketCount),
-    ];
-
-    const totalFbCharge = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
-    const totalAmount = totalRoomCharge + totalFbCharge;
-    const initialSplit = methodContribution(input.paymentMethod, input.amountPaid, {
-      cash: input.splitCashAmount,
-      gcash: input.splitGcashAmount,
-      qrph: input.splitQrphAmount,
-    });
-
-    const booking: Omit<Booking, "checkInTime" | "updatedAt"> & {
-      checkInTime: ReturnType<typeof serverTimestamp>;
-      updatedAt: ReturnType<typeof serverTimestamp>;
-    } = {
-      bookingId: bookingRef.id,
-      roomId: input.roomId,
-      roomNumber: input.roomNumber,
-      guestName: input.guestName,
-      checkInTime: serverTimestamp(),
-      hoursBooked: input.packageHours,
-      originalPackageHours: input.packageHours,
-      originalPackagePrice: input.packagePrice,
-      totalRoomCharge,
-      totalFbCharge,
-      totalAmount,
-      amountPaid: input.amountPaid,
-      paymentMethod: input.paymentMethod,
-      // Tracked from the first transaction on, regardless of method, so
-      // later transactions (extend, checkout) always have an accurate
-      // running total to accumulate onto — see paymentBreakdown().
-      splitCashAmount: initialSplit.cash,
-      splitGcashAmount: initialSplit.gcash,
-      splitQrphAmount: initialSplit.qrph,
-      paymentStatus: paymentStatusFor(input.amountPaid, totalAmount),
-      status: "active",
-      items: orderItems,
-      cashierId: input.cashierId,
-      updatedAt: serverTimestamp(),
-      // Optional fields are only included when provided — Firestore rejects
-      // `undefined` values outright.
-      ...(input.guestPhone ? { guestPhone: input.guestPhone } : {}),
-      ...(input.guestCount !== undefined ? { guestCount: input.guestCount } : {}),
-      ...(input.specialRequests ? { specialRequests: input.specialRequests } : {}),
-      ...(input.gcashReference ? { gcashReference: input.gcashReference } : {}),
-      ...(input.qrphReference ? { qrphReference: input.qrphReference } : {}),
-      ...(input.openEnded ? { openEnded: true } : {}),
-      ...(input.cashierName ? { cashierName: input.cashierName } : {}),
-      ...(input.cashierRole ? { cashierRole: input.cashierRole } : {}),
-      ...(extraPersonCount > 0 ? { extraPersonCount } : {}),
-      ...(towelCount > 0 ? { towelCount } : {}),
-      ...(blanketCount > 0 ? { blanketCount } : {}),
+  const orderItems: OrderItem[] = [
+    ...cartItems.map((line, i) => {
+    const snap = itemSnaps[i];
+    if (!snap.exists()) throw new Error("An item in the order no longer exists.");
+    const data = snap.data() as InventoryItem;
+    if (!data.unlimited && data.quantity < line.quantity) {
+      throw new Error(`Only ${data.quantity} ${data.name} left in stock.`);
+    }
+    return {
+      itemId: line.itemId,
+      name: data.name,
+      unitPrice: data.sellingPrice,
+      quantity: line.quantity,
+      subtotal: line.quantity * data.sellingPrice,
     };
+    }),
+    ...amenityLineItems(towelCount, blanketCount),
+  ];
 
-    tx.set(bookingRef, booking);
-    tx.update(roomRef, { status: "occupied", lastUpdated: serverTimestamp() });
-    itemRefs.forEach((ref, i) => {
-      // An unlimited item's quantity is never tracked, so never decrement it.
-      if ((itemSnaps[i].data() as InventoryItem | undefined)?.unlimited) return;
-      tx.update(ref, { quantity: increment(-cartItems[i].quantity), lastUpdated: serverTimestamp() });
-    });
-    await recordTransaction(
-      {
-        type: "checkin",
-        bookingId: bookingRef.id,
-        roomNumber: input.roomNumber,
-        amount: input.amountPaid,
-        cashAmount: initialSplit.cash,
-        gcashAmount: initialSplit.gcash,
-        qrphAmount: initialSplit.qrph,
-        cashierId: input.cashierId,
-        cashierName: input.cashierName ?? "Staff",
-        cashierRole: input.cashierRole,
-      },
-      tx
-    );
+  const totalFbCharge = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
+  const totalAmount = totalRoomCharge + totalFbCharge;
+  const initialSplit = methodContribution(input.paymentMethod, input.amountPaid, {
+    cash: input.splitCashAmount,
+    gcash: input.splitGcashAmount,
+    qrph: input.splitQrphAmount,
+  });
+
+  const booking: Omit<Booking, "checkInTime" | "updatedAt"> & {
+    checkInTime: ReturnType<typeof serverTimestamp>;
+    updatedAt: ReturnType<typeof serverTimestamp>;
+  } = {
+    bookingId: bookingRef.id,
+    roomId: input.roomId,
+    roomNumber: input.roomNumber,
+    guestName: input.guestName,
+    checkInTime: serverTimestamp(),
+    hoursBooked: input.packageHours,
+    originalPackageHours: input.packageHours,
+    originalPackagePrice: input.packagePrice,
+    totalRoomCharge,
+    totalFbCharge,
+    totalAmount,
+    amountPaid: input.amountPaid,
+    paymentMethod: input.paymentMethod,
+    // Tracked from the first transaction on, regardless of method, so
+    // later transactions (extend, checkout) always have an accurate
+    // running total to accumulate onto — see paymentBreakdown().
+    splitCashAmount: initialSplit.cash,
+    splitGcashAmount: initialSplit.gcash,
+    splitQrphAmount: initialSplit.qrph,
+    paymentStatus: paymentStatusFor(input.amountPaid, totalAmount),
+    status: "active",
+    items: orderItems,
+    cashierId: input.cashierId,
+    updatedAt: serverTimestamp(),
+    // Optional fields are only included when provided — Firestore rejects
+    // `undefined` values outright.
+    ...(input.guestPhone ? { guestPhone: input.guestPhone } : {}),
+    ...(input.guestCount !== undefined ? { guestCount: input.guestCount } : {}),
+    ...(input.specialRequests ? { specialRequests: input.specialRequests } : {}),
+    ...(input.gcashReference ? { gcashReference: input.gcashReference } : {}),
+    ...(input.qrphReference ? { qrphReference: input.qrphReference } : {}),
+    ...(input.openEnded ? { openEnded: true } : {}),
+    ...(input.cashierName ? { cashierName: input.cashierName } : {}),
+    ...(input.cashierRole ? { cashierRole: input.cashierRole } : {}),
+    ...(extraPersonCount > 0 ? { extraPersonCount } : {}),
+    ...(towelCount > 0 ? { towelCount } : {}),
+    ...(blanketCount > 0 ? { blanketCount } : {}),
+  };
+
+  const batch = writeBatch(firestore);
+  batch.set(bookingRef, booking);
+  batch.update(roomRef, { status: "occupied", lastUpdated: serverTimestamp() });
+  itemRefs.forEach((ref, i) => {
+    // An unlimited item's quantity is never tracked, so never decrement it.
+    if ((itemSnaps[i].data() as InventoryItem | undefined)?.unlimited) return;
+    batch.update(ref, { quantity: increment(-cartItems[i].quantity), lastUpdated: serverTimestamp() });
+  });
+  await batch.commit();
+  await recordTransaction({
+    type: "checkin",
+    bookingId: bookingRef.id,
+    roomNumber: input.roomNumber,
+    amount: input.amountPaid,
+    cashAmount: initialSplit.cash,
+    gcashAmount: initialSplit.gcash,
+    qrphAmount: initialSplit.qrph,
+    cashierId: input.cashierId,
+    cashierName: input.cashierName ?? "Staff",
+    cashierRole: input.cashierRole,
   });
 
   return bookingRef.id;
@@ -526,96 +528,94 @@ export async function addOrderToBooking(
   let amountCollected = 0;
   const lowStockCandidates: InventoryItem[] = [];
 
-  await runTransaction(firestore, async (tx) => {
-    const bookingSnap = await tx.get(bookingRef);
-    const itemSnaps = await Promise.all(itemRefs.map((ref) => tx.get(ref)));
-    if (!bookingSnap.exists()) throw new Error("Booking not found.");
-    const liveBooking = bookingSnap.data() as Booking;
-    if (liveBooking.status !== "active") throw new Error("This booking is no longer active.");
+  // getDoc + writeBatch (not runTransaction) — see checkIn() for why.
+  const bookingSnap = await getDoc(bookingRef);
+  const itemSnaps = await Promise.all(itemRefs.map((ref) => getDoc(ref)));
+  if (!bookingSnap.exists()) throw new Error("Booking not found.");
+  const liveBooking = bookingSnap.data() as Booking;
+  if (liveBooking.status !== "active") throw new Error("This booking is no longer active.");
 
-    const items = [...(liveBooking.items ?? [])];
-    cartTotal = 0;
-    cartItems.forEach((line, i) => {
-      const snap = itemSnaps[i];
-      if (!snap.exists()) throw new Error("An item in the order no longer exists.");
-      const data = snap.data() as InventoryItem;
-      if (!data.unlimited && data.quantity < line.quantity) {
-        throw new Error(`Only ${data.quantity} ${data.name} left in stock.`);
-      }
-      const subtotal = line.quantity * data.sellingPrice;
-      cartTotal += subtotal;
-      const existingIndex = items.findIndex((existing) => existing.itemId === line.itemId);
-      if (existingIndex >= 0) {
-        const existing = items[existingIndex];
-        const newQuantity = existing.quantity + line.quantity;
-        items[existingIndex] = {
-          ...existing,
-          quantity: newQuantity,
-          subtotal: newQuantity * existing.unitPrice,
-        };
-      } else {
-        items.push({
-          itemId: line.itemId,
-          name: data.name,
-          unitPrice: data.sellingPrice,
-          quantity: line.quantity,
-          subtotal,
-        });
-      }
-      if (!data.unlimited) {
-        lowStockCandidates.push({ ...data, quantity: data.quantity - line.quantity });
-      }
-    });
+  const items = [...(liveBooking.items ?? [])];
+  cartTotal = 0;
+  cartItems.forEach((line, i) => {
+    const snap = itemSnaps[i];
+    if (!snap.exists()) throw new Error("An item in the order no longer exists.");
+    const data = snap.data() as InventoryItem;
+    if (!data.unlimited && data.quantity < line.quantity) {
+      throw new Error(`Only ${data.quantity} ${data.name} left in stock.`);
+    }
+    const subtotal = line.quantity * data.sellingPrice;
+    cartTotal += subtotal;
+    const existingIndex = items.findIndex((existing) => existing.itemId === line.itemId);
+    if (existingIndex >= 0) {
+      const existing = items[existingIndex];
+      const newQuantity = existing.quantity + line.quantity;
+      items[existingIndex] = {
+        ...existing,
+        quantity: newQuantity,
+        subtotal: newQuantity * existing.unitPrice,
+      };
+    } else {
+      items.push({
+        itemId: line.itemId,
+        name: data.name,
+        unitPrice: data.sellingPrice,
+        quantity: line.quantity,
+        subtotal,
+      });
+    }
+    if (!data.unlimited) {
+      lowStockCandidates.push({ ...data, quantity: data.quantity - line.quantity });
+    }
+  });
 
-    const totalFbCharge = items.reduce((sum, item) => sum + item.subtotal, 0);
-    const totalAmount = liveBooking.totalRoomCharge + totalFbCharge;
-    amountCollected = Math.max(0, Math.min(amountPaid, cartTotal));
-    const newAmountPaid = liveBooking.amountPaid + amountCollected;
-    const thisSplit =
-      amountCollected > 0
-        ? methodContribution(payment.paymentMethod, amountCollected, {
-            cash: payment.splitCashAmount,
-            gcash: payment.splitGcashAmount,
-            qrph: payment.splitQrphAmount,
-          })
-        : { cash: 0, gcash: 0, qrph: 0 };
+  const totalFbCharge = items.reduce((sum, item) => sum + item.subtotal, 0);
+  const totalAmount = liveBooking.totalRoomCharge + totalFbCharge;
+  amountCollected = Math.max(0, Math.min(amountPaid, cartTotal));
+  const newAmountPaid = liveBooking.amountPaid + amountCollected;
+  const thisSplit =
+    amountCollected > 0
+      ? methodContribution(payment.paymentMethod, amountCollected, {
+          cash: payment.splitCashAmount,
+          gcash: payment.splitGcashAmount,
+          qrph: payment.splitQrphAmount,
+        })
+      : { cash: 0, gcash: 0, qrph: 0 };
 
-    tx.update(bookingRef, {
-      items,
-      totalFbCharge,
-      totalAmount,
-      amountPaid: newAmountPaid,
-      ...(amountCollected > 0 ? { paymentMethod: payment.paymentMethod } : {}),
-      ...runningSplitUpdates(liveBooking, thisSplit),
-      paymentStatus: paymentStatusFor(newAmountPaid, totalAmount),
-      updatedAt: serverTimestamp(),
-      ...(payment.gcashReference ? { gcashReference: payment.gcashReference } : {}),
-      ...(payment.qrphReference ? { qrphReference: payment.qrphReference } : {}),
-    });
+  const batch = writeBatch(firestore);
+  batch.update(bookingRef, {
+    items,
+    totalFbCharge,
+    totalAmount,
+    amountPaid: newAmountPaid,
+    ...(amountCollected > 0 ? { paymentMethod: payment.paymentMethod } : {}),
+    ...runningSplitUpdates(liveBooking, thisSplit),
+    paymentStatus: paymentStatusFor(newAmountPaid, totalAmount),
+    updatedAt: serverTimestamp(),
+    ...(payment.gcashReference ? { gcashReference: payment.gcashReference } : {}),
+    ...(payment.qrphReference ? { qrphReference: payment.qrphReference } : {}),
+  });
 
-    itemRefs.forEach((ref, i) => {
-      // An unlimited item's quantity is never tracked, so never decrement it.
-      if ((itemSnaps[i].data() as InventoryItem | undefined)?.unlimited) return;
-      tx.update(ref, { quantity: increment(-cartItems[i].quantity), lastUpdated: serverTimestamp() });
-    });
+  itemRefs.forEach((ref, i) => {
+    // An unlimited item's quantity is never tracked, so never decrement it.
+    if ((itemSnaps[i].data() as InventoryItem | undefined)?.unlimited) return;
+    batch.update(ref, { quantity: increment(-cartItems[i].quantity), lastUpdated: serverTimestamp() });
+  });
 
-    resultItems = items;
+  resultItems = items;
 
-    await recordTransaction(
-      {
-        type: "order",
-        bookingId: booking.bookingId,
-        roomNumber: booking.roomNumber,
-        amount: amountCollected,
-        cashAmount: thisSplit.cash,
-        gcashAmount: thisSplit.gcash,
-        qrphAmount: thisSplit.qrph,
-        cashierId: actor.uid,
-        cashierName: actor.name,
-        cashierRole: actor.role,
-      },
-      tx
-    );
+  await batch.commit();
+  await recordTransaction({
+    type: "order",
+    bookingId: booking.bookingId,
+    roomNumber: booking.roomNumber,
+    amount: amountCollected,
+    cashAmount: thisSplit.cash,
+    gcashAmount: thisSplit.gcash,
+    qrphAmount: thisSplit.qrph,
+    cashierId: actor.uid,
+    cashierName: actor.name,
+    cashierRole: actor.role,
   });
 
   await Promise.all(lowStockCandidates.map((item) => syncLowStockNotification(item)));
@@ -643,48 +643,46 @@ export async function collectBalance(
   let balance = 0;
   let amountCollected = 0;
 
-  await runTransaction(firestore, async (tx) => {
-    const bookingSnap = await tx.get(bookingRef);
-    if (!bookingSnap.exists()) throw new Error("Booking not found.");
-    const liveBooking = bookingSnap.data() as Booking;
-    if (liveBooking.status !== "active") throw new Error("This booking is no longer active.");
+  // getDoc + writeBatch (not runTransaction) — see checkIn() for why.
+  const bookingSnap = await getDoc(bookingRef);
+  if (!bookingSnap.exists()) throw new Error("Booking not found.");
+  const liveBooking = bookingSnap.data() as Booking;
+  if (liveBooking.status !== "active") throw new Error("This booking is no longer active.");
 
-    balance = Math.max(0, liveBooking.totalAmount - liveBooking.amountPaid);
-    amountCollected = Math.max(0, Math.min(amountPaid, balance));
-    if (amountCollected <= 0) throw new Error("There's no balance left to collect.");
+  balance = Math.max(0, liveBooking.totalAmount - liveBooking.amountPaid);
+  amountCollected = Math.max(0, Math.min(amountPaid, balance));
+  if (amountCollected <= 0) throw new Error("There's no balance left to collect.");
 
-    const newAmountPaid = liveBooking.amountPaid + amountCollected;
-    const thisSplit = methodContribution(payment.paymentMethod, amountCollected, {
-      cash: payment.splitCashAmount,
-      gcash: payment.splitGcashAmount,
-      qrph: payment.splitQrphAmount,
-    });
+  const newAmountPaid = liveBooking.amountPaid + amountCollected;
+  const thisSplit = methodContribution(payment.paymentMethod, amountCollected, {
+    cash: payment.splitCashAmount,
+    gcash: payment.splitGcashAmount,
+    qrph: payment.splitQrphAmount,
+  });
 
-    tx.update(bookingRef, {
-      amountPaid: newAmountPaid,
-      paymentMethod: payment.paymentMethod,
-      ...runningSplitUpdates(liveBooking, thisSplit),
-      paymentStatus: paymentStatusFor(newAmountPaid, liveBooking.totalAmount),
-      updatedAt: serverTimestamp(),
-      ...(payment.gcashReference ? { gcashReference: payment.gcashReference } : {}),
-      ...(payment.qrphReference ? { qrphReference: payment.qrphReference } : {}),
-    });
+  const batch = writeBatch(firestore);
+  batch.update(bookingRef, {
+    amountPaid: newAmountPaid,
+    paymentMethod: payment.paymentMethod,
+    ...runningSplitUpdates(liveBooking, thisSplit),
+    paymentStatus: paymentStatusFor(newAmountPaid, liveBooking.totalAmount),
+    updatedAt: serverTimestamp(),
+    ...(payment.gcashReference ? { gcashReference: payment.gcashReference } : {}),
+    ...(payment.qrphReference ? { qrphReference: payment.qrphReference } : {}),
+  });
+  await batch.commit();
 
-    await recordTransaction(
-      {
-        type: "payment",
-        bookingId: booking.bookingId,
-        roomNumber: booking.roomNumber,
-        amount: amountCollected,
-        cashAmount: thisSplit.cash,
-        gcashAmount: thisSplit.gcash,
-        qrphAmount: thisSplit.qrph,
-        cashierId: actor.uid,
-        cashierName: actor.name,
-        cashierRole: actor.role,
-      },
-      tx
-    );
+  await recordTransaction({
+    type: "payment",
+    bookingId: booking.bookingId,
+    roomNumber: booking.roomNumber,
+    amount: amountCollected,
+    cashAmount: thisSplit.cash,
+    gcashAmount: thisSplit.gcash,
+    qrphAmount: thisSplit.qrph,
+    cashierId: actor.uid,
+    cashierName: actor.name,
+    cashierRole: actor.role,
   });
 
   return { balance: balance - amountCollected, amountCollected };

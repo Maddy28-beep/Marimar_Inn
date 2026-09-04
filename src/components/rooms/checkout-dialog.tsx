@@ -26,6 +26,7 @@ import { useNowTick } from "@/hooks/use-now-tick";
 import { useAuth } from "@/context/auth-context";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
+import { syncNote, useOnlineStatus } from "@/hooks/use-online-status";
 import { ReceiptBrandHeader } from "@/components/receipt-brand-header";
 import { ReceiptPreviewStrip } from "@/components/receipt-preview";
 import { printThermalReceipt, previewGuestReceipt, printerErrorMessage, referenceNumberFor, kickDrawerForCashPayment, staffFirstName } from "@/lib/receipt-printer";
@@ -52,6 +53,7 @@ export function CheckoutDialog({ room, booking, staffName, cashierId, onClose }:
   const { appUser } = useAuth();
   const now = useNowTick(1000);
   const printer = useReceiptPrinter();
+  const isOnline = useOnlineStatus();
   const [phase, setPhase] = useState<"confirm" | "receipt">("confirm");
   const [payment, setPayment] = useState<PaymentDraft>(emptyPaymentDraft);
   // The original package (e.g. 3h/₱200) is a floor, not something open time
@@ -177,6 +179,12 @@ export function CheckoutDialog({ room, booking, staffName, cashierId, onClose }:
       setSettledBooking(finalBooking);
       setCheckOutTime(new Date());
       setPhase("receipt");
+      // Checkout doesn't normally toast on success — the receipt screen is
+      // the confirmation — but offline that receipt could look identical to
+      // a normal one, so make the "this is queued, not lost" note explicit.
+      if (!isOnline) {
+        toast.success(`Room ${room.roomNumber} checked out.${syncNote(isOnline)}`);
+      }
 
       const cashNow =
         amountCollectedNow > 0 ? cashCollectedNow(payment, balanceBefore) : 0;

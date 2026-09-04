@@ -27,6 +27,7 @@ import { subscribeToRatePackages, updateRoomStatus } from "@/lib/rooms";
 import { subscribeToInventory } from "@/lib/inventory";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
+import { syncNote, useOnlineStatus } from "@/hooks/use-online-status";
 import { useAuth } from "@/context/auth-context";
 import {
   printThermalReceipt,
@@ -110,6 +111,7 @@ interface CheckInDialogProps {
 
 export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) {
   const printer = useReceiptPrinter();
+  const isOnline = useOnlineStatus();
   const { appUser } = useAuth();
   const staffName = appUser?.displayName ?? appUser?.email ?? "Staff";
   const [guestName, setGuestName] = useState("");
@@ -239,7 +241,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
         towelCount: towels || undefined,
         blanketCount: blankets || undefined,
       });
-      toast.success(`Room ${room.roomNumber} checked in.`);
+      toast.success(`Room ${room.roomNumber} checked in.${syncNote(isOnline)}`);
 
       const receiptBooking: Booking = {
         bookingId: newBookingId,

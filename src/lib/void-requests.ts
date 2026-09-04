@@ -1,10 +1,10 @@
 import {
   collection,
   doc,
+  getDoc,
   increment,
   onSnapshot,
   query,
-  runTransaction,
   serverTimestamp,
   updateDoc,
   where,
@@ -189,10 +189,16 @@ async function resolveVoidRequestNotification(voidRequestId: string) {
 }
 
 /**
- * Re-reads the live booking inside the transaction — it may have been
- * checked out (or voided some other way) between the request being filed
- * and the owner approving it. Refuses cleanly rather than corrupting state;
- * the owner should deny the stale request instead.
+ * Re-reads the live booking first — it may have been checked out (or
+ * voided some other way) between the request being filed and the owner
+ * approving it. Refuses cleanly rather than corrupting state; the owner
+ * should deny the stale request instead. getDoc + writeBatch (not
+ * runTransaction) so this can still run offline — the read is served from
+ * cache instead of failing, and the write queues locally. A void request
+ * can sit pending for a while, so this is the one spot in the app where
+ * "last-synced" instead of "guaranteed live" state is most likely to
+ * matter — an accepted tradeoff on a single-tablet deployment with no
+ * concurrent writer to actually race against.
  */
 export async function approveVoidRequest(request: VoidRequest, actor: VoidRequestActor) {
   if (request.target === "order_item") {
@@ -205,23 +211,23 @@ export async function approveVoidRequest(request: VoidRequest, actor: VoidReques
   const bookingRef = doc(firestore, "bookings", request.bookingId);
   const roomRef = doc(firestore, "rooms", request.roomId);
 
-  await runTransaction(firestore, async (tx) => {
-    const bookingSnap = await tx.get(bookingRef);
-    if (!bookingSnap.exists() || (bookingSnap.data() as Booking).status !== "active") {
-      throw new Error(
-        "This booking was already checked out or voided — deny this request instead."
-      );
-    }
+  const bookingSnap = await getDoc(bookingRef);
+  if (!bookingSnap.exists() || (bookingSnap.data() as Booking).status !== "active") {
+    throw new Error(
+      "This booking was already checked out or voided — deny this request instead."
+    );
+  }
 
-    tx.update(bookingRef, { status: "voided", updatedAt: serverTimestamp() });
-    tx.update(roomRef, { status: "available", lastUpdated: serverTimestamp() });
-    tx.update(requestRef, {
-      status: "approved",
-      resolvedBy: actor.uid,
-      resolvedByName: actor.name,
-      resolvedAt: serverTimestamp(),
-    });
+  const batch = writeBatch(firestore);
+  batch.update(bookingRef, { status: "voided", updatedAt: serverTimestamp() });
+  batch.update(roomRef, { status: "available", lastUpdated: serverTimestamp() });
+  batch.update(requestRef, {
+    status: "approved",
+    resolvedBy: actor.uid,
+    resolvedByName: actor.name,
+    resolvedAt: serverTimestamp(),
   });
+  await batch.commit();
 
   await resolveVoidRequestNotification(request.voidRequestId);
   try {
@@ -249,49 +255,50 @@ async function approveOrderItemVoidRequest(request: VoidRequest, actor: VoidRequ
   const itemRef = doc(firestore, "inventory", itemId);
   let resultingItem: InventoryItem | null = null;
 
-  await runTransaction(firestore, async (tx) => {
-    const [bookingSnap, itemSnap] = await Promise.all([tx.get(bookingRef), tx.get(itemRef)]);
-    if (!bookingSnap.exists() || (bookingSnap.data() as Booking).status !== "active") {
-      throw new Error(
-        "This booking was already checked out or voided — deny this request instead."
-      );
-    }
+  // getDoc + writeBatch (not runTransaction) — see approveVoidRequest() above.
+  const [bookingSnap, itemSnap] = await Promise.all([getDoc(bookingRef), getDoc(itemRef)]);
+  if (!bookingSnap.exists() || (bookingSnap.data() as Booking).status !== "active") {
+    throw new Error(
+      "This booking was already checked out or voided — deny this request instead."
+    );
+  }
 
-    const booking = bookingSnap.data() as Booking;
-    const existing = (booking.items ?? []).find((line) => line.itemId === itemId);
-    if (!existing) {
-      throw new Error("That item is no longer on the booking — deny this request instead.");
-    }
+  const booking = bookingSnap.data() as Booking;
+  const existing = (booking.items ?? []).find((line) => line.itemId === itemId);
+  if (!existing) {
+    throw new Error("That item is no longer on the booking — deny this request instead.");
+  }
 
-    const items = (booking.items ?? []).filter((line) => line.itemId !== itemId);
-    const totalFbCharge = items.reduce((sum, item) => sum + item.subtotal, 0);
-    const totalAmount = booking.totalRoomCharge + totalFbCharge;
-    const isUnlimited = itemSnap.exists() && (itemSnap.data() as InventoryItem).unlimited;
+  const items = (booking.items ?? []).filter((line) => line.itemId !== itemId);
+  const totalFbCharge = items.reduce((sum, item) => sum + item.subtotal, 0);
+  const totalAmount = booking.totalRoomCharge + totalFbCharge;
+  const isUnlimited = itemSnap.exists() && (itemSnap.data() as InventoryItem).unlimited;
 
-    if (!isUnlimited) {
-      tx.update(itemRef, {
-        quantity: increment(existing.quantity),
-        lastUpdated: serverTimestamp(),
-      });
-    }
-    tx.update(bookingRef, {
-      items,
-      totalFbCharge,
-      totalAmount,
-      updatedAt: serverTimestamp(),
+  const batch = writeBatch(firestore);
+  if (!isUnlimited) {
+    batch.update(itemRef, {
+      quantity: increment(existing.quantity),
+      lastUpdated: serverTimestamp(),
     });
-    tx.update(requestRef, {
-      status: "approved",
-      resolvedBy: actor.uid,
-      resolvedByName: actor.name,
-      resolvedAt: serverTimestamp(),
-    });
-
-    if (itemSnap.exists()) {
-      const item = itemSnap.data() as InventoryItem;
-      resultingItem = { ...item, quantity: item.quantity + existing.quantity };
-    }
+  }
+  batch.update(bookingRef, {
+    items,
+    totalFbCharge,
+    totalAmount,
+    updatedAt: serverTimestamp(),
   });
+  batch.update(requestRef, {
+    status: "approved",
+    resolvedBy: actor.uid,
+    resolvedByName: actor.name,
+    resolvedAt: serverTimestamp(),
+  });
+  await batch.commit();
+
+  if (itemSnap.exists()) {
+    const item = itemSnap.data() as InventoryItem;
+    resultingItem = { ...item, quantity: item.quantity + existing.quantity };
+  }
 
   if (resultingItem) await syncLowStockNotification(resultingItem);
   await resolveVoidRequestNotification(request.voidRequestId);

@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { approveVoidRequest, denyVoidRequest } from "@/lib/void-requests";
 import { useAuth } from "@/context/auth-context";
+import { syncNote, useOnlineStatus } from "@/hooks/use-online-status";
 import { visibleStaffName } from "@/lib/roles";
 import type { VoidRequest } from "@/lib/types";
 import { Loader2Icon } from "lucide-react";
@@ -34,6 +35,7 @@ interface VoidRequestReviewDialogProps {
 
 export function VoidRequestReviewDialog({ requests, onClose }: VoidRequestReviewDialogProps) {
   const { appUser } = useAuth();
+  const isOnline = useOnlineStatus();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [denyingId, setDenyingId] = useState<string | null>(null);
   const [denyNote, setDenyNote] = useState("");
@@ -51,7 +53,11 @@ export function VoidRequestReviewDialog({ requests, onClose }: VoidRequestReview
         uid: appUser.uid,
         name: appUser.displayName ?? appUser.email ?? "Owner",
       });
-      toast.success(isOrderItem ? `${request.itemName} removed from Room ${request.roomNumber}'s order.` : `Room ${request.roomNumber} voided.`);
+      toast.success(
+        (isOrderItem
+          ? `${request.itemName} removed from Room ${request.roomNumber}'s order.`
+          : `Room ${request.roomNumber} voided.`) + syncNote(isOnline)
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't approve the void request.");
     } finally {

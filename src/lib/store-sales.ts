@@ -1,13 +1,14 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   increment,
   query,
-  runTransaction,
   serverTimestamp,
   Timestamp,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { methodContribution } from "@/lib/bookings";
@@ -45,55 +46,60 @@ export async function createStoreSale(input: StoreSaleInput): Promise<StoreSale>
   let items: OrderItem[] = [];
   let totalAmount = 0;
 
-  await runTransaction(firestore, async (tx) => {
-    const snaps = await Promise.all(itemRefs.map((ref) => tx.get(ref)));
-    items = [];
-    totalAmount = 0;
+  // getDoc + writeBatch (not runTransaction) — transactions require a live
+  // round-trip and can't run offline; getDoc serves cached data offline
+  // instead of failing, and writeBatch queues locally and flushes on
+  // reconnect. Safe to drop the atomicity guarantee here since this app
+  // runs on a single front-desk tablet — no concurrent writer to race.
+  const snaps = await Promise.all(itemRefs.map((ref) => getDoc(ref)));
+  items = [];
+  totalAmount = 0;
 
-    for (let i = 0; i < cartItems.length; i++) {
-      const snap = snaps[i];
-      if (!snap.exists()) throw new Error("An item is missing from inventory.");
-      const item = snap.data() as InventoryItem;
-      const quantity = cartItems[i].quantity;
-      if (!item.unlimited && item.quantity < quantity) {
-        throw new Error(`Only ${item.quantity} ${item.name} left in stock.`);
-      }
-      items.push({
-        itemId: item.itemId,
-        name: item.name,
-        unitPrice: item.sellingPrice,
-        quantity,
-        subtotal: quantity * item.sellingPrice,
-      });
-      totalAmount += quantity * item.sellingPrice;
-      if (!item.unlimited) {
-        tx.update(itemRefs[i], {
-          quantity: increment(-quantity),
-          lastUpdated: serverTimestamp(),
-        });
-        lowStock.push({ ...item, quantity: item.quantity - quantity });
-      }
+  const batch = writeBatch(firestore);
+  for (let i = 0; i < cartItems.length; i++) {
+    const snap = snaps[i];
+    if (!snap.exists()) throw new Error("An item is missing from inventory.");
+    const item = snap.data() as InventoryItem;
+    const quantity = cartItems[i].quantity;
+    if (!item.unlimited && item.quantity < quantity) {
+      throw new Error(`Only ${item.quantity} ${item.name} left in stock.`);
     }
+    items.push({
+      itemId: item.itemId,
+      name: item.name,
+      unitPrice: item.sellingPrice,
+      quantity,
+      subtotal: quantity * item.sellingPrice,
+    });
+    totalAmount += quantity * item.sellingPrice;
+    if (!item.unlimited) {
+      batch.update(itemRefs[i], {
+        quantity: increment(-quantity),
+        lastUpdated: serverTimestamp(),
+      });
+      lowStock.push({ ...item, quantity: item.quantity - quantity });
+    }
+  }
 
-    const sale: Omit<StoreSale, "soldAt"> & { soldAt: ReturnType<typeof serverTimestamp> } = {
-      saleId: saleRef.id,
-      soldAt: serverTimestamp(),
-      guestName: input.guestName?.trim() || "Walk-in",
-      items,
-      totalAmount,
-      amountPaid: input.amountPaid,
-      paymentMethod: input.paymentMethod,
-      cashierId: input.cashierId,
-      cashierName: input.cashierName,
-      ...(input.cashierRole ? { cashierRole: input.cashierRole } : {}),
-      ...(input.gcashReference ? { gcashReference: input.gcashReference } : {}),
-      ...(input.qrphReference ? { qrphReference: input.qrphReference } : {}),
-      ...(input.splitCashAmount !== undefined ? { splitCashAmount: input.splitCashAmount } : {}),
-      ...(input.splitGcashAmount !== undefined ? { splitGcashAmount: input.splitGcashAmount } : {}),
-      ...(input.splitQrphAmount !== undefined ? { splitQrphAmount: input.splitQrphAmount } : {}),
-    };
-    tx.set(saleRef, sale);
-  });
+  const sale: Omit<StoreSale, "soldAt"> & { soldAt: ReturnType<typeof serverTimestamp> } = {
+    saleId: saleRef.id,
+    soldAt: serverTimestamp(),
+    guestName: input.guestName?.trim() || "Walk-in",
+    items,
+    totalAmount,
+    amountPaid: input.amountPaid,
+    paymentMethod: input.paymentMethod,
+    cashierId: input.cashierId,
+    cashierName: input.cashierName,
+    ...(input.cashierRole ? { cashierRole: input.cashierRole } : {}),
+    ...(input.gcashReference ? { gcashReference: input.gcashReference } : {}),
+    ...(input.qrphReference ? { qrphReference: input.qrphReference } : {}),
+    ...(input.splitCashAmount !== undefined ? { splitCashAmount: input.splitCashAmount } : {}),
+    ...(input.splitGcashAmount !== undefined ? { splitGcashAmount: input.splitGcashAmount } : {}),
+    ...(input.splitQrphAmount !== undefined ? { splitQrphAmount: input.splitQrphAmount } : {}),
+  };
+  batch.set(saleRef, sale);
+  await batch.commit();
 
   await Promise.all(lowStock.map((item) => syncLowStockNotification(item)));
 
