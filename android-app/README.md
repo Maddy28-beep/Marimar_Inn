@@ -25,7 +25,8 @@ Each printer-app update is a **new file**, never overwrite:
 - `D:\Downloads\MarimarInn-tablet-v7.apk` — cash drawer kick stays on one Bluetooth connection
 - `D:\Downloads\MarimarInn-tablet-v8.apk` — keep the printer socket open so print and drawer do not drop on every job
 - `D:\Downloads\MarimarInn-tablet-v9.apk` — cache the site and connect the printer in the background so the tablet stays responsive
-- Next change will be `v10`, and so on
+- `android-app/releases/MarimarInn-tablet-v10.apk` — survives offline reloads: the app shell (and any page already visited) now loads from a saved copy instead of showing "Webpage not available" when the tablet loses signal and the app has to reload; also auto-retries a failed load every 2s instead of getting stuck
+- Next change will be `v11`, and so on
 
 Install the **highest** version number. Allow Nearby devices when Android asks.
 
