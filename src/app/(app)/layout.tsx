@@ -211,22 +211,27 @@ function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between gap-2 border-b bg-card px-3 py-2 sm:px-4 xl:px-6 xl:py-3">
-        <div className="flex min-w-0 items-center gap-2 xl:gap-4">
+        {/* overflow-hidden is a deliberate safety net: nav links use
+            whitespace-nowrap and don't wrap, so if this row is ever too
+            narrow for its content (a new header item added, a tighter
+            tablet viewport), the excess clips here instead of spilling
+            out and overlapping the clock/status icons to the right. */}
+        <div className="flex min-w-0 items-center gap-2 overflow-hidden xl:gap-3">
           <Link href="/dashboard" className="shrink-0">
             <BrandLogo className="h-9 w-auto sm:h-10 xl:h-12" />
           </Link>
           {appUser && (
-            <Badge variant="secondary" className="capitalize">
+            <Badge variant="secondary" className="shrink-0 capitalize">
               {roleLabel(appUser.role)}
             </Badge>
           )}
-          <nav className="hidden items-center gap-1 xl:flex">
+          <nav className="hidden min-w-0 items-center gap-1 xl:flex">
             {visibleLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  "flex items-center gap-1 whitespace-nowrap rounded-md px-2.5 py-1 text-sm font-medium text-muted-foreground hover:text-foreground",
+                  "flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-sm font-medium text-muted-foreground hover:text-foreground",
                   pathname === link.href && "bg-muted text-foreground"
                 )}
               >
@@ -237,10 +242,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
 
-        <div className="hidden items-center gap-3 xl:flex">
+        <div className="hidden shrink-0 items-center gap-2 xl:flex">
           <HeaderClock />
           <Separator orientation="vertical" className="h-5" />
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <OnlineStatus />
             <PrinterStatus />
             <CashDrawerControl />

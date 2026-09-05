@@ -29,10 +29,13 @@ export function OnlineStatus() {
   }, [isOnline]);
 
   if (isOnline) {
+    // Icon-only — the header is tight for room and the online case is the
+    // common, unremarkable one. "Offline" below stays spelled out since
+    // that's the rare state where a cashier needs it to be unmissable.
     return (
-      <Badge variant="secondary" className="gap-1 text-muted-foreground">
+      <Badge variant="secondary" className="text-muted-foreground" title="Online">
         <WifiIcon className="size-3.5" />
-        <span className="hidden sm:inline">Online</span>
+        <span className="sr-only">Online</span>
       </Badge>
     );
   }
