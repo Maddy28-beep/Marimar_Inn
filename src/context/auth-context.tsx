@@ -69,8 +69,27 @@ function cacheAppUser(appUser: AppUser | null) {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [appUser, setAppUser] = useState<AppUser | null>(() => readCachedAppUser());
+  // Starts null (not readCachedAppUser()) even though a cached value is
+  // usually available on the client — reading sessionStorage synchronously
+  // during the initial render mismatches the server/static-export prerender
+  // (no window there, always null) against a returning signed-in user's
+  // first client render (a real cached user), which is a guaranteed React
+  // hydration error, not just a rare edge case. Restored a tick later
+  // instead, in the effect below, which only ever runs client-side.
+  const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(() => Boolean(auth && db));
+
+  useEffect(() => {
+    // Deliberately not a lazy useState initializer (the usual fix for this
+    // lint rule) — that would read sessionStorage during the initial render
+    // again, reintroducing the exact hydration mismatch this effect exists
+    // to avoid. Reading it here instead, right after mount, is the standard
+    // React-recommended pattern for browser-storage state that must differ
+    // from the server-rendered value.
+    const cached = readCachedAppUser();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (cached) setAppUser(cached);
+  }, []);
 
   useEffect(() => {
     if (!auth || !db) {
