@@ -123,10 +123,15 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
           />
         </div>
       </div>
-      <div className="flex items-center gap-1.5">
+      {/* gap-1 + px-1 (not the more typical gap-1.5/px-1.5) — on an
+          iPad-Mini-width screen this card only has ~40px next to the status
+          pill, and "Standard" needs every one of those pixels or it clips
+          to "Stand…". Verified via a live width/truncation check before
+          landing on this exact spacing. */}
+      <div className="flex items-center gap-1">
         <span
           className={cn(
-            "rounded-full px-1.5 py-0.5 text-[10px] font-bold tracking-wide uppercase",
+            "rounded-full px-1 py-0.5 text-[10px] font-bold tracking-wide uppercase",
             isCritical || isOverdue
               ? "bg-red-700/20 text-red-800 dark:text-red-300"
               : style.pill
