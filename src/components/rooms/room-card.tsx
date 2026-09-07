@@ -9,8 +9,14 @@ import { useAuth } from "@/context/auth-context";
 import { isOwnerLikeRole } from "@/lib/roles";
 import { BedDoubleIcon, BroomIcon, UserIcon, WrenchIcon } from "lucide-react";
 
+// Glassmorphism shell: a translucent, blurred panel (backdrop-blur +
+// backdrop-saturate) with a soft inset highlight ring standing in for a
+// glass edge, and a diffuse shadow that lifts slightly further on hover —
+// the per-status color still reads through the tinted background plus the
+// left accent bar/dot/pill below, so the glass treatment doesn't wash out
+// the at-a-glance status signal.
 const CARD_SHELL =
-  "relative flex h-36 w-full flex-col gap-1 overflow-hidden rounded-2xl border p-3 pl-3.5 text-left shadow-sm before:absolute before:inset-y-0 before:left-0 before:w-1.5";
+  "relative flex h-36 w-full flex-col gap-1 overflow-hidden rounded-2xl border p-3 pl-3.5 text-left shadow-lg shadow-black/5 backdrop-blur-md backdrop-saturate-150 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl dark:shadow-black/20 dark:ring-white/10 before:absolute before:inset-y-0 before:left-0 before:w-1.5";
 
 const STATUS_STYLES: Record<RoomStatus, { label: string; card: string; dot: string; pill: string }> = {
   available: {
@@ -33,7 +39,9 @@ const STATUS_STYLES: Record<RoomStatus, { label: string; card: string; dot: stri
   },
   maintenance: {
     label: "Maintenance",
-    card: "border-muted-foreground/25 bg-muted before:bg-muted-foreground/70",
+    // Was a fully opaque bg-muted — translucent now so it picks up the
+    // same backdrop-blur glass effect as every other status.
+    card: "border-muted-foreground/25 bg-muted-foreground/10 before:bg-muted-foreground/70",
     dot: "bg-muted-foreground",
     pill: "bg-muted-foreground/15 text-muted-foreground",
   },

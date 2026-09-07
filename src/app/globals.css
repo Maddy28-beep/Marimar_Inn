@@ -117,6 +117,27 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/*
+ * Soft decorative backdrop for the room grid — deliberately violet/teal
+ * (not green/red/amber) so it can never be mistaken for a room-status
+ * color. Exists purely so the glass cards (backdrop-blur) have something
+ * to actually blur; without it the frosted-glass effect is invisible
+ * against a flat page background.
+ */
+.room-grid-surface {
+  background:
+    radial-gradient(circle at 12% 15%, oklch(0.75 0.12 290 / 18%), transparent 42%),
+    radial-gradient(circle at 88% 12%, oklch(0.8 0.12 200 / 16%), transparent 42%),
+    radial-gradient(circle at 50% 95%, oklch(0.78 0.1 320 / 14%), transparent 48%);
+}
+
+.dark .room-grid-surface {
+  background:
+    radial-gradient(circle at 12% 15%, oklch(0.45 0.14 290 / 30%), transparent 42%),
+    radial-gradient(circle at 88% 12%, oklch(0.5 0.14 200 / 26%), transparent 42%),
+    radial-gradient(circle at 50% 95%, oklch(0.48 0.12 320 / 24%), transparent 48%);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

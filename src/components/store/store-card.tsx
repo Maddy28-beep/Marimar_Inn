@@ -8,7 +8,7 @@ export function StoreCard({ onClick }: { onClick: () => void }) {
       type="button"
       onClick={onClick}
       className={cn(
-        "relative flex h-36 w-full flex-col gap-1 overflow-hidden rounded-2xl border p-3 pl-3.5 text-left shadow-sm before:absolute before:inset-y-0 before:left-0 before:w-1.5",
+        "relative flex h-36 w-full flex-col gap-1 overflow-hidden rounded-2xl border p-3 pl-3.5 text-left shadow-lg shadow-black/5 backdrop-blur-md backdrop-saturate-150 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl dark:shadow-black/20 dark:ring-white/10 before:absolute before:inset-y-0 before:left-0 before:w-1.5",
         "border-sky-500/30 bg-sky-500/10 before:bg-sky-500"
       )}
     >
