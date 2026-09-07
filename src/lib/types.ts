@@ -172,7 +172,7 @@ export interface InventoryItem {
   createdByRole?: UserRole;
 }
 
-export type NotificationType = "checkout_reminder" | "low_stock" | "void_request";
+export type NotificationType = "checkout_reminder" | "low_stock" | "void_request" | "stock_request";
 
 export interface AppNotification {
   notificationId: string;
@@ -184,9 +184,36 @@ export interface AppNotification {
   itemName?: string;
   bookingId?: string;
   voidRequestId?: string;
+  stockRequestId?: string;
   createdAt: Timestamp;
   resolved: boolean;
   readBy: string[];
+}
+
+export type StockRequestStatus = "pending" | "approved" | "denied";
+
+/**
+ * A cashier-filed "add stock" request — inventory quantity only actually
+ * increases once an owner/admin approves it (see approveStockRequest()).
+ * itemName/category are snapshotted at request time so the review UI still
+ * reads correctly even if the item is later renamed or recategorized.
+ */
+export interface StockRequest {
+  stockRequestId: string;
+  itemId: string;
+  itemName: string;
+  category: string;
+  quantity: number;
+  reason?: string;
+  status: StockRequestStatus;
+  requestedBy: string;
+  requestedByName: string;
+  requestedByRole?: UserRole;
+  requestedAt: Timestamp;
+  resolvedBy?: string;
+  resolvedByName?: string;
+  resolvedAt?: Timestamp;
+  resolutionNote?: string;
 }
 
 export const ROOM_TYPE_LABELS: Record<RoomType, string> = {

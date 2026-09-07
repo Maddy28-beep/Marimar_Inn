@@ -277,6 +277,41 @@ service cloud.firestore {
     }
 
     // ============================================
+    // STOCK REQUESTS (cashier-requested "add stock", owner approval —
+    // inventory quantity only changes once approved, see approveStockRequest())
+    // ============================================
+    match /stockRequests/{stockRequestId} {
+      allow read: if isAuthenticated();
+
+      allow create: if isStaff() &&
+        request.resource.data.keys().hasOnly([
+          'stockRequestId', 'itemId', 'itemName', 'category', 'quantity',
+          'reason', 'status', 'requestedBy', 'requestedByName', 'requestedByRole', 'requestedAt'
+        ]) &&
+        request.resource.data.stockRequestId == stockRequestId &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.requestedBy == request.auth.uid &&
+        request.resource.data.quantity is number &&
+        request.resource.data.quantity > 0 &&
+        (!('reason' in request.resource.data) ||
+          (request.resource.data.reason is string && request.resource.data.reason.size() <= 300));
+
+      // Only owner/admin resolve — pending -> approved/denied only, resolver
+      // must be the caller, and nothing else about the original request can
+      // be rewritten (keeps this an honest audit trail). The matching
+      // inventory quantity update is a separate write, covered by the
+      // inventory collection's own rules above.
+      allow update: if isOwnerOrAdmin() &&
+        resource.data.status == 'pending' &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'resolvedBy', 'resolvedByName', 'resolvedAt', 'resolutionNote']) &&
+        request.resource.data.status in ['approved', 'denied'] &&
+        request.resource.data.resolvedBy == request.auth.uid;
+
+      allow delete: if false; // durable audit trail
+    }
+
+    // ============================================
     // SHIFT EXPENSES (cash taken from the drawer)
     // ============================================
     match /shiftExpenses/{expenseId} {

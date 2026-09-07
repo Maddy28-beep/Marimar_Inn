@@ -46,6 +46,16 @@ export function canManageStaff(role: UserRole | null | undefined): boolean {
   return role === "owner" || role === "admin" || role === "superadmin";
 }
 
+/**
+ * Stock-request approve/deny — same narrowing as canApproveVoid(). Not
+ * needed for Supervisor's own restocking (isOwnerLikeRole() already gives
+ * them direct restock access on the Inventory page), only for reviewing a
+ * cashier's request.
+ */
+export function canApproveStockRequest(role: UserRole | null | undefined): boolean {
+  return role === "owner" || role === "admin" || role === "superadmin";
+}
+
 export function roleLabel(role: UserRole): string {
   return ROLE_LABELS[role];
 }

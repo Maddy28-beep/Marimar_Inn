@@ -12,8 +12,9 @@ import { useAuth } from "@/context/auth-context";
 import { useFrontDesk } from "@/context/front-desk-context";
 import { subscribeToNotifications, markAsRead, markAllAsRead } from "@/lib/notifications";
 import { playOverdueAlarm } from "@/lib/alarm";
-import { canApproveVoid } from "@/lib/roles";
+import { canApproveVoid, canApproveStockRequest } from "@/lib/roles";
 import { VoidRequestReviewDialog } from "@/components/notifications/void-request-review-dialog";
+import { StockRequestReviewDialog } from "@/components/notifications/stock-request-review-dialog";
 import type { AppNotification } from "@/lib/types";
 import { BellIcon, CheckIcon, Volume2Icon } from "lucide-react";
 
@@ -28,10 +29,11 @@ function timeAgo(date: Date, now: Date): string {
 
 export function NotificationBell() {
   const { appUser } = useAuth();
-  const { pendingVoidRequestsByBookingId } = useFrontDesk();
+  const { pendingVoidRequestsByBookingId, pendingStockRequests } = useFrontDesk();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [now, setNow] = useState(() => new Date());
   const [voidReviewOpen, setVoidReviewOpen] = useState(false);
+  const [stockReviewOpen, setStockReviewOpen] = useState(false);
 
   useEffect(() => subscribeToNotifications(setNotifications), []);
 
@@ -44,6 +46,7 @@ export function NotificationBell() {
 
   const unread = notifications.filter((n) => !n.readBy.includes(appUser.uid));
   const canReviewVoidRequests = canApproveVoid(appUser.role);
+  const canReviewStockRequests = canApproveStockRequest(appUser.role);
   const pendingVoidRequests = Array.from(pendingVoidRequestsByBookingId.values())
     .flat()
     .sort((a, b) => (a.requestedAt?.toMillis() ?? 0) - (b.requestedAt?.toMillis() ?? 0));
@@ -96,6 +99,22 @@ export function NotificationBell() {
               size="xs"
               className="shrink-0 text-amber-700 dark:text-amber-400"
               onClick={() => setVoidReviewOpen(true)}
+            >
+              Review
+            </Button>
+          </div>
+        )}
+        {canReviewStockRequests && pendingStockRequests.length > 0 && (
+          <div className="flex items-center justify-between gap-2 border-b bg-amber-500/10 px-3 py-2">
+            <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+              {pendingStockRequests.length} stock request{pendingStockRequests.length > 1 ? "s" : ""}{" "}
+              awaiting approval
+            </span>
+            <Button
+              variant="outline"
+              size="xs"
+              className="shrink-0 text-amber-700 dark:text-amber-400"
+              onClick={() => setStockReviewOpen(true)}
             >
               Review
             </Button>
@@ -157,6 +176,12 @@ export function NotificationBell() {
       <VoidRequestReviewDialog
         requests={pendingVoidRequests}
         onClose={() => setVoidReviewOpen(false)}
+      />
+    )}
+    {stockReviewOpen && (
+      <StockRequestReviewDialog
+        requests={pendingStockRequests}
+        onClose={() => setStockReviewOpen(false)}
       />
     )}
     </>

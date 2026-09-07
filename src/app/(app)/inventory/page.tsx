@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { subscribeToInventory, subscribeToCategories, deleteItem, restockItem } from "@/lib/inventory";
+import { createStockRequest } from "@/lib/stock-requests";
 import type { InventoryCategory, InventoryItem } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +13,8 @@ import { ItemFormDialog } from "@/components/inventory/item-form-dialog";
 import { CategoryManagerDialog } from "@/components/inventory/category-manager-dialog";
 import { useAuth } from "@/context/auth-context";
 import { isHiddenSuperadminRole, isOwnerLikeRole } from "@/lib/roles";
-import { Loader2Icon, PencilIcon, PlusIcon, SearchIcon, TagIcon, Trash2Icon } from "lucide-react";
+import { useOnlineStatus, syncNote } from "@/hooks/use-online-status";
+import { Loader2Icon, PencilIcon, PlusIcon, SearchIcon, SendIcon, TagIcon, Trash2Icon } from "lucide-react";
 
 type DialogState = "create" | { item: InventoryItem } | null;
 
@@ -51,6 +53,60 @@ function RestockControl({ item }: { item: InventoryItem }) {
       />
       <Button variant="outline" size="sm" onClick={handleRestock} disabled={submitting}>
         {submitting ? <Loader2Icon className="size-3.5 animate-spin" /> : "Add"}
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * Cashier-facing counterpart to RestockControl above — doesn't touch stock
+ * itself, just files a request the owner has to approve before quantity
+ * actually changes (see stock-requests.ts).
+ */
+function RequestStockControl({ item }: { item: InventoryItem }) {
+  const { appUser } = useAuth();
+  const isOnline = useOnlineStatus();
+  const [amount, setAmount] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleRequest() {
+    if (!appUser) return;
+    const add = Number(amount);
+    if (!add || add <= 0) {
+      toast.error("Enter a quantity to add.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await createStockRequest({
+        item,
+        quantity: add,
+        requestedBy: appUser.uid,
+        requestedByName: appUser.displayName ?? appUser.email ?? "Cashier",
+        ...(appUser.role ? { requestedByRole: appUser.role } : {}),
+      });
+      toast.success(`Request sent — waiting for owner approval.` + syncNote(isOnline));
+      setAmount("");
+    } catch {
+      toast.error("Couldn't send the request — please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        type="number"
+        min={1}
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        disabled={submitting}
+        placeholder="+ qty"
+        className="h-7 w-20"
+      />
+      <Button variant="outline" size="sm" onClick={handleRequest} disabled={submitting}>
+        {submitting ? <Loader2Icon className="size-3.5 animate-spin" /> : <SendIcon className="size-3.5" />}
       </Button>
     </div>
   );
@@ -111,7 +167,7 @@ function ManageInventoryContent() {
           <p className="text-sm text-muted-foreground">
             {canManage
               ? "Manage the store item catalog, prices, and stock levels."
-              : "Check current stock levels against the actual inventory."}
+              : "Check current stock levels, or request stock — an owner approves it before it's added."}
           </p>
         </div>
         {canManage && (
@@ -148,6 +204,7 @@ function ManageInventoryContent() {
               <th className="px-4 py-2 font-medium">Price</th>
               <th className="px-4 py-2 font-medium">Stock</th>
               {canManage && <th className="px-4 py-2 font-medium">Restock</th>}
+              {!canManage && <th className="px-4 py-2 font-medium">Request stock</th>}
               {canManage && <th className="px-4 py-2" />}
             </tr>
           </thead>
@@ -194,6 +251,15 @@ function ManageInventoryContent() {
                       )}
                     </td>
                   )}
+                  {!canManage && (
+                    <td className="px-4 py-2">
+                      {item.unlimited ? (
+                        <span className="text-xs text-muted-foreground">Not tracked</span>
+                      ) : (
+                        <RequestStockControl item={item} />
+                      )}
+                    </td>
+                  )}
                   {canManage && (
                     <td className="px-4 py-2 text-right">
                       <div className="flex justify-end gap-1">
@@ -216,14 +282,14 @@ function ManageInventoryContent() {
             })}
             {items?.length === 0 && (
               <tr>
-                <td colSpan={canManage ? 6 : 4} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={canManage ? 6 : 5} className="px-4 py-8 text-center text-muted-foreground">
                   No inventory items yet — add your first item to get started.
                 </td>
               </tr>
             )}
             {items && items.length > 0 && filteredItems?.length === 0 && (
               <tr>
-                <td colSpan={canManage ? 6 : 4} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={canManage ? 6 : 5} className="px-4 py-8 text-center text-muted-foreground">
                   No items match &ldquo;{search}&rdquo;.
                 </td>
               </tr>
