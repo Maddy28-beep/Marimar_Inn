@@ -123,12 +123,16 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
           />
         </div>
       </div>
-      {/* gap-1 + px-1 (not the more typical gap-1.5/px-1.5) — on an
-          iPad-Mini-width screen this card only has ~40px next to the status
-          pill, and "Standard" needs every one of those pixels or it clips
-          to "Stand…". Verified via a live width/truncation check before
-          landing on this exact spacing. */}
-      <div className="flex items-center gap-1">
+      {/* gap-0.5 + px-1, and the room type matched down to the pill's own
+          text-[10px] — on an iPad-Mini-width card (~111px inside the
+          padding) "Standard" next to the actual deployed Geist font still
+          didn't fit at text-xs (12px): measured -5px short even with a
+          milder gap-1 tightening tried first. Confirmed against the real
+          font file from the build output, not a generic system font, before
+          landing here — ~2.8px of real margin on the tightest row
+          ("AVAILABLE", the widest status label), not an exact-fit knife
+          edge. */}
+      <div className="flex items-center gap-0.5">
         <span
           className={cn(
             "rounded-full px-1 py-0.5 text-[10px] font-bold tracking-wide uppercase",
@@ -139,7 +143,7 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
         >
           {style.label}
         </span>
-        <span className="truncate text-xs text-muted-foreground">{ROOM_TYPE_LABELS[room.type]}</span>
+        <span className="truncate text-[10px] text-muted-foreground">{ROOM_TYPE_LABELS[room.type]}</span>
       </div>
 
       {showBooking ? (
