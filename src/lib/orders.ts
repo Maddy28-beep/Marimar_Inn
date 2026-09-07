@@ -2,6 +2,7 @@ import { doc, getDoc, increment, serverTimestamp, writeBatch } from "firebase/fi
 import { db } from "@/lib/firebase";
 import type { Booking, InventoryItem, OrderItem } from "@/lib/types";
 import { syncLowStockNotification } from "@/lib/notifications";
+import { stockUnitsFor } from "@/lib/inventory";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -32,14 +33,16 @@ export async function removeOrderItem(bookingId: string, itemId: string) {
   if (existing) {
     const items = (booking.items ?? []).filter((line) => line.itemId !== itemId);
     const { totalFbCharge, totalAmount } = recalcTotals(items, booking.totalRoomCharge);
-    const isUnlimited = itemSnap.exists() && (itemSnap.data() as InventoryItem).unlimited;
+    const inventoryItem = itemSnap.exists() ? (itemSnap.data() as InventoryItem) : null;
+    const isUnlimited = inventoryItem?.unlimited ?? false;
+    const restoreBy = inventoryItem ? stockUnitsFor(inventoryItem, existing.quantity) : existing.quantity;
 
     const batch = writeBatch(firestore);
     // An unlimited item was never decremented when ordered, so removing it
     // shouldn't restore anything either.
     if (!isUnlimited) {
       batch.update(itemRef, {
-        quantity: increment(existing.quantity),
+        quantity: increment(restoreBy),
         lastUpdated: serverTimestamp(),
       });
     }
@@ -51,9 +54,8 @@ export async function removeOrderItem(bookingId: string, itemId: string) {
     });
     await batch.commit();
 
-    if (itemSnap.exists()) {
-      const item = itemSnap.data() as InventoryItem;
-      resultingItem = { ...item, quantity: item.quantity + existing.quantity };
+    if (inventoryItem) {
+      resultingItem = { ...inventoryItem, quantity: inventoryItem.quantity + restoreBy };
     }
   }
 

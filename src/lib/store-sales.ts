@@ -13,6 +13,7 @@ import {
 import { db } from "@/lib/firebase";
 import { methodContribution } from "@/lib/bookings";
 import { syncLowStockNotification } from "@/lib/notifications";
+import { stockUnitsFor } from "@/lib/inventory";
 import type { InventoryItem, OrderItem, PaymentMethod, StoreSale, UserRole } from "@/lib/types";
 
 function requireDb() {
@@ -61,7 +62,8 @@ export async function createStoreSale(input: StoreSaleInput): Promise<StoreSale>
     if (!snap.exists()) throw new Error("An item is missing from inventory.");
     const item = snap.data() as InventoryItem;
     const quantity = cartItems[i].quantity;
-    if (!item.unlimited && item.quantity < quantity) {
+    const stockNeeded = stockUnitsFor(item, quantity);
+    if (!item.unlimited && item.quantity < stockNeeded) {
       throw new Error(`Only ${item.quantity} ${item.name} left in stock.`);
     }
     items.push({
@@ -74,10 +76,10 @@ export async function createStoreSale(input: StoreSaleInput): Promise<StoreSale>
     totalAmount += quantity * item.sellingPrice;
     if (!item.unlimited) {
       batch.update(itemRefs[i], {
-        quantity: increment(-quantity),
+        quantity: increment(-stockNeeded),
         lastUpdated: serverTimestamp(),
       });
-      lowStock.push({ ...item, quantity: item.quantity - quantity });
+      lowStock.push({ ...item, quantity: item.quantity - stockNeeded });
     }
   }
 

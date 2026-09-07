@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { subscribeToInventory } from "@/lib/inventory";
+import { subscribeToInventory, sellableUnits } from "@/lib/inventory";
 import { addOrderToBooking } from "@/lib/bookings";
 import { useAuth } from "@/context/auth-context";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
@@ -112,7 +112,7 @@ export function OrderPickerDialog({ room, booking, onClose }: OrderPickerDialogP
   function adjustCart(item: InventoryItem, delta: number) {
     setCart((prev) => {
       const current = prev[item.itemId] ?? 0;
-      const cap = item.unlimited ? Infinity : item.quantity;
+      const cap = item.unlimited ? Infinity : sellableUnits(item);
       const next = Math.max(0, Math.min(cap, current + delta));
       return { ...prev, [item.itemId]: next };
     });
@@ -350,7 +350,7 @@ export function OrderPickerDialog({ room, booking, onClose }: OrderPickerDialogP
             )}
             {filtered.map((item) => {
               const qty = cart[item.itemId] ?? 0;
-              const outOfStock = !item.unlimited && item.quantity <= 0;
+              const outOfStock = !item.unlimited && sellableUnits(item) <= 0;
               const lowStock = !item.unlimited && !outOfStock && item.quantity <= item.minStockLevel;
               return (
                 <div
@@ -393,7 +393,7 @@ export function OrderPickerDialog({ room, booking, onClose }: OrderPickerDialogP
                       variant="outline"
                       size="icon-sm"
                       onClick={() => adjustCart(item, 1)}
-                      disabled={(!item.unlimited && qty >= item.quantity) || submitting}
+                      disabled={(!item.unlimited && qty >= sellableUnits(item)) || submitting}
                     >
                       <PlusIcon className="size-3.5" />
                     </Button>

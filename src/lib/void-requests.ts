@@ -13,6 +13,7 @@ import {
 import { db } from "@/lib/firebase";
 import type { AppNotification, Booking, InventoryItem, OrderItem, UserRole, VoidRequest } from "@/lib/types";
 import { resolveCheckoutReminder, syncLowStockNotification } from "@/lib/notifications";
+import { stockUnitsFor } from "@/lib/inventory";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -272,12 +273,14 @@ async function approveOrderItemVoidRequest(request: VoidRequest, actor: VoidRequ
   const items = (booking.items ?? []).filter((line) => line.itemId !== itemId);
   const totalFbCharge = items.reduce((sum, item) => sum + item.subtotal, 0);
   const totalAmount = booking.totalRoomCharge + totalFbCharge;
-  const isUnlimited = itemSnap.exists() && (itemSnap.data() as InventoryItem).unlimited;
+  const inventoryItem = itemSnap.exists() ? (itemSnap.data() as InventoryItem) : null;
+  const isUnlimited = inventoryItem?.unlimited ?? false;
+  const restoreBy = inventoryItem ? stockUnitsFor(inventoryItem, existing.quantity) : existing.quantity;
 
   const batch = writeBatch(firestore);
   if (!isUnlimited) {
     batch.update(itemRef, {
-      quantity: increment(existing.quantity),
+      quantity: increment(restoreBy),
       lastUpdated: serverTimestamp(),
     });
   }
@@ -295,9 +298,8 @@ async function approveOrderItemVoidRequest(request: VoidRequest, actor: VoidRequ
   });
   await batch.commit();
 
-  if (itemSnap.exists()) {
-    const item = itemSnap.data() as InventoryItem;
-    resultingItem = { ...item, quantity: item.quantity + existing.quantity };
+  if (inventoryItem) {
+    resultingItem = { ...inventoryItem, quantity: inventoryItem.quantity + restoreBy };
   }
 
   if (resultingItem) await syncLowStockNotification(resultingItem);

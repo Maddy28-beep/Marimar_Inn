@@ -164,6 +164,12 @@ export interface InventoryItem {
   // low stock, never decremented when ordered, and quantity/minStockLevel
   // are ignored everywhere this is true.
   unlimited?: boolean;
+  // For an item sold as a fixed bundle — e.g. "Candy (3 pcs)" is one ₱5
+  // order line but consumes 3 individual pieces of physical stock. Absent
+  // or 1 means the normal 1:1 case. Ignored when unlimited. See
+  // stockUnitsFor()/sellableUnits() in lib/inventory.ts — every stock
+  // decrement/restore/cap goes through those instead of raw quantity math.
+  piecesPerSale?: number;
   lastUpdated: Timestamp;
   // Absent on items created before this was tracked.
   createdAt?: Timestamp;

@@ -43,6 +43,7 @@ export function ItemFormDialog({ mode, categories, onClose }: ItemFormDialogProp
   const [quantity, setQuantity] = useState(String(editingItem?.quantity ?? "0"));
   const [minStockLevel, setMinStockLevel] = useState(String(editingItem?.minStockLevel ?? "5"));
   const [unlimited, setUnlimited] = useState(editingItem?.unlimited ?? false);
+  const [piecesPerSale, setPiecesPerSale] = useState(String(editingItem?.piecesPerSale ?? "1"));
   const [submitting, setSubmitting] = useState(false);
 
   // The item being edited might carry a category that predates the
@@ -77,6 +78,7 @@ export function ItemFormDialog({ mode, categories, onClose }: ItemFormDialogProp
       quantity: Number(quantity) || 0,
       minStockLevel: Number(minStockLevel) || 0,
       unlimited,
+      piecesPerSale: Number(piecesPerSale) || 1,
     };
 
     setSubmitting(true);
@@ -191,6 +193,25 @@ export function ItemFormDialog({ mode, categories, onClose }: ItemFormDialogProp
               </div>
             )}
           </div>
+          {!unlimited && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="piecesPerSale">Pieces used per sale</Label>
+              <Input
+                id="piecesPerSale"
+                type="number"
+                min={1}
+                value={piecesPerSale}
+                onChange={(e) => setPiecesPerSale(e.target.value)}
+                disabled={submitting}
+                className="max-w-32"
+              />
+              <span className="text-xs text-muted-foreground">
+                Leave at 1 for normal items. Set to 3 for something like &ldquo;Candy (3 pcs)&rdquo; sold as
+                one order but taking 3 individual pieces out of stock — Quantity above should then be
+                the number of loose pieces, not bundles.
+              </span>
+            </div>
+          )}
           <label className="flex items-start gap-2 rounded-lg border p-3 text-sm">
             <input
               type="checkbox"

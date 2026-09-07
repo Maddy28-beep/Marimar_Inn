@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { subscribeToInventory } from "@/lib/inventory";
+import { subscribeToInventory, sellableUnits } from "@/lib/inventory";
 import { createStoreSale } from "@/lib/store-sales";
 import { methodContribution } from "@/lib/bookings";
 import { useAuth } from "@/context/auth-context";
@@ -100,7 +100,7 @@ export function WalkInSaleDialog({ onClose }: WalkInSaleDialogProps) {
   function adjustCart(item: InventoryItem, delta: number) {
     setCart((prev) => {
       const current = prev[item.itemId] ?? 0;
-      const cap = item.unlimited ? Infinity : item.quantity;
+      const cap = item.unlimited ? Infinity : sellableUnits(item);
       const next = Math.max(0, Math.min(cap, current + delta));
       return { ...prev, [item.itemId]: next };
     });
@@ -292,7 +292,7 @@ export function WalkInSaleDialog({ onClose }: WalkInSaleDialogProps) {
                 )}
                 {filtered.map((item) => {
                   const qty = cart[item.itemId] ?? 0;
-                  const outOfStock = !item.unlimited && item.quantity <= 0;
+                  const outOfStock = !item.unlimited && sellableUnits(item) <= 0;
                   return (
                     <div key={item.itemId} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm">
                       <div className="min-w-0 flex-1">
@@ -322,7 +322,7 @@ export function WalkInSaleDialog({ onClose }: WalkInSaleDialogProps) {
                           variant="outline"
                           size="icon-sm"
                           onClick={() => adjustCart(item, 1)}
-                          disabled={outOfStock || (!item.unlimited && qty >= item.quantity) || submitting}
+                          disabled={outOfStock || (!item.unlimited && qty >= sellableUnits(item)) || submitting}
                         >
                           <PlusIcon className="size-3.5" />
                         </Button>

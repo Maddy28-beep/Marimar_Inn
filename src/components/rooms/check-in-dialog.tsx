@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { checkIn, methodContribution, OPEN_TIME_RATE_PER_HOUR } from "@/lib/bookings";
 import { subscribeToRatePackages, updateRoomStatus } from "@/lib/rooms";
-import { subscribeToInventory } from "@/lib/inventory";
+import { subscribeToInventory, sellableUnits } from "@/lib/inventory";
 import { useReceiptPrinter } from "@/hooks/use-receipt-printer";
 import { useSubmitGuard } from "@/hooks/use-submit-guard";
 import { syncNote, useOnlineStatus } from "@/hooks/use-online-status";
@@ -170,7 +170,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
   function adjustCart(item: InventoryItem, delta: number) {
     setCart((prev) => {
       const current = prev[item.itemId] ?? 0;
-      const cap = item.unlimited ? Infinity : item.quantity;
+      const cap = item.unlimited ? Infinity : sellableUnits(item);
       const next = Math.max(0, Math.min(cap, current + delta));
       return { ...prev, [item.itemId]: next };
     });
@@ -585,7 +585,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
                 )}
                 {filteredInventory.map((item) => {
                   const qty = cart[item.itemId] ?? 0;
-                  const outOfStock = !item.unlimited && item.quantity <= 0;
+                  const outOfStock = !item.unlimited && sellableUnits(item) <= 0;
                   return (
                     <div
                       key={item.itemId}
@@ -618,7 +618,7 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
                             variant="outline"
                             size="icon-xs"
                             onClick={() => adjustCart(item, 1)}
-                            disabled={(!item.unlimited && qty >= item.quantity) || submitting}
+                            disabled={(!item.unlimited && qty >= sellableUnits(item)) || submitting}
                           >
                             <PlusIcon className="size-3" />
                           </Button>

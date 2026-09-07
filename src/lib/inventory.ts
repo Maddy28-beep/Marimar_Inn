@@ -37,6 +37,24 @@ export interface NewItemInput {
   quantity: number;
   minStockLevel: number;
   unlimited?: boolean;
+  piecesPerSale?: number;
+}
+
+/** Raw stock units consumed by selling `count` order-lines of this item. */
+export function stockUnitsFor(
+  item: Pick<InventoryItem, "piecesPerSale">,
+  count: number
+): number {
+  return count * (item.piecesPerSale ?? 1);
+}
+
+/**
+ * How many order-lines of this item current stock can still cover — e.g. 2
+ * pieces left of a 3-pieces-per-sale item is 0 sellable, not "some". Used
+ * everywhere a picker caps how much a cashier can add to a cart.
+ */
+export function sellableUnits(item: Pick<InventoryItem, "quantity" | "piecesPerSale">): number {
+  return Math.floor(item.quantity / (item.piecesPerSale ?? 1));
 }
 
 export interface ItemActor {
@@ -64,6 +82,7 @@ export async function createItem(input: NewItemInput, actor: ItemActor) {
     createdByName: actor.name,
     ...(actor.role ? { createdByRole: actor.role } : {}),
     ...(input.unlimited ? { unlimited: true } : {}),
+    ...(input.piecesPerSale && input.piecesPerSale > 1 ? { piecesPerSale: input.piecesPerSale } : {}),
   };
   await setDoc(ref, item);
   await syncLowStockNotification(item);
@@ -80,8 +99,10 @@ export async function updateItem(itemId: string, input: NewItemInput) {
     lastUpdated: serverTimestamp(),
     // Always written (not conditionally spread) so unchecking "Always
     // available" on an existing item actually clears the flag instead of
-    // leaving the old value in place.
+    // leaving the old value in place. Same reasoning for piecesPerSale —
+    // resetting it back to 1 must actually overwrite a previous bundle size.
     unlimited: input.unlimited ?? false,
+    piecesPerSale: input.piecesPerSale && input.piecesPerSale > 1 ? input.piecesPerSale : 1,
   });
   await syncLowStockNotification({
     itemId,

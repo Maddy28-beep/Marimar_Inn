@@ -23,6 +23,7 @@ import {
 import { hoursElapsed } from "@/lib/time";
 import { resolveCheckoutReminder, syncLowStockNotification } from "@/lib/notifications";
 import { recordTransaction } from "@/lib/transactions";
+import { stockUnitsFor } from "@/lib/inventory";
 
 export { hoursElapsed };
 
@@ -229,7 +230,7 @@ export async function checkIn(input: CheckInInput) {
     const snap = itemSnaps[i];
     if (!snap.exists()) throw new Error("An item in the order no longer exists.");
     const data = snap.data() as InventoryItem;
-    if (!data.unlimited && data.quantity < line.quantity) {
+    if (!data.unlimited && data.quantity < stockUnitsFor(data, line.quantity)) {
       throw new Error(`Only ${data.quantity} ${data.name} left in stock.`);
     }
     return {
@@ -298,9 +299,11 @@ export async function checkIn(input: CheckInInput) {
   batch.set(bookingRef, booking);
   batch.update(roomRef, { status: "occupied", lastUpdated: serverTimestamp() });
   itemRefs.forEach((ref, i) => {
+    const itemData = itemSnaps[i].data() as InventoryItem | undefined;
     // An unlimited item's quantity is never tracked, so never decrement it.
-    if ((itemSnaps[i].data() as InventoryItem | undefined)?.unlimited) return;
-    batch.update(ref, { quantity: increment(-cartItems[i].quantity), lastUpdated: serverTimestamp() });
+    if (itemData?.unlimited) return;
+    const decrementBy = itemData ? stockUnitsFor(itemData, cartItems[i].quantity) : cartItems[i].quantity;
+    batch.update(ref, { quantity: increment(-decrementBy), lastUpdated: serverTimestamp() });
   });
   await batch.commit();
   await recordTransaction({
@@ -541,7 +544,7 @@ export async function addOrderToBooking(
     const snap = itemSnaps[i];
     if (!snap.exists()) throw new Error("An item in the order no longer exists.");
     const data = snap.data() as InventoryItem;
-    if (!data.unlimited && data.quantity < line.quantity) {
+    if (!data.unlimited && data.quantity < stockUnitsFor(data, line.quantity)) {
       throw new Error(`Only ${data.quantity} ${data.name} left in stock.`);
     }
     const subtotal = line.quantity * data.sellingPrice;
@@ -565,7 +568,7 @@ export async function addOrderToBooking(
       });
     }
     if (!data.unlimited) {
-      lowStockCandidates.push({ ...data, quantity: data.quantity - line.quantity });
+      lowStockCandidates.push({ ...data, quantity: data.quantity - stockUnitsFor(data, line.quantity) });
     }
   });
 
@@ -597,9 +600,11 @@ export async function addOrderToBooking(
   });
 
   itemRefs.forEach((ref, i) => {
+    const itemData = itemSnaps[i].data() as InventoryItem | undefined;
     // An unlimited item's quantity is never tracked, so never decrement it.
-    if ((itemSnaps[i].data() as InventoryItem | undefined)?.unlimited) return;
-    batch.update(ref, { quantity: increment(-cartItems[i].quantity), lastUpdated: serverTimestamp() });
+    if (itemData?.unlimited) return;
+    const decrementBy = itemData ? stockUnitsFor(itemData, cartItems[i].quantity) : cartItems[i].quantity;
+    batch.update(ref, { quantity: increment(-decrementBy), lastUpdated: serverTimestamp() });
   });
 
   resultItems = items;
