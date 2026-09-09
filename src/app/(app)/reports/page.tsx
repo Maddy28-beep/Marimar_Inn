@@ -1719,6 +1719,12 @@ function OverdueReportTab() {
                     <th className="py-1 font-medium">Check-in</th>
                     <th className="py-1 font-medium">Booked until</th>
                     <th className="py-1 font-medium">Checked out</th>
+                    {/* Who was on duty when the overdue room finally got
+                        resolved (or, if still ongoing, who's on duty right
+                        now) — the guest can be checked in by one shift and
+                        run overdue well into the next, so this is who
+                        actually let it sit that long, not who started it. */}
+                    <th className="py-1 font-medium">Shift</th>
                     <th className="py-1 font-medium">Checked in by</th>
                     <th className="py-1 font-medium">Overdue by</th>
                     <th className="py-1 font-medium">Status</th>
@@ -1738,6 +1744,9 @@ function OverdueReportTab() {
                           {record.actualCheckOutTime
                             ? formatOverdueDateTime(record.actualCheckOutTime)
                             : "—"}
+                        </td>
+                        <td className="py-1.5">
+                          {shiftLabelForTime(record.actualCheckOutTime ?? now)}
                         </td>
                         <td className="py-1.5 text-muted-foreground">
                           {visibleStaffName(record.cashierName, record.cashierRole) || "—"}
