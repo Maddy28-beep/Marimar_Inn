@@ -1624,6 +1624,20 @@ function InventoryReportTab() {
   );
 }
 
+// This report spans a whole month, unlike the Daily Sales report where a
+// shared subtitle already carries the date — a bare time here ("5:11 AM")
+// gives the Owner no way to tell which day, and therefore which cashier's
+// shift, it happened on. Each row gets its own date since check-in and
+// checkout can even land on different calendar days.
+function formatOverdueDateTime(d: Date): string {
+  return d.toLocaleString("en-PH", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function OverdueReportTab() {
   const now = useNowTick(30_000);
   // Monthly, not per-day — checking overdue history one day at a time meant
@@ -1705,6 +1719,7 @@ function OverdueReportTab() {
                     <th className="py-1 font-medium">Check-in</th>
                     <th className="py-1 font-medium">Booked until</th>
                     <th className="py-1 font-medium">Checked out</th>
+                    <th className="py-1 font-medium">Checked in by</th>
                     <th className="py-1 font-medium">Overdue by</th>
                     <th className="py-1 font-medium">Status</th>
                   </tr>
@@ -1717,12 +1732,15 @@ function OverdueReportTab() {
                       <tr key={record.bookingId} className="border-t">
                         <td className="py-1.5 font-medium">{record.roomNumber}</td>
                         <td className="py-1.5">{record.guestName}</td>
-                        <td className="py-1.5">{record.checkInTime.toLocaleTimeString("en-PH")}</td>
-                        <td className="py-1.5">{record.bookedUntil.toLocaleTimeString("en-PH")}</td>
+                        <td className="py-1.5">{formatOverdueDateTime(record.checkInTime)}</td>
+                        <td className="py-1.5">{formatOverdueDateTime(record.bookedUntil)}</td>
                         <td className="py-1.5">
                           {record.actualCheckOutTime
-                            ? record.actualCheckOutTime.toLocaleTimeString("en-PH")
+                            ? formatOverdueDateTime(record.actualCheckOutTime)
                             : "—"}
+                        </td>
+                        <td className="py-1.5 text-muted-foreground">
+                          {visibleStaffName(record.cashierName, record.cashierRole) || "—"}
                         </td>
                         <td className="py-1.5 font-semibold text-rose-600 dark:text-rose-400">
                           {formatHours(record.overdueByHours)}

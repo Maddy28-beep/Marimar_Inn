@@ -464,6 +464,11 @@ export interface OverdueRecord {
   actualCheckOutTime: Date | null;
   overdueByHours: number;
   stillOngoing: boolean;
+  // Who checked the guest in — this report spans a whole month, so date
+  // alone still leaves the Owner guessing which cashier's shift it was;
+  // this answers that directly instead.
+  cashierName?: string;
+  cashierRole?: UserRole;
 }
 
 /**
@@ -497,6 +502,8 @@ export function computeOverdueHistory(bookings: Booking[], now: Date): OverdueRe
       actualCheckOutTime,
       overdueByHours,
       stillOngoing: booking.status === "active",
+      cashierName: booking.cashierName,
+      cashierRole: booking.cashierRole,
     });
   }
 
