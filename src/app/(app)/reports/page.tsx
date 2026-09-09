@@ -1638,6 +1638,23 @@ function formatOverdueDateTime(d: Date): string {
   });
 }
 
+/**
+ * "Day shift, Sep 8" / "Night shift, Sep 8" — bare "Day"/"Night" is fine
+ * for Day shift (its date always matches the clock), but Night shift runs
+ * 7pm through 7am the *next* calendar day, so a 2am checkout needs to be
+ * attributed to the evening-before's date, not its own — same shift-owning
+ * date the Daily Sales report's own night-shift range uses.
+ */
+function formatCallOutShift(d: Date): string {
+  const isNight = shiftLabelForTime(d) === "Night";
+  const label = isNight ? "Night shift" : "Day shift";
+  const shiftDate = new Date(d);
+  if (isNight && d.getHours() < 7) {
+    shiftDate.setDate(shiftDate.getDate() - 1);
+  }
+  return `${label}, ${shiftDate.toLocaleDateString("en-PH", { month: "short", day: "numeric" })}`;
+}
+
 function OverdueReportTab() {
   const now = useNowTick(30_000);
   // Monthly, not per-day — checking overdue history one day at a time meant
@@ -1724,7 +1741,7 @@ function OverdueReportTab() {
                         now) — the guest can be checked in by one shift and
                         run overdue well into the next, so this is who
                         actually let it sit that long, not who started it. */}
-                    <th className="py-1 font-medium">Shift</th>
+                    <th className="py-1 font-medium">Call out</th>
                     <th className="py-1 font-medium">Checked in by</th>
                     <th className="py-1 font-medium">Overdue by</th>
                     <th className="py-1 font-medium">Status</th>
@@ -1745,8 +1762,8 @@ function OverdueReportTab() {
                             ? formatOverdueDateTime(record.actualCheckOutTime)
                             : "—"}
                         </td>
-                        <td className="py-1.5">
-                          {shiftLabelForTime(record.actualCheckOutTime ?? now)}
+                        <td className="py-1.5 whitespace-nowrap">
+                          {formatCallOutShift(record.actualCheckOutTime ?? now)}
                         </td>
                         <td className="py-1.5 text-muted-foreground">
                           {visibleStaffName(record.cashierName, record.cashierRole) || "—"}
