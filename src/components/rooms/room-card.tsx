@@ -101,7 +101,7 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
           {showBooking && (
             <BedDoubleIcon
               className={cn(
-                "size-3.5 shrink-0 animate-bed-sway",
+                "size-4.5 shrink-0 animate-bed-sway",
                 isCritical || isOverdue ? "text-red-700 dark:text-red-400" : "text-rose-500/70 dark:text-rose-400/70"
               )}
             />
@@ -110,10 +110,10 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
             <BedDoubleIcon className="size-3.5 shrink-0 text-emerald-600/70 dark:text-emerald-400/70" />
           )}
           {room.status === "cleaning" && (
-            <BroomIcon className="size-3.5 shrink-0 animate-broom-sweep text-amber-600/70 dark:text-amber-400/70" />
+            <BroomIcon className="size-4.5 shrink-0 animate-broom-sweep text-amber-600/70 dark:text-amber-400/70" />
           )}
           {room.status === "maintenance" && (
-            <WrenchIcon className="size-3.5 shrink-0 animate-wrench-turn text-muted-foreground/70" />
+            <WrenchIcon className="size-4.5 shrink-0 animate-wrench-turn text-muted-foreground/70" />
           )}
           <span
             className={cn(
