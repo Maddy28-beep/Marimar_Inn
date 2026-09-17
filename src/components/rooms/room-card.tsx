@@ -7,43 +7,74 @@ import { hoursElapsed } from "@/lib/bookings";
 import { formatHours } from "@/lib/time";
 import { useAuth } from "@/context/auth-context";
 import { isOwnerLikeRole } from "@/lib/roles";
-import { BedDoubleIcon, BroomIcon, UserIcon, WrenchIcon } from "lucide-react";
+import { BedDoubleIcon, BroomIcon, CheckCircle2Icon, ClockIcon, WrenchIcon } from "lucide-react";
 
-// Glassmorphism shell: a translucent, blurred panel (backdrop-blur +
-// backdrop-saturate) with a soft inset highlight ring standing in for a
-// glass edge, and a diffuse shadow that lifts slightly further on hover —
-// the per-status color still reads through the tinted background plus the
-// left accent bar/dot/pill below, so the glass treatment doesn't wash out
-// the at-a-glance status signal.
+// One shared photo for every room (all rooms are Standard for now) —
+// pre-resized/compressed to ~70KB (was a 2.3MB source) since it's loaded
+// on every card and this app runs on a tablet over an occasionally slow
+// connection.
+const ROOM_PHOTO_SRC = "/logo/room.jpg";
+
+// Every card is the exact same fixed height, not sized to its own content —
+// a room with a guest, a balance due, and a countdown must look identical
+// in size to an empty Available card, so the grid stays perfectly aligned
+// no matter what's actually happening in each room. flex-col + the flex-1
+// middle wrapper below (not this card growing) is what keeps the footer
+// pinned to the same place across every status.
+//
+// h-72, not h-80 — the guest name moved up onto the room-number line
+// (see below), which freed a whole line's worth of height that used to
+// go toward the "center a short Available/Cleaning/Maintenance message"
+// treatment. Re-verified the worst case (Occupied + balance due, longest
+// possible content) still fits with room to spare at this height.
+//
+// No separate action button anymore — the whole card is already a real
+// <button> (native keyboard focus + Enter/Space activation, no extra work
+// needed for that part). group is for the room-number hover/focus tint
+// below; the visible focus-visible ring is the polished keyboard-only
+// affordance the boxed button used to provide implicitly.
 const CARD_SHELL =
-  "relative flex h-36 w-full flex-col gap-1 overflow-hidden rounded-2xl border p-3 pl-3.5 text-left shadow-lg shadow-black/5 backdrop-blur-md backdrop-saturate-150 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl dark:shadow-black/20 dark:ring-white/10 before:absolute before:inset-y-0 before:left-0 before:w-1.5";
+  "group relative flex h-72 w-full flex-col overflow-hidden rounded-2xl border bg-card text-left shadow-lg shadow-black/5 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:shadow-black/20 dark:ring-white/10";
 
-const STATUS_STYLES: Record<RoomStatus, { label: string; card: string; dot: string; pill: string }> = {
+const STATUS_STYLES: Record<
+  RoomStatus,
+  { label: string; border: string; badge: string; body: string; accent: string; ring: string; hint: string }
+> = {
   available: {
     label: "Available",
-    card: "border-emerald-500/30 bg-emerald-500/10 before:bg-emerald-500",
-    dot: "bg-emerald-500",
-    pill: "bg-emerald-600/15 text-emerald-800 dark:text-emerald-300",
+    border: "border-emerald-500/30",
+    badge: "bg-emerald-600 text-white",
+    body: "bg-card",
+    accent: "group-hover:text-emerald-700 dark:group-hover:text-emerald-400",
+    ring: "focus-visible:ring-emerald-500",
+    hint: "text-emerald-700 dark:text-emerald-400",
   },
   occupied: {
     label: "Occupied",
-    card: "border-rose-500/30 bg-rose-500/10 before:bg-rose-500",
-    dot: "bg-rose-500",
-    pill: "bg-rose-600/15 text-rose-800 dark:text-rose-300",
+    border: "border-rose-500/30",
+    badge: "bg-rose-600 text-white",
+    body: "bg-rose-500/10",
+    accent: "group-hover:text-rose-700 dark:group-hover:text-rose-400",
+    ring: "focus-visible:ring-rose-500",
+    hint: "text-rose-700 dark:text-rose-400",
   },
   cleaning: {
     label: "Cleaning",
-    card: "border-amber-500/30 bg-amber-500/10 before:bg-amber-500",
-    dot: "bg-amber-500",
-    pill: "bg-amber-600/15 text-amber-800 dark:text-amber-300",
+    border: "border-amber-500/30",
+    badge: "bg-amber-600 text-white",
+    body: "bg-amber-500/10",
+    accent: "group-hover:text-amber-700 dark:group-hover:text-amber-400",
+    ring: "focus-visible:ring-amber-500",
+    hint: "text-amber-800 dark:text-amber-300",
   },
   maintenance: {
     label: "Maintenance",
-    // Was a fully opaque bg-muted — translucent now so it picks up the
-    // same backdrop-blur glass effect as every other status.
-    card: "border-muted-foreground/25 bg-muted-foreground/10 before:bg-muted-foreground/70",
-    dot: "bg-muted-foreground",
-    pill: "bg-muted-foreground/15 text-muted-foreground",
+    border: "border-muted-foreground/25",
+    badge: "bg-muted-foreground text-white",
+    body: "bg-muted-foreground/10",
+    accent: "group-hover:text-foreground",
+    ring: "focus-visible:ring-muted-foreground",
+    hint: "text-muted-foreground",
   },
 };
 
@@ -78,6 +109,24 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
     showBooking && !booking!.openEnded && booking!.hoursBooked > 0
       ? Math.min(1, Math.max(0, elapsed / booking!.hoursBooked))
       : 0;
+  const isAlert = isCritical || isOverdue;
+  // "Expected out" is just checkInTime + hoursBooked — data we already
+  // have, shown as a clock time instead of only a countdown, same as the
+  // "Check-in" time next to it.
+  const expectedOut =
+    showBooking && !booking!.openEnded
+      ? new Date(booking!.checkInTime.toDate().getTime() + booking!.hoursBooked * 60 * 60 * 1000)
+      : null;
+  const timeLabel = (d: Date) => d.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" });
+
+  const hintText =
+    room.status === "available"
+      ? "Click room to check in →"
+      : room.status === "occupied"
+        ? "Click room to view →"
+        : room.status === "cleaning"
+          ? "Click room to mark ready →"
+          : "Click room to update →";
 
   return (
     <button
@@ -85,127 +134,198 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
       onClick={() => onSelect(room)}
       className={cn(
         CARD_SHELL,
-        // 15 minutes left or overdue gets a dark-red card, not just the
-        // usual light "occupied" rose — a glance at the grid should make
-        // these rooms impossible to miss.
-        isCritical || isOverdue
-          ? "border-red-700/60 bg-red-700/20 hover:bg-red-700/25 before:bg-red-700 dark:border-red-600/70 dark:bg-red-600/25 dark:hover:bg-red-600/30 dark:before:bg-red-500"
-          : style.card
+        isAlert ? "border-red-700/60 focus-visible:ring-red-700 dark:border-red-600/70" : cn(style.border, style.ring)
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="font-heading text-xl leading-none font-semibold tracking-tight">
-          {room.roomNumber}
-        </span>
-        <div className="mt-1 flex items-center gap-1">
-          {showBooking && (
-            <BedDoubleIcon
-              className={cn(
-                "size-4.5 shrink-0 animate-bed-sway",
-                isCritical || isOverdue ? "text-red-700 dark:text-red-400" : "text-rose-500/70 dark:text-rose-400/70"
-              )}
-            />
-          )}
-          {room.status === "available" && (
-            <BedDoubleIcon className="size-3.5 shrink-0 text-emerald-600/70 dark:text-emerald-400/70" />
-          )}
-          {room.status === "cleaning" && (
-            <BroomIcon className="size-4.5 shrink-0 animate-broom-sweep text-amber-600/70 dark:text-amber-400/70" />
-          )}
-          {room.status === "maintenance" && (
-            <WrenchIcon className="size-4.5 shrink-0 animate-wrench-turn text-muted-foreground/70" />
-          )}
-          <span
-            className={cn(
-              "size-2.5 shrink-0 rounded-full",
-              isCritical || isOverdue ? "bg-red-700 ring-2 ring-red-700/30 dark:bg-red-500" : style.dot
-            )}
-          />
-        </div>
-      </div>
-      {/* gap-0.5 + px-1, and the room type matched down to the pill's own
-          text-[10px] — on an iPad-Mini-width card (~111px inside the
-          padding) "Standard" next to the actual deployed Geist font still
-          didn't fit at text-xs (12px): measured -5px short even with a
-          milder gap-1 tightening tried first. Confirmed against the real
-          font file from the build output, not a generic system font, before
-          landing here — ~2.8px of real margin on the tightest row
-          ("AVAILABLE", the widest status label), not an exact-fit knife
-          edge. */}
-      <div className="flex items-center gap-0.5">
+      {/* 1. Photo — fixed height, object-cover */}
+      <div className="relative h-28 w-full shrink-0 overflow-hidden">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={ROOM_PHOTO_SRC} alt="" className="h-full w-full object-cover" />
         <span
           className={cn(
-            "rounded-full px-1 py-0.5 text-[10px] font-bold tracking-wide uppercase",
-            isCritical || isOverdue
-              ? "bg-red-700/20 text-red-800 dark:text-red-300"
-              : style.pill
+            "absolute top-2 right-2 flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wide uppercase shadow",
+            isAlert ? "bg-red-700 text-white" : style.badge
           )}
         >
           {style.label}
         </span>
-        <span className="truncate text-[10px] text-muted-foreground">{ROOM_TYPE_LABELS[room.type]}</span>
+        {showBooking && (
+          <BedDoubleIcon
+            className={cn(
+              "absolute bottom-2 left-2 size-5 animate-bed-sway drop-shadow",
+              isAlert ? "text-red-100" : "text-white"
+            )}
+          />
+        )}
+        {room.status === "cleaning" && (
+          <BroomIcon className="absolute bottom-2 left-2 size-5 animate-broom-sweep text-white drop-shadow" />
+        )}
+        {room.status === "maintenance" && (
+          <WrenchIcon className="absolute bottom-2 left-2 size-5 animate-wrench-turn text-white drop-shadow" />
+        )}
       </div>
 
-      {showBooking ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-0.5">
-          <div className="flex items-center gap-1 truncate text-sm font-medium">
-            <UserIcon className="size-3.5 shrink-0" />
-            <span className="truncate">{booking!.guestName}</span>
-          </div>
-          <div
-            className={cn(
-              "text-xl leading-tight font-bold",
-              booking!.openEnded
-                ? "text-sky-600 dark:text-sky-400"
-                : isOverdue
-                  ? "text-red-700 dark:text-red-400"
-                  : isCritical
-                    ? "text-red-700 dark:text-red-400"
-                    : isRunningLow
-                      ? "text-amber-600 dark:text-amber-400"
-                      : "text-foreground"
+      {/* Everything below the photo fills the rest of the fixed card
+          height exactly, every time. */}
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col gap-1.5 p-3",
+          isAlert ? "bg-red-700/10" : style.body
+        )}
+      >
+        {/* 2. Room number + guest, on one line — combining these is what
+            actually freed up the room this refinement needed; the guest
+            name used to sit on its own line further down. Type stays on
+            its own (smaller, muted) line right below. The room number
+            itself tints on hover/keyboard-focus (group-hover / the card's
+            own :focus-visible reaching this child) — it's the thing your
+            eye lands on first, so that's the main "this is clickable"
+            signal, on top of the whole-card lift. */}
+        <div className="shrink-0">
+          <div className="flex items-baseline gap-1.5 truncate">
+            <span
+              className={cn(
+                "shrink-0 truncate font-heading text-base leading-tight font-bold tracking-wide uppercase transition-colors",
+                style.accent,
+                isAlert && "group-hover:text-red-700 dark:group-hover:text-red-400"
+              )}
+            >
+              Room {room.roomNumber}
+            </span>
+            {showBooking && (
+              <span className="truncate text-sm font-medium text-muted-foreground">
+                {booking!.guestName}
+              </span>
             )}
-          >
-            {booking!.openEnded
-              ? `Open · ${formatHours(elapsed)}`
-              : isOverdue
-                ? // Owner sees the exact overdue duration right on the card;
-                  // cashiers only see "Overdue" (no number) so they can't game
-                  // how late they report a checkout — the Owner can still spot
-                  // the real duration here or in Reports > Overdue.
-                  isOwnerLike
-                  ? `Overdue ${formatHours(-remaining!)}`
-                  : "Overdue"
-                : `${formatHours(remaining!)} left`}
           </div>
-          {balance > 0 && (
-            <div className="mt-auto w-fit rounded-md bg-amber-500/25 px-2 py-0.5 text-sm font-bold text-amber-800 dark:text-amber-300">
-              ₱{balance.toFixed(2)} due
+          <div className="truncate text-xs leading-tight text-muted-foreground">
+            {ROOM_TYPE_LABELS[room.type]} Room
+          </div>
+        </div>
+
+        {/* 3+4. Time/status info. Occupied now has enough content (In/Out,
+            countdown, progress, payment) to flow top-down naturally — no
+            centering needed. The quiet statuses (Available/Cleaning/
+            Maintenance) still only have one honest line to show, so their
+            flex-1 region stays centered rather than stranding that line at
+            the top with a gap below it. */}
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col gap-1 overflow-hidden",
+            showBooking ? "justify-start" : "justify-center"
+          )}
+        >
+          {showBooking ? (
+            <>
+              {expectedOut && (
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <div className="truncate">
+                    <span className="text-muted-foreground">In </span>
+                    <span className="font-medium">{timeLabel(booking!.checkInTime.toDate())}</span>
+                  </div>
+                  <div className="truncate text-right">
+                    <span className="text-muted-foreground">Out </span>
+                    <span className="font-medium">{timeLabel(expectedOut)}</span>
+                  </div>
+                </div>
+              )}
+              <div
+                className={cn(
+                  "flex items-center gap-1 truncate text-base leading-tight font-bold",
+                  booking!.openEnded
+                    ? "text-sky-600 dark:text-sky-400"
+                    : isOverdue
+                      ? "text-red-700 dark:text-red-400"
+                      : isCritical
+                        ? "text-red-700 dark:text-red-400"
+                        : isRunningLow
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-foreground"
+                )}
+              >
+                <ClockIcon className="size-4 shrink-0" />
+                <span className="truncate">
+                  {booking!.openEnded
+                    ? `Open · ${formatHours(elapsed)}`
+                    : isOverdue
+                      ? // Owner sees the exact overdue duration right on the card;
+                        // cashiers only see "Overdue" (no number) so they can't game
+                        // how late they report a checkout — the Owner can still spot
+                        // the real duration here or in Reports > Overdue.
+                        isOwnerLike
+                        ? `Overdue ${formatHours(-remaining!)}`
+                        : "Overdue"
+                      : `${formatHours(remaining!)} left`}
+                </span>
+              </div>
+              {!booking!.openEnded && (
+                <div className="h-1.5 shrink-0 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-[width]",
+                      isOverdue || isCritical ? "bg-red-700" : isRunningLow ? "bg-amber-500" : "bg-rose-400"
+                    )}
+                    style={{ width: `${Math.round(usedFrac * 100)}%` }}
+                  />
+                </div>
+              )}
+              {/* Real data either way — never fabricated: the amount due
+                  when there's a balance, or the booking's own recorded
+                  paymentStatus when it's already settled. */}
+              {balance > 0 ? (
+                <div className="w-fit truncate rounded-md bg-amber-500/25 px-1.5 py-0.5 text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                  ₱{balance.toFixed(2)} due
+                </div>
+              ) : (
+                booking!.paymentStatus === "paid" && (
+                  <div className="flex items-center gap-1 truncate text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                    <CheckCircle2Icon className="size-3 shrink-0" />
+                    Paid in full
+                  </div>
+                )
+              )}
+            </>
+          ) : room.status === "available" ? (
+            // truncate goes on the text span, not this flex row — on a flex
+            // container, white-space:nowrap doesn't stop the icon+text from
+            // wrapping, so the ellipsis never actually kicked in; a very
+            // narrow phone (~320px) just clipped the word outright instead
+            // of showing "...". Same fix applied to the two statuses below.
+            <div className="flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+              <CheckCircle2Icon className="size-4 shrink-0" />
+              <span className="truncate">Ready for check-in</span>
+            </div>
+          ) : room.status === "cleaning" ? (
+            <div className="flex items-center gap-1.5 text-sm font-medium text-amber-800 dark:text-amber-300">
+              <BroomIcon className="size-4 shrink-0" />
+              <span className="truncate">Cleaning in progress</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+              <WrenchIcon className="size-4 shrink-0" />
+              <span className="truncate">Room unavailable</span>
             </div>
           )}
         </div>
-      ) : room.status === "available" ? (
-        <div className="mt-auto flex items-center gap-1.5 text-sm font-medium text-emerald-800 dark:text-emerald-300">
-          <BedDoubleIcon className="size-4 shrink-0" />
-          Tap to check in
-        </div>
-      ) : room.status === "cleaning" ? (
-        <div className="mt-auto text-sm font-medium text-amber-800 dark:text-amber-300">Tap when ready</div>
-      ) : (
-        <div className="mt-auto text-sm font-medium text-muted-foreground">Tap to update</div>
-      )}
 
-      {showBooking && !booking!.openEnded && (
-        <div className="absolute inset-x-0 bottom-0 h-1 bg-black/5 dark:bg-white/10">
-          <div
-            className={cn(
-              "h-full",
-              isOverdue || isCritical ? "bg-red-700" : isRunningLow ? "bg-amber-500" : "bg-rose-400"
-            )}
-            style={{ width: `${Math.round(usedFrac * 100)}%` }}
-          />
+        {/* 5. Small context label instead of a boxed button — the card
+            itself is the whole interaction target, this just spells out
+            what tapping it does. Fixed height so it doesn't shift layout
+            between statuses. Deliberately NOT a flex row with
+            justify-center: centering a too-wide flex child clips it evenly
+            from both sides with no visible "…", which is what a very
+            narrow phone (~320px) actually did. Plain block + text-center
+            gets a real trailing ellipsis when it overflows, and still
+            reads centered the rest of the time. */}
+        <div
+          className={cn(
+            "h-5 shrink-0 truncate text-center text-xs font-medium opacity-70 transition-opacity group-hover:opacity-100",
+            isAlert ? "text-red-700 dark:text-red-400" : style.hint
+          )}
+        >
+          {hintText}
         </div>
-      )}
+      </div>
     </button>
   );
 });

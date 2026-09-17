@@ -6,6 +6,14 @@ const nextConfig: NextConfig = {
   // runtime to lose. Pairs with public/sw.js: a static asset tree is what
   // lets the service worker cache the app shell for offline reloads.
   output: "export",
+  // Static export has no server to run Next's on-demand Image Optimization
+  // API against — next/image (brand-logo.tsx, brand-mark.tsx) otherwise
+  // throws a runtime error the moment it tries to request an optimized
+  // variant. This just serves the source file as-is, which is what static
+  // export needs regardless of host.
+  images: {
+    unoptimized: true,
+  },
   turbopack: {
     resolveAlias: {
       // These two packages declare only a "browser" export condition with
