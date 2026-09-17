@@ -173,16 +173,23 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
           isAlert ? "bg-red-700/10" : style.body
         )}
       >
-        {/* 2. Room number + guest, on one line — combining these is what
-            actually freed up the room this refinement needed; the guest
-            name used to sit on its own line further down. Type stays on
-            its own (smaller, muted) line right below. The room number
-            itself tints on hover/keyboard-focus (group-hover / the card's
-            own :focus-visible reaching this child) — it's the thing your
-            eye lands on first, so that's the main "this is clickable"
-            signal, on top of the whole-card lift. */}
-        <div className="shrink-0">
-          <div className="flex items-baseline gap-1.5 truncate">
+        {/* 2. Room number + guest on the left, room type pinned to the top
+            right — lines up above the "Out" column below it, and freed the
+            line the type used to occupy on its own so the In/Out row could
+            grow bigger and bolder.
+            Deliberately NO min-w-0 on the left group: a flex item's
+            automatic minimum size is the max of its own children's minimums,
+            and the room-number span's shrink-0 gives it a real (non-zero)
+            minimum — so leaving the left group's min-width on "auto" makes
+            the flex algorithm protect the room number first and squeeze the
+            type label (which truncates via plain overflow-hidden, so its
+            own minimum is 0) down to nothing before the room number ever
+            gives up a pixel. Getting this backwards (shrink-0 on the type
+            label instead) was tried first and clipped the room NUMBER on
+            narrow phones — the type label instead of a name is not
+            something a cashier can recover from at a glance. */}
+        <div className="flex shrink-0 items-baseline justify-between gap-1.5">
+          <div className="flex items-baseline gap-1.5">
             <span
               className={cn(
                 "shrink-0 truncate font-heading text-base leading-tight font-bold tracking-wide uppercase transition-colors",
@@ -193,14 +200,14 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
               Room {room.roomNumber}
             </span>
             {showBooking && (
-              <span className="truncate text-sm font-medium text-muted-foreground">
+              <span className="min-w-0 truncate text-sm font-medium text-muted-foreground">
                 {booking!.guestName}
               </span>
             )}
           </div>
-          <div className="truncate text-xs leading-tight text-muted-foreground">
+          <span className="min-w-0 truncate text-xs leading-tight text-muted-foreground">
             {ROOM_TYPE_LABELS[room.type]} Room
-          </div>
+          </span>
         </div>
 
         {/* 3+4. Time/status info. Occupied now has enough content (In/Out,
@@ -218,14 +225,18 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
           {showBooking ? (
             <>
               {expectedOut && (
-                <div className="flex items-center justify-between gap-2 text-xs">
+                // Stacked, not side-by-side — side-by-side is what let the
+                // bigger/bolder time values overflow their half of the row
+                // on narrow phones (~355px and down). Each on its own full-
+                // width line has room to be this size without truncating.
+                <div className="shrink-0 text-sm">
                   <div className="truncate">
                     <span className="text-muted-foreground">In </span>
-                    <span className="font-medium">{timeLabel(booking!.checkInTime.toDate())}</span>
+                    <span className="font-bold">{timeLabel(booking!.checkInTime.toDate())}</span>
                   </div>
-                  <div className="truncate text-right">
+                  <div className="truncate">
                     <span className="text-muted-foreground">Out </span>
-                    <span className="font-medium">{timeLabel(expectedOut)}</span>
+                    <span className="font-bold">{timeLabel(expectedOut)}</span>
                   </div>
                 </div>
               )}
