@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { cn } from "@/lib/utils";
-import { ROOM_TYPE_LABELS, type Booking, type Room, type RoomStatus } from "@/lib/types";
+import type { Booking, Room, RoomStatus } from "@/lib/types";
 import { hoursElapsed } from "@/lib/bookings";
 import { formatHours } from "@/lib/time";
 import { useAuth } from "@/context/auth-context";
@@ -173,41 +173,24 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
           isAlert ? "bg-red-700/10" : style.body
         )}
       >
-        {/* 2. Room number + guest on the left, room type pinned to the top
-            right — lines up above the "Out" column below it, and freed the
-            line the type used to occupy on its own so the In/Out row could
-            grow bigger and bolder.
-            Deliberately NO min-w-0 on the left group: a flex item's
-            automatic minimum size is the max of its own children's minimums,
-            and the room-number span's shrink-0 gives it a real (non-zero)
-            minimum — so leaving the left group's min-width on "auto" makes
-            the flex algorithm protect the room number first and squeeze the
-            type label (which truncates via plain overflow-hidden, so its
-            own minimum is 0) down to nothing before the room number ever
-            gives up a pixel. Getting this backwards (shrink-0 on the type
-            label instead) was tried first and clipped the room NUMBER on
-            narrow phones — the type label instead of a name is not
-            something a cashier can recover from at a glance. */}
-        <div className="flex shrink-0 items-baseline justify-between gap-1.5">
-          <div className="flex items-baseline gap-1.5">
-            <span
-              className={cn(
-                "shrink-0 truncate font-heading text-base leading-tight font-bold tracking-wide uppercase transition-colors",
-                style.accent,
-                isAlert && "group-hover:text-red-700 dark:group-hover:text-red-400"
-              )}
-            >
-              Room {room.roomNumber}
-            </span>
-            {showBooking && (
-              <span className="min-w-0 truncate text-sm font-medium text-muted-foreground">
-                {booking!.guestName}
-              </span>
+        {/* 2. Room number + guest — no room type shown here anymore (Owner:
+            every room is Standard, so there's nothing to distinguish/compare
+            against). */}
+        <div className="flex shrink-0 items-baseline gap-1.5">
+          <span
+            className={cn(
+              "shrink-0 truncate font-heading text-base leading-tight font-bold tracking-wide uppercase transition-colors",
+              style.accent,
+              isAlert && "group-hover:text-red-700 dark:group-hover:text-red-400"
             )}
-          </div>
-          <span className="min-w-0 truncate text-xs leading-tight text-muted-foreground">
-            {ROOM_TYPE_LABELS[room.type]} Room
+          >
+            Room {room.roomNumber}
           </span>
+          {showBooking && (
+            <span className="min-w-0 truncate text-sm font-medium text-muted-foreground">
+              {booking!.guestName}
+            </span>
+          )}
         </div>
 
         {/* 3+4. Time/status info. Occupied now has enough content (In/Out,
