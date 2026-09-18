@@ -181,17 +181,32 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
       </div>
 
       {/* Everything below the photo fills the rest of the fixed card
-          height exactly, every time. */}
+          height exactly, every time.
+          CSS Grid, not nested flex-col: this wrapper's OWN height already
+          comes from flex-1 (filling whatever's left under the photo in the
+          card's flex-col) — a single level of flex-grow against a definite
+          h-[280px]/h-72 ancestor is the well-supported case. The row below
+          (middle content) used to ALSO be flex-1 to fill whatever's left
+          under the header, and THAT'S "flex-grow of something whose own
+          height came from flex-grow" — a real iPhone (WebKit) measurably
+          resolved that nested case differently than Chromium (confirmed:
+          switching that row's justify-content produced no visible change on
+          the phone, meaning the row's actual height/slack was already wrong
+          before justify-content ever got a say). grid-rows-[auto_1fr_auto]
+          gives the header/middle/footer split a single, explicit set of
+          row tracks up front instead of two stacked flex-grow guesses —
+          CSS Grid's algorithm for resolving fr tracks against a definite
+          container height doesn't have that same nested-nesting ambiguity. */}
       <div
         className={cn(
-          "flex min-h-0 flex-1 flex-col gap-1.5 p-3",
+          "grid min-h-0 flex-1 grid-rows-[auto_1fr_auto] gap-1.5 p-3",
           isAlert ? "bg-red-700/10" : style.body
         )}
       >
         {/* 2. Room number + guest — no room type shown here anymore (Owner:
             every room is Standard, so there's nothing to distinguish/compare
             against). */}
-        <div className="flex shrink-0 items-baseline gap-1.5">
+        <div className="flex items-baseline gap-1.5">
           <span
             className={cn(
               "shrink-0 truncate font-heading text-base leading-tight font-bold tracking-wide uppercase transition-colors",
@@ -234,7 +249,7 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
             below the whole block, so it looks intentional regardless of
             which engine computed it or by how much the two engines
             disagree. */}
-        <div className="flex min-h-0 flex-1 flex-col justify-center gap-1 overflow-hidden">
+        <div className="flex min-h-0 flex-col justify-center gap-1 overflow-hidden">
           {showBooking ? (
             <>
               {expectedOut && (
@@ -343,7 +358,7 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
             reads centered the rest of the time. */}
         <div
           className={cn(
-            "h-5 shrink-0 truncate text-center text-xs font-medium opacity-70 transition-opacity group-hover:opacity-100",
+            "h-5 truncate text-center text-xs font-medium opacity-70 transition-opacity group-hover:opacity-100",
             isAlert ? "text-red-700 dark:text-red-400" : style.hint
           )}
         >

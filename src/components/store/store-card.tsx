@@ -30,19 +30,26 @@ export function StoreCard({ onClick }: { onClick: () => void }) {
         </span>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-1.5 p-3">
-        <div className="h-10 shrink-0">
+      {/* CSS Grid, not nested flex-col — see the matching note in
+          room-card.tsx: this wrapper's own flex-1 (against the card's
+          definite height) is fine, but the middle row being ALSO flex-1
+          (to fill whatever's left under the header) is the nested-flex-grow
+          pattern that rendered differently on a real iPhone than in
+          Chromium. grid-rows-[auto_1fr_auto] resolves the header/middle/
+          footer split in one step instead of two stacked flex-grow guesses. */}
+      <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr_auto] gap-1.5 p-3">
+        <div className="h-10">
           <div className="truncate font-heading text-base leading-tight font-bold tracking-wide uppercase">
             Walk-in Store
           </div>
           <div className="truncate text-xs leading-tight text-muted-foreground">Guest Essentials</div>
         </div>
-        <div className="flex min-h-0 flex-1 flex-col justify-center overflow-hidden">
+        <div className="flex min-h-0 flex-col justify-center overflow-hidden">
           <div className="truncate text-sm font-medium text-sky-700 dark:text-sky-300">
             Colgate • Shampoo • Water • Snacks
           </div>
         </div>
-        <div className="h-5 shrink-0 truncate text-center text-xs font-medium text-sky-700 opacity-70 transition-opacity group-hover:opacity-100 dark:text-sky-300">
+        <div className="h-5 truncate text-center text-xs font-medium text-sky-700 opacity-70 transition-opacity group-hover:opacity-100 dark:text-sky-300">
           Click to open store →
         </div>
       </div>
