@@ -22,11 +22,18 @@ const ROOM_PHOTO_SRC = "/logo/room.jpg";
 // middle wrapper below (not this card growing) is what keeps the footer
 // pinned to the same place across every status.
 //
-// h-72, not h-80 — the guest name moved up onto the room-number line
-// (see below), which freed a whole line's worth of height that used to
-// go toward the "center a short Available/Cleaning/Maintenance message"
-// treatment. Re-verified the worst case (Occupied + balance due, longest
-// possible content) still fits with room to spare at this height.
+// Separate, smaller height below the sm breakpoint (< 640px, i.e. phones —
+// matches room-grid.tsx's own 2-col/3-col breakpoint), not the desktop h-72
+// reused everywhere: h-72 was originally measured against the busiest
+// occupied case (guest name + In/Out + countdown + progress + balance) at
+// desktop width, but that same fixed height on a phone — where every pixel
+// of scroll matters — read as broken empty space for every less-busy
+// status/booking, since content height doesn't scale with the card's own
+// width. h-64 was re-measured (not guessed) against that exact busiest case
+// with the smaller mobile photo below and still clears it with a few
+// pixels to spare; see the justify-between/justify-center split further
+// down for how what little slack remains gets distributed instead of
+// dumped in one spot below the payment line.
 //
 // No separate action button anymore — the whole card is already a real
 // <button> (native keyboard focus + Enter/Space activation, no extra work
@@ -34,7 +41,7 @@ const ROOM_PHOTO_SRC = "/logo/room.jpg";
 // below; the visible focus-visible ring is the polished keyboard-only
 // affordance the boxed button used to provide implicitly.
 const CARD_SHELL =
-  "group relative flex h-72 w-full flex-col overflow-hidden rounded-2xl border bg-card text-left shadow-lg shadow-black/5 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:shadow-black/20 dark:ring-white/10";
+  "group relative flex h-64 w-full flex-col overflow-hidden rounded-2xl border bg-card text-left shadow-lg shadow-black/5 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:shadow-black/20 dark:ring-white/10 sm:h-72";
 
 const STATUS_STYLES: Record<
   RoomStatus,
@@ -138,7 +145,7 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
       )}
     >
       {/* 1. Photo — fixed height, object-cover */}
-      <div className="relative h-28 w-full shrink-0 overflow-hidden">
+      <div className="relative h-20 w-full shrink-0 overflow-hidden sm:h-28">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={ROOM_PHOTO_SRC} alt="" className="h-full w-full object-cover" />
         <span
@@ -193,28 +200,33 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
           )}
         </div>
 
-        {/* 3+4. Time/status info. Occupied flows top-down instead of
-            being vertically centered (there's enough content to fill the
-            space), but each individual line is still horizontally centered
-            — left-aligning them left a big one-sided blank strip on the
-            right of the card (flagged by the Owner as looking unfinished),
-            since these are short lines that don't reach the card's own
-            edges. The progress bar stays full-width (it's a graphic meter,
-            not text, so touching both edges reads as intentional).
-            Centering via mx-auto/text-center rather than flex
+        {/* 3+4. Time/status info. Each individual line is horizontally
+            centered — left-aligning them left a one-sided blank strip on
+            the right of the card (flagged by the Owner as looking
+            unfinished), since these are short lines that don't reach the
+            card's own edges. The progress bar stays full-width (it's a
+            graphic meter, not text, so touching both edges reads as
+            intentional). Centering via mx-auto/text-center rather than flex
             justify-center: justify-center on a flex row combined with a
             truncating child clips symmetrically from both sides with no
             visible ellipsis (see the countdown row and hint-text notes
             elsewhere in this file) — mx-auto on a w-fit/max-w-full box, or
             plain text-center on a non-flex block, doesn't have that
-            problem. The quiet statuses (Available/Cleaning/Maintenance)
-            still only have one honest line to show, so their flex-1 region
-            stays vertically centered too rather than stranding that line at
-            the top with a gap below it. */}
+            problem.
+            Vertically: a fixed-length booking (In/Out, countdown, progress,
+            payment — 4 rows) has close to zero slack against the card's
+            fixed height, so justify-between just quietly closes whatever
+            sliver is left by spreading it across the gaps instead of
+            dumping it all in one spot below the payment line. An
+            open-ended booking only has 2 rows (no In/Out or progress bar,
+            since there's no booked end time) — justify-between would yank
+            those two far apart with one big gap in between, so it gets the
+            same honest justify-center as the single-line quiet statuses
+            (Available/Cleaning/Maintenance) instead. */}
         <div
           className={cn(
             "flex min-h-0 flex-1 flex-col gap-1 overflow-hidden",
-            showBooking ? "justify-start" : "justify-center"
+            showBooking ? (booking!.openEnded ? "justify-center" : "justify-between") : "justify-center"
           )}
         >
           {showBooking ? (

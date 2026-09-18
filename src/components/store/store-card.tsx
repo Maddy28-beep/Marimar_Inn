@@ -12,16 +12,17 @@ export function StoreCard({ onClick }: { onClick: () => void }) {
       type="button"
       onClick={onClick}
       className={cn(
-        // Same fixed h-72 as room cards, so the Store card lines up in
-        // the same grid row instead of standing out as a different height.
+        // Same fixed height as room cards (smaller below sm/640px, same
+        // room-card.tsx reasoning) so the Store card lines up in the same
+        // grid row instead of standing out as a different height.
         // group + focus-visible ring match room-card.tsx's whole-card-is-
         // the-button treatment — the Owner flagged this card's old boxed
         // "Open Store" button as inconsistent once room cards dropped
         // theirs for a text hint.
-        "group relative flex h-72 w-full flex-col overflow-hidden rounded-2xl border border-sky-500/30 bg-card text-left shadow-lg shadow-black/5 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-sky-500 dark:shadow-black/20 dark:ring-white/10"
+        "group relative flex h-64 w-full flex-col overflow-hidden rounded-2xl border border-sky-500/30 bg-card text-left shadow-lg shadow-black/5 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-sky-500 dark:shadow-black/20 dark:ring-white/10 sm:h-72"
       )}
     >
-      <div className="relative h-28 w-full shrink-0 overflow-hidden">
+      <div className="relative h-20 w-full shrink-0 overflow-hidden sm:h-28">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={STORE_PHOTO_SRC} alt="" className="h-full w-full object-cover" />
         <span className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-sky-600 px-2.5 py-1 text-[10px] font-bold tracking-wide text-white uppercase shadow">
