@@ -29,10 +29,18 @@ const ROOM_PHOTO_SRC = "/logo/room.jpg";
 // desktop width, but that same fixed height on a phone — where every pixel
 // of scroll matters — read as broken empty space for every less-busy
 // status/booking, since content height doesn't scale with the card's own
-// width. h-64 was re-measured (not guessed) against that exact busiest case
-// with the smaller mobile photo below and still clears it with a few
-// pixels to spare; see the justify-between/justify-center split further
-// down for how what little slack remains gets distributed instead of
+// width.
+//
+// h-[280px], not an exact-fit h-64: the busiest case only needs ~255px
+// measured in Chromium, but a real iPhone (WebKit, a different rendering
+// engine than anything this was tested in) rendered that same content
+// visibly differently — a 1px margin has zero tolerance for WebKit
+// computing even slightly different line-height metrics per text row
+// across ~5 rows. 280px gives ~25px of genuine slack instead of an
+// exact-pixel fit, so small per-engine font-metric differences can't tip
+// it into clipping. See the justify-between/justify-center split further
+// down for how that slack (intentionally small, so it still doesn't look
+// broken on the engine it was tuned against) gets distributed instead of
 // dumped in one spot below the payment line.
 //
 // No separate action button anymore — the whole card is already a real
@@ -41,7 +49,7 @@ const ROOM_PHOTO_SRC = "/logo/room.jpg";
 // below; the visible focus-visible ring is the polished keyboard-only
 // affordance the boxed button used to provide implicitly.
 const CARD_SHELL =
-  "group relative flex h-64 w-full flex-col overflow-hidden rounded-2xl border bg-card text-left shadow-lg shadow-black/5 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:shadow-black/20 dark:ring-white/10 sm:h-72";
+  "group relative flex h-[280px] w-full flex-col overflow-hidden rounded-2xl border bg-card text-left shadow-lg shadow-black/5 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:shadow-black/20 dark:ring-white/10 sm:h-72";
 
 const STATUS_STYLES: Record<
   RoomStatus,
