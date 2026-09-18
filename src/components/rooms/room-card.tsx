@@ -48,8 +48,23 @@ const ROOM_PHOTO_SRC = "/logo/room.jpg";
 // needed for that part). group is for the room-number hover/focus tint
 // below; the visible focus-visible ring is the polished keyboard-only
 // affordance the boxed button used to provide implicitly.
+//
+// The <button> itself is a plain BLOCK, and CARD_INNER below does the
+// flex-col layout. This is deliberate and load-bearing: WebKit does not
+// apply display:flex/grid to a <button> the way Blink does — Safari/iOS
+// wraps a button's children in an anonymous box that shrink-wraps to its
+// content instead of stretching to the button's width. On a real iPhone
+// that made the body only about two-thirds of the card wide, leaving a
+// bare strip down the right side (invisible on the white Available cards,
+// glaring on the tinted Occupied ones) and truncating the Store card's
+// item list early. It also made every layout change *inside* the card do
+// nothing, since the breakage was one level above them. Keeping the
+// button display:block and moving the layout onto a real <div> child
+// sidesteps the anonymous-button-box behaviour entirely.
 const CARD_SHELL =
-  "group relative flex h-[280px] w-full flex-col overflow-hidden rounded-2xl border bg-card text-left shadow-lg shadow-black/5 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:shadow-black/20 dark:ring-white/10 sm:h-72";
+  "group relative block h-[280px] w-full overflow-hidden rounded-2xl border bg-card text-left shadow-lg shadow-black/5 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:shadow-black/20 dark:ring-white/10 sm:h-72";
+
+const CARD_INNER = "flex h-full w-full flex-col";
 
 const STATUS_STYLES: Record<
   RoomStatus,
@@ -152,6 +167,7 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
         isAlert ? "border-red-700/60 focus-visible:ring-red-700 dark:border-red-600/70" : cn(style.border, style.ring)
       )}
     >
+      <div className={CARD_INNER}>
       {/* 1. Photo — fixed height, object-cover */}
       <div className="relative h-20 w-full shrink-0 overflow-hidden sm:h-28">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -364,6 +380,7 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
         >
           {hintText}
         </div>
+      </div>
       </div>
     </button>
   );

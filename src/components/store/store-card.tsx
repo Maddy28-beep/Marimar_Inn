@@ -19,9 +19,14 @@ export function StoreCard({ onClick }: { onClick: () => void }) {
         // the-button treatment — the Owner flagged this card's old boxed
         // "Open Store" button as inconsistent once room cards dropped
         // theirs for a text hint.
-        "group relative flex h-[280px] w-full flex-col overflow-hidden rounded-2xl border border-sky-500/30 bg-card text-left shadow-lg shadow-black/5 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-sky-500 dark:shadow-black/20 dark:ring-white/10 sm:h-72"
+        // display:block here with the flex-col on the inner <div> — see the
+        // CARD_SHELL note in room-card.tsx: WebKit shrink-wraps a <button>'s
+        // children instead of stretching them, which cut this card's item
+        // list off early on a real iPhone.
+        "group relative block h-[280px] w-full overflow-hidden rounded-2xl border border-sky-500/30 bg-card text-left shadow-lg shadow-black/5 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-sky-500 dark:shadow-black/20 dark:ring-white/10 sm:h-72"
       )}
     >
+      <div className="flex h-full w-full flex-col">
       <div className="relative h-20 w-full shrink-0 overflow-hidden sm:h-28">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={STORE_PHOTO_SRC} alt="" className="h-full w-full object-cover" />
@@ -52,6 +57,7 @@ export function StoreCard({ onClick }: { onClick: () => void }) {
         <div className="h-5 truncate text-center text-xs font-medium text-sky-700 opacity-70 transition-opacity group-hover:opacity-100 dark:text-sky-300">
           Click to open store →
         </div>
+      </div>
       </div>
     </button>
   );
