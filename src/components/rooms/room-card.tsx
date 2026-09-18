@@ -221,22 +221,20 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
             elsewhere in this file) — mx-auto on a w-fit/max-w-full box, or
             plain text-center on a non-flex block, doesn't have that
             problem.
-            Vertically: a fixed-length booking (In/Out, countdown, progress,
-            payment — 4 rows) has close to zero slack against the card's
-            fixed height, so justify-between just quietly closes whatever
-            sliver is left by spreading it across the gaps instead of
-            dumping it all in one spot below the payment line. An
-            open-ended booking only has 2 rows (no In/Out or progress bar,
-            since there's no booked end time) — justify-between would yank
-            those two far apart with one big gap in between, so it gets the
-            same honest justify-center as the single-line quiet statuses
-            (Available/Cleaning/Maintenance) instead. */}
-        <div
-          className={cn(
-            "flex min-h-0 flex-1 flex-col gap-1 overflow-hidden",
-            showBooking ? (booking!.openEnded ? "justify-center" : "justify-between") : "justify-center"
-          )}
-        >
+            Vertically: plain justify-center, same as the single-line quiet
+            statuses (Available/Cleaning/Maintenance) — tried justify-between
+            first (spread whatever slack is left evenly across the row gaps)
+            since a fixed-length booking has very little slack to begin with,
+            but that depends on precisely knowing how much slack there is,
+            and a real iPhone (WebKit) computed this nested flex-1 layout's
+            height differently enough from Chromium that "a few small gaps"
+            became "several large gaps" instead — a known-fragile class of
+            cross-engine flexbox difference. justify-center doesn't care how
+            much slack actually exists: it always splits it evenly above and
+            below the whole block, so it looks intentional regardless of
+            which engine computed it or by how much the two engines
+            disagree. */}
+        <div className="flex min-h-0 flex-1 flex-col justify-center gap-1 overflow-hidden">
           {showBooking ? (
             <>
               {expectedOut && (
