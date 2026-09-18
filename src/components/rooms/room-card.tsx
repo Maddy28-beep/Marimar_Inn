@@ -193,11 +193,23 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
           )}
         </div>
 
-        {/* 3+4. Time/status info. Occupied now has enough content (In/Out,
-            countdown, progress, payment) to flow top-down naturally — no
-            centering needed. The quiet statuses (Available/Cleaning/
-            Maintenance) still only have one honest line to show, so their
-            flex-1 region stays centered rather than stranding that line at
+        {/* 3+4. Time/status info. Occupied flows top-down instead of
+            being vertically centered (there's enough content to fill the
+            space), but each individual line is still horizontally centered
+            — left-aligning them left a big one-sided blank strip on the
+            right of the card (flagged by the Owner as looking unfinished),
+            since these are short lines that don't reach the card's own
+            edges. The progress bar stays full-width (it's a graphic meter,
+            not text, so touching both edges reads as intentional).
+            Centering via mx-auto/text-center rather than flex
+            justify-center: justify-center on a flex row combined with a
+            truncating child clips symmetrically from both sides with no
+            visible ellipsis (see the countdown row and hint-text notes
+            elsewhere in this file) — mx-auto on a w-fit/max-w-full box, or
+            plain text-center on a non-flex block, doesn't have that
+            problem. The quiet statuses (Available/Cleaning/Maintenance)
+            still only have one honest line to show, so their flex-1 region
+            stays vertically centered too rather than stranding that line at
             the top with a gap below it. */}
         <div
           className={cn(
@@ -212,7 +224,7 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
                 // bigger/bolder time values overflow their half of the row
                 // on narrow phones (~355px and down). Each on its own full-
                 // width line has room to be this size without truncating.
-                <div className="shrink-0 text-sm">
+                <div className="shrink-0 text-center text-sm">
                   <div className="truncate">
                     <span className="text-muted-foreground">In </span>
                     <span className="font-bold">{timeLabel(booking!.checkInTime.toDate())}</span>
@@ -225,7 +237,7 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
               )}
               <div
                 className={cn(
-                  "flex items-center gap-1 truncate text-base leading-tight font-bold",
+                  "mx-auto flex w-fit max-w-full items-center gap-1 text-base leading-tight font-bold",
                   booking!.openEnded
                     ? "text-sky-600 dark:text-sky-400"
                     : isOverdue
@@ -267,12 +279,12 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
                   when there's a balance, or the booking's own recorded
                   paymentStatus when it's already settled. */}
               {balance > 0 ? (
-                <div className="w-fit truncate rounded-md bg-amber-500/25 px-1.5 py-0.5 text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                <div className="mx-auto w-fit max-w-full truncate rounded-md bg-amber-500/25 px-1.5 py-0.5 text-[11px] font-bold text-amber-800 dark:text-amber-300">
                   ₱{balance.toFixed(2)} due
                 </div>
               ) : (
                 booking!.paymentStatus === "paid" && (
-                  <div className="flex items-center gap-1 truncate text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                  <div className="mx-auto flex w-fit max-w-full items-center gap-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
                     <CheckCircle2Icon className="size-3 shrink-0" />
                     Paid in full
                   </div>
