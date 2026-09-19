@@ -112,9 +112,9 @@ export function RoomGrid() {
 
   if (rooms === null) {
     return (
-      <div className="room-grid-surface grid grid-cols-2 gap-3 rounded-2xl p-3 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="room-grid-surface grid auto-rows-[9rem] grid-cols-2 gap-3 rounded-2xl p-3 sm:grid-cols-3 md:grid-cols-5">
         {Array.from({ length: 10 }).map((_, i) => (
-          <Skeleton key={i} className="h-56 rounded-xl" />
+          <Skeleton key={i} className="h-36 rounded-xl" />
         ))}
       </div>
     );
@@ -199,7 +199,7 @@ export function RoomGrid() {
         </Select>
       </div>
 
-      <div className="room-grid-surface grid grid-cols-2 gap-3 rounded-2xl p-3 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="room-grid-surface grid auto-rows-[9rem] grid-cols-2 gap-3 rounded-2xl p-3 sm:grid-cols-3 md:grid-cols-5">
         {(!search.trim() || "store".includes(search.trim().toLowerCase())) &&
           statusFilter === "all" &&
           typeFilter === "all" && <StoreCard onClick={() => setDialog({ kind: "store" })} />}

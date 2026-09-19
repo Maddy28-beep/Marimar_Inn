@@ -2,61 +2,31 @@
 
 import { cn } from "@/lib/utils";
 
-// Pre-resized/compressed to ~105KB (was a 2.4MB source) — see the same
-// note in room-card.tsx.
-const STORE_PHOTO_SRC = "/logo/store.jpg";
-
 export function StoreCard({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        // Same fixed height as room cards (smaller below sm/640px, same
-        // room-card.tsx reasoning) so the Store card lines up in the same
-        // grid row instead of standing out as a different height.
-        // group + focus-visible ring match room-card.tsx's whole-card-is-
-        // the-button treatment — the Owner flagged this card's old boxed
-        // "Open Store" button as inconsistent once room cards dropped
-        // theirs for a text hint.
-        // display:block here with the flex-col on the inner <div> — see the
-        // CARD_SHELL note in room-card.tsx: WebKit shrink-wraps a <button>'s
-        // children instead of stretching them, which cut this card's item
-        // list off early on a real iPhone.
-        "group relative block h-[280px] w-full overflow-hidden rounded-2xl border border-sky-500/30 bg-card text-left shadow-lg shadow-black/5 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-sky-500 dark:shadow-black/20 dark:ring-white/10 sm:h-72"
+        // display:block with the layout on the inner <div> — see CARD_SHELL
+        // in room-card.tsx (WebKit shrink-wraps a flex <button>'s children).
+        "relative block h-36 w-full overflow-hidden rounded-2xl border p-3 pl-3.5 text-left shadow-lg shadow-black/5 backdrop-blur-md backdrop-saturate-150 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl dark:shadow-black/20 dark:ring-white/10 before:absolute before:inset-y-0 before:left-0 before:w-1.5",
+        "border-sky-500/30 bg-sky-500/10 before:bg-sky-500"
       )}
     >
-      <div className="flex h-full w-full flex-col">
-      <div className="relative h-20 w-full shrink-0 overflow-hidden sm:h-28">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={STORE_PHOTO_SRC} alt="" className="h-full w-full object-cover" />
-        <span className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-sky-600 px-2.5 py-1 text-[10px] font-bold tracking-wide text-white uppercase shadow">
+      <div className="flex h-full w-full flex-col gap-1">
+      <div className="flex items-start justify-between gap-2">
+        <span className="font-heading text-xl leading-none font-semibold tracking-tight">Store</span>
+        <span className="mt-1 size-2.5 shrink-0 rounded-full bg-sky-500" />
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span className="rounded-full bg-sky-600/15 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-sky-800 uppercase dark:text-sky-300">
           Walk-in
         </span>
+        <span className="truncate text-xs text-muted-foreground">No room</span>
       </div>
-
-      {/* CSS Grid, not nested flex-col — see the matching note in
-          room-card.tsx: this wrapper's own flex-1 (against the card's
-          definite height) is fine, but the middle row being ALSO flex-1
-          (to fill whatever's left under the header) is the nested-flex-grow
-          pattern that rendered differently on a real iPhone than in
-          Chromium. grid-rows-[auto_1fr_auto] resolves the header/middle/
-          footer split in one step instead of two stacked flex-grow guesses. */}
-      <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr_auto] gap-1.5 p-3">
-        <div className="h-10">
-          <div className="truncate font-heading text-base leading-tight font-bold tracking-wide uppercase">
-            Walk-in Store
-          </div>
-          <div className="truncate text-xs leading-tight text-muted-foreground">Guest Essentials</div>
-        </div>
-        <div className="flex min-h-0 flex-col justify-center overflow-hidden">
-          <div className="truncate text-sm font-medium text-sky-700 dark:text-sky-300">
-            Colgate • Shampoo • Water • Snacks
-          </div>
-        </div>
-        <div className="h-5 truncate text-center text-xs font-medium text-sky-700 opacity-70 transition-opacity group-hover:opacity-100 dark:text-sky-300">
-          Click to open store →
-        </div>
+      <div className="mt-auto text-sm font-medium text-sky-800 dark:text-sky-300">
+        Colgate, shampoo, water…
       </div>
       </div>
     </button>
