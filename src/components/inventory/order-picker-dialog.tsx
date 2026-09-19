@@ -155,6 +155,39 @@ export function OrderPickerDialog({ room, booking, onClose }: OrderPickerDialogP
         } catch (error) {
           toast.error(`Order added, but the drawer said: ${printerErrorMessage(error)}`);
         }
+        // Any payment prints its receipt automatically (an order added with
+        // nothing paid goes on the room's balance and gets its receipt when
+        // that's paid). Own try/catch so a drawer problem above can never
+        // stop it; Print Receipt stays as the retry / extra-copy path.
+        try {
+          await printOrderReceipt(booking, room, {
+            staffName,
+            items: cartLines.map((line) => ({
+              itemId: line.item.itemId,
+              name: line.item.name,
+              unitPrice: line.item.sellingPrice,
+              quantity: line.qty,
+              subtotal: line.qty * line.item.sellingPrice,
+            })),
+            amountCharged: result.cartTotal,
+            amountPaid: result.amountCollected,
+            change,
+            paymentMethod: payload.paymentMethod,
+            gcashReference: payload.gcashReference,
+            qrphReference: payload.qrphReference,
+            splitCashAmount: payload.splitCashAmount,
+            splitGcashAmount: payload.splitGcashAmount,
+            splitQrphAmount: payload.splitQrphAmount,
+          });
+        } catch (error) {
+          toast.error(
+            `Order added, but the receipt didn't print: ${printerErrorMessage(error)} Tap Print Receipt to try again.`
+          );
+        }
+      } else if (result.amountCollected > 0) {
+        toast.warning(
+          "Order added, but no printer is connected so the receipt wasn't printed. Connect the printer, then tap Print Receipt."
+        );
       }
       setReceipt({
         items: cartLines.map((line) => ({

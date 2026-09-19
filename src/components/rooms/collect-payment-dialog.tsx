@@ -103,6 +103,33 @@ export function CollectPaymentDialog({ room, booking, balance, onClose }: Collec
         } catch (error) {
           toast.error(`Collected, but the drawer said: ${printerErrorMessage(error)}`);
         }
+        // Any payment prints its receipt automatically. Own try/catch so a
+        // drawer problem above can never stop it; Print Receipt on the
+        // receipt screen stays as the retry / extra-copy path.
+        if (result.amountCollected > 0) {
+          try {
+            await printBalancePaymentReceipt(booking, room, {
+              staffName,
+              amountCollected: result.amountCollected,
+              remainingBalance: result.balance,
+              change,
+              paymentMethod: payload.paymentMethod,
+              gcashReference: payload.gcashReference,
+              qrphReference: payload.qrphReference,
+              splitCashAmount: payload.splitCashAmount,
+              splitGcashAmount: payload.splitGcashAmount,
+              splitQrphAmount: payload.splitQrphAmount,
+            });
+          } catch (error) {
+            toast.error(
+              `Collected, but the receipt didn't print: ${printerErrorMessage(error)} Tap Print Receipt to try again.`
+            );
+          }
+        }
+      } else if (result.amountCollected > 0) {
+        toast.warning(
+          "Collected, but no printer is connected so the receipt wasn't printed. Connect the printer, then tap Print Receipt."
+        );
       }
       setReceipt({
         amountCollected: result.amountCollected,

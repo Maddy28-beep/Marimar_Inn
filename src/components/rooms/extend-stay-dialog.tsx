@@ -149,6 +149,34 @@ export function ExtendStayDialog({ room, booking, onClose }: ExtendStayDialogPro
         } catch (error) {
           toast.error(`Extended, but the drawer said: ${printerErrorMessage(error)}`);
         }
+        // Any payment prints its receipt automatically. Own try/catch so a
+        // drawer problem above can never stop it; Print Receipt on the
+        // receipt screen stays as the retry / extra-copy path.
+        if (amountCollected > 0) {
+          try {
+            await printExtensionReceipt(booking, room, {
+              staffName,
+              hours: additionalHours,
+              amountCharged: additionalCost,
+              amountPaid: amountCollected,
+              change,
+              paymentMethod: payload.paymentMethod,
+              gcashReference: payload.gcashReference,
+              qrphReference: payload.qrphReference,
+              splitCashAmount: payload.splitCashAmount,
+              splitGcashAmount: payload.splitGcashAmount,
+              splitQrphAmount: payload.splitQrphAmount,
+            });
+          } catch (error) {
+            toast.error(
+              `Extended, but the receipt didn't print: ${printerErrorMessage(error)} Tap Print Receipt to try again.`
+            );
+          }
+        }
+      } else if (amountCollected > 0) {
+        toast.warning(
+          "Extended, but no printer is connected so the receipt wasn't printed. Connect the printer, then tap Print Receipt."
+        );
       }
       setReceipt({
         hours: additionalHours,

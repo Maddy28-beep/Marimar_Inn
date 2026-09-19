@@ -136,6 +136,20 @@ export function WalkInSaleDialog({ onClose }: WalkInSaleDialogProps) {
         } catch (error) {
           toast.error(`Sold, but the drawer said: ${printerErrorMessage(error)}`);
         }
+        // A sale is always paid on the spot, so its receipt prints
+        // automatically. Own try/catch so a drawer problem above can never
+        // stop it; Print Receipt stays as the retry / extra-copy path.
+        try {
+          await printStoreSaleReceipt(sale, { staffName, change });
+        } catch (error) {
+          toast.error(
+            `Sold, but the receipt didn't print: ${printerErrorMessage(error)} Tap Print Receipt to try again.`
+          );
+        }
+      } else {
+        toast.warning(
+          "Sold, but no printer is connected so the receipt wasn't printed. Connect the printer, then tap Print Receipt."
+        );
       }
       setReceipt({ sale, change });
       setPhase("receipt");
