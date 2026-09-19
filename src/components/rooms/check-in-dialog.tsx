@@ -301,6 +301,28 @@ export function CheckInDialog({ room, cashierId, onClose }: CheckInDialogProps) 
         } catch (error) {
           toast.error(`Checked in, but the drawer said: ${printerErrorMessage(error)}`);
         }
+        // The guest's receipt prints automatically the moment they pay —
+        // check-in is the payment moment, so it prints here without the
+        // cashier having to tap Print. Own try/catch so a drawer problem
+        // above can never stop the receipt. The Print Receipt button on the
+        // receipt screen stays as the retry / extra-copy path.
+        if (amountCollected > 0) {
+          try {
+            await printThermalReceipt(receiptBooking, room, {
+              staffName,
+              finalAmountPaid: amountCollected,
+              change,
+            });
+          } catch (error) {
+            toast.error(
+              `Checked in, but the receipt didn't print: ${printerErrorMessage(error)} Tap Print Receipt to try again.`
+            );
+          }
+        }
+      } else if (amountCollected > 0) {
+        toast.warning(
+          "Checked in, but no printer is connected so the receipt wasn't printed. Connect the printer, then tap Print Receipt."
+        );
       }
 
       setReceipt({ booking: receiptBooking, finalAmountPaid: amountCollected, change });

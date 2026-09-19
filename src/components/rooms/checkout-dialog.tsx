@@ -194,21 +194,25 @@ export function CheckoutDialog({ room, booking, staffName, cashierId, onClose }:
         } catch (error) {
           toast.error(`Checked out, but the drawer said: ${printerErrorMessage(error)}`);
         }
-        // Every checkout prints the guest's receipt automatically — guests
-        // always want one, so it's no longer left to the cashier to remember
-        // to tap Print. Its own try/catch so a drawer problem above can never
-        // stop the receipt. Uses finalBooking, not settledBooking: the
-        // setSettledBooking above hasn't been applied to this closure yet.
-        // The Print Receipt button stays on the receipt screen as the retry /
-        // extra-copy path if this print fails or a second copy is wanted.
-        try {
-          await printThermalReceipt(finalBooking, room, { staffName, finalAmountPaid, change });
-        } catch (error) {
-          toast.error(
-            `Checked out, but the receipt didn't print: ${printerErrorMessage(error)} Tap Print Receipt to try again.`
-          );
+        // A receipt prints automatically whenever money is collected — not on
+        // every checkout. If the guest already paid in full at check-in they
+        // already got that receipt, so nothing new is collected here and the
+        // Print Receipt button on the receipt screen stays a manual option.
+        // If a balance was left (store items / extras added during the stay)
+        // and is paid now, that payment gets its own receipt right away.
+        // Own try/catch so a drawer problem above can never stop the receipt.
+        // Uses finalBooking, not settledBooking: the setSettledBooking above
+        // hasn't been applied to this closure yet.
+        if (amountCollectedNow > 0) {
+          try {
+            await printThermalReceipt(finalBooking, room, { staffName, finalAmountPaid, change });
+          } catch (error) {
+            toast.error(
+              `Checked out, but the receipt didn't print: ${printerErrorMessage(error)} Tap Print Receipt to try again.`
+            );
+          }
         }
-      } else {
+      } else if (amountCollectedNow > 0) {
         toast.warning(
           "Checked out, but no printer is connected so the receipt wasn't printed. Connect the printer, then tap Print Receipt."
         );
