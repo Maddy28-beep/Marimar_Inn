@@ -9,37 +9,54 @@ import { useAuth } from "@/context/auth-context";
 import { isOwnerLikeRole } from "@/lib/roles";
 import { BedDoubleIcon, BroomIcon, UserIcon, WrenchIcon } from "lucide-react";
 
-// Glassmorphism shell: a translucent, blurred panel (backdrop-blur +
-// backdrop-saturate) with a soft inset highlight ring standing in for a
-// glass edge, and a diffuse shadow that lifts slightly further on hover —
-// the per-status color still reads through the tinted background plus the
-// left accent bar/dot/pill below, so the glass treatment doesn't wash out
-// the at-a-glance status signal.
+// The card is a bed seen from above, at the same fixed size as before
+// (h-36 — the front desk needs every room on one screen, so the bed shape
+// has to be built out of the space the content already used, never added
+// on top of it):
+//   - headboard: the darker top band, holding two pillows side by side —
+//     the room number on one, the status icon + dot on the other
+//   - folded-down sheet: the lighter band under it, holding the status
+//     pill and room type
+//   - blanket: everything below, tinted with the status color, holding the
+//     guest / countdown / balance / tap hint
+//   - footboard: the progress bar along the very bottom edge
+//
+// Glassmorphism shell kept from before (backdrop-blur + soft inset ring +
+// hover lift) so the bed still reads as one translucent object.
 //
 // The <button> is display:block and CARD_INNER does the flex-col: WebKit
 // (iPhone) doesn't lay out a flex <button>'s children like Blink does — it
 // shrink-wraps them instead of stretching, which broke row widths on a real
 // iPhone. An explicit w-full on a real <div> child sidesteps that.
-const CARD_INNER = "flex h-full w-full flex-col gap-1";
+const CARD_INNER = "flex h-full w-full flex-col";
 const CARD_SHELL =
-  "relative block h-36 w-full overflow-hidden rounded-2xl border p-3 pl-3.5 text-left shadow-lg shadow-black/5 backdrop-blur-md backdrop-saturate-150 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl dark:shadow-black/20 dark:ring-white/10 before:absolute before:inset-y-0 before:left-0 before:w-1.5";
+  "relative block h-36 w-full overflow-hidden rounded-2xl border text-left shadow-lg shadow-black/5 backdrop-blur-md backdrop-saturate-150 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl dark:shadow-black/20 dark:ring-white/10";
 
-const STATUS_STYLES: Record<RoomStatus, { label: string; card: string; dot: string; pill: string }> = {
+const PILLOW =
+  "flex h-6 flex-1 items-center justify-center gap-1 rounded-xl bg-white/85 shadow-sm ring-1 ring-black/5 dark:bg-white/15 dark:ring-white/10";
+
+const STATUS_STYLES: Record<
+  RoomStatus,
+  { label: string; card: string; head: string; dot: string; pill: string }
+> = {
   available: {
     label: "Available",
-    card: "border-emerald-500/30 bg-emerald-500/10 before:bg-emerald-500",
+    card: "border-emerald-500/30 bg-emerald-500/10",
+    head: "border-emerald-500/30 bg-emerald-600/25",
     dot: "bg-emerald-500",
     pill: "bg-emerald-600/15 text-emerald-800 dark:text-emerald-300",
   },
   occupied: {
     label: "Occupied",
-    card: "border-rose-500/30 bg-rose-500/10 before:bg-rose-500",
+    card: "border-rose-500/30 bg-rose-500/10",
+    head: "border-rose-500/30 bg-rose-600/25",
     dot: "bg-rose-500",
     pill: "bg-rose-600/15 text-rose-800 dark:text-rose-300",
   },
   cleaning: {
     label: "Cleaning",
-    card: "border-amber-500/30 bg-amber-500/10 before:bg-amber-500",
+    card: "border-amber-500/30 bg-amber-500/10",
+    head: "border-amber-500/30 bg-amber-600/25",
     dot: "bg-amber-500",
     pill: "bg-amber-600/15 text-amber-800 dark:text-amber-300",
   },
@@ -47,7 +64,8 @@ const STATUS_STYLES: Record<RoomStatus, { label: string; card: string; dot: stri
     label: "Maintenance",
     // Was a fully opaque bg-muted — translucent now so it picks up the
     // same backdrop-blur glass effect as every other status.
-    card: "border-muted-foreground/25 bg-muted-foreground/10 before:bg-muted-foreground/70",
+    card: "border-muted-foreground/25 bg-muted-foreground/10",
+    head: "border-muted-foreground/25 bg-muted-foreground/25",
     dot: "bg-muted-foreground",
     pill: "bg-muted-foreground/15 text-muted-foreground",
   },
@@ -79,6 +97,7 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
   const isCritical = remaining !== null && remaining <= 0.25 && remaining > 0;
   const isRunningLow = remaining !== null && remaining <= 0.5 && remaining > 0.25;
   const isOverdue = remaining !== null && remaining <= 0;
+  const isAlert = isCritical || isOverdue;
   const balance = showBooking ? Math.max(booking!.totalAmount - booking!.amountPaid, 0) : 0;
   const usedFrac =
     showBooking && !booking!.openEnded && booking!.hoursBooked > 0
@@ -94,115 +113,128 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
         // 15 minutes left or overdue gets a dark-red card, not just the
         // usual light "occupied" rose — a glance at the grid should make
         // these rooms impossible to miss.
-        isCritical || isOverdue
-          ? "border-red-700/60 bg-red-700/20 hover:bg-red-700/25 before:bg-red-700 dark:border-red-600/70 dark:bg-red-600/25 dark:hover:bg-red-600/30 dark:before:bg-red-500"
+        isAlert
+          ? "border-red-700/60 bg-red-700/20 hover:bg-red-700/25 dark:border-red-600/70 dark:bg-red-600/25 dark:hover:bg-red-600/30"
           : style.card
       )}
     >
       <div className={CARD_INNER}>
-      <div className="flex items-start justify-between gap-2">
-        <span className="font-heading text-xl leading-none font-semibold tracking-tight">
-          {room.roomNumber}
-        </span>
-        <div className="mt-1 flex items-center gap-1">
-          {showBooking && (
-            <BedDoubleIcon
-              className={cn(
-                "size-4.5 shrink-0 animate-bed-sway",
-                isCritical || isOverdue ? "text-red-700 dark:text-red-400" : "text-rose-500/70 dark:text-rose-400/70"
-              )}
-            />
-          )}
-          {room.status === "available" && (
-            <BedDoubleIcon className="size-3.5 shrink-0 text-emerald-600/70 dark:text-emerald-400/70" />
-          )}
-          {room.status === "cleaning" && (
-            <BroomIcon className="size-4.5 shrink-0 animate-broom-sweep text-amber-600/70 dark:text-amber-400/70" />
-          )}
-          {room.status === "maintenance" && (
-            <WrenchIcon className="size-4.5 shrink-0 animate-wrench-turn text-muted-foreground/70" />
-          )}
-          <span
-            className={cn(
-              "size-2.5 shrink-0 rounded-full",
-              isCritical || isOverdue ? "bg-red-700 ring-2 ring-red-700/30 dark:bg-red-500" : style.dot
-            )}
-          />
-        </div>
-      </div>
-      {/* gap-0.5 + px-1, and the room type matched down to the pill's own
-          text-[10px] — on an iPad-Mini-width card (~111px inside the
-          padding) "Standard" next to the actual deployed Geist font still
-          didn't fit at text-xs (12px): measured -5px short even with a
-          milder gap-1 tightening tried first. Confirmed against the real
-          font file from the build output, not a generic system font, before
-          landing here — ~2.8px of real margin on the tightest row
-          ("AVAILABLE", the widest status label), not an exact-fit knife
-          edge. */}
-      <div className="flex items-center gap-0.5">
-        <span
+        {/* Headboard with two pillows */}
+        <div
           className={cn(
-            "rounded-full px-1 py-0.5 text-[10px] font-bold tracking-wide uppercase",
-            isCritical || isOverdue
-              ? "bg-red-700/20 text-red-800 dark:text-red-300"
-              : style.pill
+            "flex shrink-0 items-center gap-1.5 border-b px-2 py-1",
+            isAlert ? "border-red-700/40 bg-red-700/30 dark:bg-red-600/35" : style.head
           )}
         >
-          {style.label}
-        </span>
-        <span className="truncate text-[10px] text-muted-foreground">{ROOM_TYPE_LABELS[room.type]}</span>
-      </div>
-
-      {showBooking ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-0.5">
-          <div className="flex items-center gap-1 truncate text-sm font-medium">
-            <UserIcon className="size-3.5 shrink-0" />
-            <span className="truncate">{booking!.guestName}</span>
+          <div className={PILLOW}>
+            <span className="font-heading text-lg leading-none font-semibold tracking-tight">
+              {room.roomNumber}
+            </span>
           </div>
-          <div
+          <div className={PILLOW}>
+            {showBooking && (
+              <BedDoubleIcon
+                className={cn(
+                  "size-4 shrink-0 animate-bed-sway",
+                  isAlert ? "text-red-700 dark:text-red-400" : "text-rose-500/80 dark:text-rose-400/80"
+                )}
+              />
+            )}
+            {room.status === "available" && (
+              <BedDoubleIcon className="size-3.5 shrink-0 text-emerald-600/80 dark:text-emerald-400/80" />
+            )}
+            {room.status === "cleaning" && (
+              <BroomIcon className="size-4 shrink-0 animate-broom-sweep text-amber-600/80 dark:text-amber-400/80" />
+            )}
+            {room.status === "maintenance" && (
+              <WrenchIcon className="size-4 shrink-0 animate-wrench-turn text-muted-foreground/80" />
+            )}
+            <span
+              className={cn(
+                "size-2.5 shrink-0 rounded-full",
+                isAlert ? "bg-red-700 ring-2 ring-red-700/30 dark:bg-red-500" : style.dot
+              )}
+            />
+          </div>
+        </div>
+
+        {/* Folded-down sheet. gap-0.5 + px-1 on the pill, and the room type
+            matched down to the pill's own text-[10px] — on an iPad-Mini-width
+            card (~111px inside the padding) "Standard" next to the actual
+            deployed Geist font still didn't fit at text-xs (12px): measured
+            -5px short even with a milder gap-1 tightening tried first.
+            Confirmed against the real font file from the build output, not a
+            generic system font, before landing here — ~2.8px of real margin
+            on the tightest row ("AVAILABLE", the widest status label), not
+            an exact-fit knife edge. */}
+        <div className="flex shrink-0 items-center gap-0.5 border-b border-white/50 bg-white/40 px-3 py-0.5 dark:border-white/10 dark:bg-white/5">
+          <span
             className={cn(
-              "text-xl leading-tight font-bold",
-              booking!.openEnded
-                ? "text-sky-600 dark:text-sky-400"
-                : isOverdue
-                  ? "text-red-700 dark:text-red-400"
-                  : isCritical
-                    ? "text-red-700 dark:text-red-400"
-                    : isRunningLow
-                      ? "text-amber-600 dark:text-amber-400"
-                      : "text-foreground"
+              "rounded-full px-1 py-0.5 text-[10px] font-bold tracking-wide uppercase",
+              isAlert ? "bg-red-700/20 text-red-800 dark:text-red-300" : style.pill
             )}
           >
-            {booking!.openEnded
-              ? `Open · ${formatHours(elapsed)}`
-              : isOverdue
-                ? // Owner sees the exact overdue duration right on the card;
-                  // cashiers only see "Overdue" (no number) so they can't game
-                  // how late they report a checkout — the Owner can still spot
-                  // the real duration here or in Reports > Overdue.
-                  isOwnerLike
-                  ? `Overdue ${formatHours(-remaining!)}`
-                  : "Overdue"
-                : `${formatHours(remaining!)} left`}
-          </div>
-          {balance > 0 && (
-            <div className="mt-auto w-fit rounded-md bg-amber-500/25 px-2 py-0.5 text-sm font-bold text-amber-800 dark:text-amber-300">
-              ₱{balance.toFixed(2)} due
+            {style.label}
+          </span>
+          <span className="truncate text-[10px] text-muted-foreground">{ROOM_TYPE_LABELS[room.type]}</span>
+        </div>
+
+        {/* Blanket */}
+        {showBooking ? (
+          <div className="flex min-h-0 flex-1 flex-col gap-0.5 px-3 pt-1 pb-2">
+            <div className="flex items-center gap-1 truncate text-sm font-medium">
+              <UserIcon className="size-3.5 shrink-0" />
+              <span className="truncate">{booking!.guestName}</span>
             </div>
-          )}
-        </div>
-      ) : room.status === "available" ? (
-        <div className="mt-auto flex items-center gap-1.5 text-sm font-medium text-emerald-800 dark:text-emerald-300">
-          <BedDoubleIcon className="size-4 shrink-0" />
-          Tap to check in
-        </div>
-      ) : room.status === "cleaning" ? (
-        <div className="mt-auto text-sm font-medium text-amber-800 dark:text-amber-300">Tap when ready</div>
-      ) : (
-        <div className="mt-auto text-sm font-medium text-muted-foreground">Tap to update</div>
-      )}
+            <div
+              className={cn(
+                "text-xl leading-tight font-bold",
+                booking!.openEnded
+                  ? "text-sky-600 dark:text-sky-400"
+                  : isOverdue
+                    ? "text-red-700 dark:text-red-400"
+                    : isCritical
+                      ? "text-red-700 dark:text-red-400"
+                      : isRunningLow
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-foreground"
+              )}
+            >
+              {booking!.openEnded
+                ? `Open · ${formatHours(elapsed)}`
+                : isOverdue
+                  ? // Owner sees the exact overdue duration right on the card;
+                    // cashiers only see "Overdue" (no number) so they can't game
+                    // how late they report a checkout — the Owner can still spot
+                    // the real duration here or in Reports > Overdue.
+                    isOwnerLike
+                    ? `Overdue ${formatHours(-remaining!)}`
+                    : "Overdue"
+                  : `${formatHours(remaining!)} left`}
+            </div>
+            {balance > 0 && (
+              <div className="mt-auto w-fit rounded-md bg-amber-500/25 px-2 py-0.5 text-sm font-bold text-amber-800 dark:text-amber-300">
+                ₱{balance.toFixed(2)} due
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col justify-end px-3 pt-1 pb-2">
+            {room.status === "available" ? (
+              <div className="flex items-center gap-1.5 text-sm font-medium text-emerald-800 dark:text-emerald-300">
+                <BedDoubleIcon className="size-4 shrink-0" />
+                Tap to check in
+              </div>
+            ) : room.status === "cleaning" ? (
+              <div className="text-sm font-medium text-amber-800 dark:text-amber-300">Tap when ready</div>
+            ) : (
+              <div className="text-sm font-medium text-muted-foreground">Tap to update</div>
+            )}
+          </div>
+        )}
       </div>
 
+      {/* Footboard */}
       {showBooking && !booking!.openEnded && (
         <div className="absolute inset-x-0 bottom-0 h-1 bg-black/5 dark:bg-white/10">
           <div
