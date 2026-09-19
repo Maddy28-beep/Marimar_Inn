@@ -2,12 +2,12 @@
 
 import { memo } from "react";
 import { cn } from "@/lib/utils";
-import { ROOM_TYPE_LABELS, type Booking, type Room, type RoomStatus } from "@/lib/types";
+import type { Booking, Room, RoomStatus } from "@/lib/types";
 import { hoursElapsed } from "@/lib/bookings";
 import { formatHours } from "@/lib/time";
 import { useAuth } from "@/context/auth-context";
 import { isOwnerLikeRole } from "@/lib/roles";
-import { BedDoubleIcon, BroomIcon, UserIcon, WrenchIcon } from "lucide-react";
+import { BedDoubleIcon, BroomIcon, WrenchIcon } from "lucide-react";
 
 // The card is a bed seen from above, at the same fixed size as before
 // (h-36 — the front desk needs every room on one screen, so the bed shape
@@ -135,19 +135,19 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
             {showBooking && (
               <BedDoubleIcon
                 className={cn(
-                  "size-4 shrink-0 animate-bed-sway",
+                  "size-5 shrink-0 animate-bed-sway",
                   isAlert ? "text-red-700 dark:text-red-400" : "text-rose-500/80 dark:text-rose-400/80"
                 )}
               />
             )}
             {room.status === "available" && (
-              <BedDoubleIcon className="size-3.5 shrink-0 text-emerald-600/80 dark:text-emerald-400/80" />
+              <BedDoubleIcon className="size-5 shrink-0 text-emerald-600/80 dark:text-emerald-400/80" />
             )}
             {room.status === "cleaning" && (
-              <BroomIcon className="size-4 shrink-0 animate-broom-sweep text-amber-600/80 dark:text-amber-400/80" />
+              <BroomIcon className="size-5 shrink-0 animate-broom-sweep text-amber-600/80 dark:text-amber-400/80" />
             )}
             {room.status === "maintenance" && (
-              <WrenchIcon className="size-4 shrink-0 animate-wrench-turn text-muted-foreground/80" />
+              <WrenchIcon className="size-5 shrink-0 animate-wrench-turn text-muted-foreground/80" />
             )}
             <span
               className={cn(
@@ -158,34 +158,29 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
           </div>
         </div>
 
-        {/* Folded-down sheet. gap-0.5 + px-1 on the pill, and the room type
-            matched down to the pill's own text-[10px] — on an iPad-Mini-width
-            card (~111px inside the padding) "Standard" next to the actual
-            deployed Geist font still didn't fit at text-xs (12px): measured
-            -5px short even with a milder gap-1 tightening tried first.
-            Confirmed against the real font file from the build output, not a
-            generic system font, before landing here — ~2.8px of real margin
-            on the tightest row ("AVAILABLE", the widest status label), not
-            an exact-fit knife edge. */}
-        <div className="flex shrink-0 items-center gap-0.5 border-b border-white/50 bg-white/40 px-3 py-0.5 dark:border-white/10 dark:bg-white/5">
+        {/* Folded-down sheet: status pill on the left, the guest on the right
+            (occupied only). The room type used to sit here, but every room is
+            Standard so it told the cashier nothing (Owner asked to drop it).
+            The pill never shrinks; the guest name is what truncates when the
+            card is narrow — the full name is one tap away in the detail
+            dialog, the status label is not. */}
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/50 bg-white/40 px-3 py-0.5 dark:border-white/10 dark:bg-white/5">
           <span
             className={cn(
-              "rounded-full px-1 py-0.5 text-[10px] font-bold tracking-wide uppercase",
+              "shrink-0 rounded-full px-1 py-0.5 text-[10px] font-bold tracking-wide uppercase",
               isAlert ? "bg-red-700/20 text-red-800 dark:text-red-300" : style.pill
             )}
           >
             {style.label}
           </span>
-          <span className="truncate text-[10px] text-muted-foreground">{ROOM_TYPE_LABELS[room.type]}</span>
+          {showBooking && (
+            <span className="min-w-0 truncate text-right text-xs font-medium">{booking!.guestName}</span>
+          )}
         </div>
 
         {/* Blanket */}
         {showBooking ? (
-          <div className="flex min-h-0 flex-1 flex-col gap-0.5 px-3 pt-1 pb-2">
-            <div className="flex items-center gap-1 truncate text-sm font-medium">
-              <UserIcon className="size-3.5 shrink-0" />
-              <span className="truncate">{booking!.guestName}</span>
-            </div>
+          <div className="flex min-h-0 flex-1 flex-col justify-center gap-1 px-3 pt-1 pb-2">
             <div
               className={cn(
                 "text-xl leading-tight font-bold",
@@ -213,7 +208,7 @@ export const RoomCard = memo(function RoomCard({ room, booking, now, onSelect }:
                   : `${formatHours(remaining!)} left`}
             </div>
             {balance > 0 && (
-              <div className="mt-auto w-fit rounded-md bg-amber-500/25 px-2 py-0.5 text-sm font-bold text-amber-800 dark:text-amber-300">
+              <div className="w-fit rounded-md bg-amber-500/25 px-2 py-0.5 text-sm font-bold text-amber-800 dark:text-amber-300">
                 ₱{balance.toFixed(2)} due
               </div>
             )}
