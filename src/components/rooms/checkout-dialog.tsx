@@ -194,6 +194,24 @@ export function CheckoutDialog({ room, booking, staffName, cashierId, onClose }:
         } catch (error) {
           toast.error(`Checked out, but the drawer said: ${printerErrorMessage(error)}`);
         }
+        // Every checkout prints the guest's receipt automatically — guests
+        // always want one, so it's no longer left to the cashier to remember
+        // to tap Print. Its own try/catch so a drawer problem above can never
+        // stop the receipt. Uses finalBooking, not settledBooking: the
+        // setSettledBooking above hasn't been applied to this closure yet.
+        // The Print Receipt button stays on the receipt screen as the retry /
+        // extra-copy path if this print fails or a second copy is wanted.
+        try {
+          await printThermalReceipt(finalBooking, room, { staffName, finalAmountPaid, change });
+        } catch (error) {
+          toast.error(
+            `Checked out, but the receipt didn't print: ${printerErrorMessage(error)} Tap Print Receipt to try again.`
+          );
+        }
+      } else {
+        toast.warning(
+          "Checked out, but no printer is connected so the receipt wasn't printed. Connect the printer, then tap Print Receipt."
+        );
       }
     } catch (error) {
       console.error(error);
