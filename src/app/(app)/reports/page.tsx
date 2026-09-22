@@ -266,6 +266,11 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   const netCash = (collected?.cashCollected ?? 0) - expenseTotal;
   const netCollected = (collected?.totalCollected ?? 0) - expenseTotal;
   const netSales = overallSale - expenseTotal;
+  // Same reasoning as DailySalesTable's otherShiftsCollected — real money
+  // already inside Total collected/Overall Sale, but not in Room/Store
+  // total, so it's called out here too rather than only in the "Payments
+  // from other shifts" table further up the sheet.
+  const otherShiftsCollected = transactions.reduce((sum, t) => sum + t.amount, 0);
   const isOwnerLike = isOwnerLikeRole(appUser?.role);
 
   async function handleExport() {
@@ -466,6 +471,9 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
                       { metric: "Net cash", value: netCash },
                       { metric: "GCash collected", value: collected?.gcashCollected ?? 0 },
                       { metric: "QRPh collected", value: collected?.qrphCollected ?? 0 },
+                      ...(otherShiftsCollected > 0
+                        ? [{ metric: "Other shifts collected", value: otherShiftsCollected }]
+                        : []),
                       { metric: "Total collected", value: collected?.totalCollected ?? 0 },
                       { metric: "Net after expenses", value: netCollected },
                       { metric: "Overall Sale", value: overallSale },

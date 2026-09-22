@@ -122,6 +122,12 @@ export function DailySalesTable({
   const netCash = cashCollected - expenseTotal;
   const netCollected = totalCollected - expenseTotal;
   const netSales = overallSale - expenseTotal;
+  // Real money already inside Total collected/Overall Sale above, but not in
+  // Room total/Store total — those only cover bookings that started this
+  // shift. Shown here too (not just in the "Payments from other shifts"
+  // table further up) so it doesn't look like Overall Sale disagrees with
+  // Room total + Store total when someone scrolls straight to this summary.
+  const otherShiftsCollected = transactions.reduce((sum, t) => sum + t.amount, 0);
 
   return (
     <div className="flex flex-col gap-3">
@@ -328,6 +334,12 @@ export function DailySalesTable({
           <span className="text-muted-foreground">QRPh collected</span>{" "}
           <span className="font-medium">{peso(qrphCollected)}</span>
         </div>
+        {otherShiftsCollected > 0 && (
+          <div>
+            <span className="text-muted-foreground">Other shifts collected</span>{" "}
+            <span className="font-medium">{peso(otherShiftsCollected)}</span>
+          </div>
+        )}
         <div>
           <span className="text-muted-foreground">Total collected</span>{" "}
           <span className="font-medium">{peso(totalCollected)}</span>

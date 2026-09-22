@@ -1572,12 +1572,26 @@ function dailySalesReceiptEncoder(data: DailySalesReceiptData) {
   // *started* this shift — same reasoning as the on-screen Overall Sale.
   const overallSale = data.totals.totalPaid;
 
+  // Room total / Store total / Extra total only cover bookings that
+  // *started* this shift — a payment collected this shift for a booking
+  // that started in an earlier one (an extend, a checkout balance, an order)
+  // is real money in Cash/GCash/QRPh/Total collected and OVERALL SALE below,
+  // but wasn't in any of those three lines. It's listed in the "Payments
+  // from other shifts" section above, but the Owner sometimes skips straight
+  // to this final totals block and is then confused why Total collected /
+  // OVERALL SALE is more than Room total + Store total + Extra total. This
+  // line makes that gap visible right where she's actually looking.
+  const otherShiftTotal = (data.otherShiftPayments ?? []).reduce((sum, p) => sum + p.amount, 0);
+
   encoder
     .bold(true)
     .line(twoColumn("Room total", money(data.totals.totalRoomAmount), width))
     .line(twoColumn("Store total", money(data.totals.totalStoreAmount), width));
   if ((data.totals.extrasAmount ?? 0) > 0) {
     encoder.line(twoColumn("Extra/Request total", money(data.totals.extrasAmount), width));
+  }
+  if (otherShiftTotal > 0) {
+    encoder.line(twoColumn("Other shifts total", money(otherShiftTotal), width));
   }
   encoder.bold(false)
     .newline()
