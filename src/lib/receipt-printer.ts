@@ -1610,8 +1610,19 @@ function dailySalesReceiptEncoder(data: DailySalesReceiptData) {
 
   encoder
     .line(twoColumn("GCash collected", money(data.totals.gcashCollected), width))
-    .line(twoColumn("QRPh collected", money(data.totals.qrphCollected), width))
-    .line(twoColumn("Total collected", money(data.totals.totalPaid), width));
+    .line(twoColumn("QRPh collected", money(data.totals.qrphCollected), width));
+  // Same otherShiftTotal already shown above (near Room/Store total) —
+  // reused, not recomputed, so the two can never disagree. Shown again
+  // here, right next to Total collected, for whoever skips straight to
+  // this block instead of the revenue breakdown further up. Same exact
+  // label both times ("Other shifts total"), not "...collected" — that
+  // version clips to "Other shifts co..." on 58mm paper's narrower
+  // character width, and a matching label also makes it obvious both
+  // lines are the same figure, not two different things.
+  if (otherShiftTotal > 0) {
+    encoder.line(twoColumn("Other shifts total", money(otherShiftTotal), width));
+  }
+  encoder.line(twoColumn("Total collected", money(data.totals.totalPaid), width));
 
   if (expenseTotal > 0) {
     encoder.line(twoColumn("Net after expenses", money(data.totals.totalPaid - expenseTotal), width));
