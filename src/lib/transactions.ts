@@ -63,10 +63,14 @@ export async function recordTransaction(input: RecordTransactionInput): Promise<
   }
 }
 
-export async function fetchTransactionsInRange(start: Date, end: Date): Promise<Transaction[]> {
+export async function fetchTransactionsInRange(
+  start: Date,
+  end: Date,
+  branchId?: string
+): Promise<Transaction[]> {
   const firestore = requireDb();
   const q = query(
-    bCollection(firestore, "transactions"),
+    bCollection(firestore, "transactions", branchId),
     where("timestamp", ">=", Timestamp.fromDate(start)),
     where("timestamp", "<=", Timestamp.fromDate(end))
   );

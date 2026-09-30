@@ -86,11 +86,12 @@ function voidedRoomPortionCollected(booking: Booking): PaymentPortions {
 export async function fetchBookingsInRange(
   field: "checkInTime" | "checkOutTime",
   start: Date,
-  end: Date
+  end: Date,
+  branchId?: string
 ): Promise<Booking[]> {
   const firestore = requireDb();
   const q = query(
-    bCollection(firestore, "bookings"),
+    bCollection(firestore, "bookings", branchId),
     where(field, ">=", Timestamp.fromDate(start)),
     where(field, "<=", Timestamp.fromDate(end))
   );

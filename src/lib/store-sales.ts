@@ -130,10 +130,14 @@ export async function createStoreSale(input: StoreSaleInput): Promise<StoreSale>
   };
 }
 
-export async function fetchStoreSalesInRange(start: Date, end: Date): Promise<StoreSale[]> {
+export async function fetchStoreSalesInRange(
+  start: Date,
+  end: Date,
+  branchId?: string
+): Promise<StoreSale[]> {
   const firestore = requireDb();
   const q = query(
-    bCollection(firestore, "storeSales"),
+    bCollection(firestore, "storeSales", branchId),
     where("soldAt", ">=", Timestamp.fromDate(start)),
     where("soldAt", "<=", Timestamp.fromDate(end))
   );

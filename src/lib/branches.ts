@@ -71,15 +71,17 @@ export function allowedBranchIds(role: UserRole, branchIds?: string[]): string[]
   return assigned.length > 0 ? assigned : [DEFAULT_BRANCH_ID];
 }
 
-function pathFor(name: string): string {
-  return activeBranchId === DEFAULT_BRANCH_ID
-    ? name
-    : `branches/${activeBranchId}/${name}`;
+function pathFor(name: string, branchId: string = activeBranchId): string {
+  return branchId === DEFAULT_BRANCH_ID ? name : `branches/${branchId}/${name}`;
 }
 
 /** Branch-scoped stand-in for collection(firestore, name). */
-export function bCollection(firestore: Firestore, name: string): CollectionReference {
-  return collection(firestore, pathFor(name));
+export function bCollection(
+  firestore: Firestore,
+  name: string,
+  branchId?: string
+): CollectionReference {
+  return collection(firestore, pathFor(name, branchId));
 }
 
 /** Branch-scoped stand-in for doc(firestore, name, id). */

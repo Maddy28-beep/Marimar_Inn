@@ -27,10 +27,14 @@ export function totalExpenses(expenses: ShiftExpense[]): number {
   return expenses.reduce((sum, expense) => sum + (expense.amount ?? 0), 0);
 }
 
-export async function fetchExpensesInRange(start: Date, end: Date): Promise<ShiftExpense[]> {
+export async function fetchExpensesInRange(
+  start: Date,
+  end: Date,
+  branchId?: string
+): Promise<ShiftExpense[]> {
   const firestore = requireDb();
   const q = query(
-    bCollection(firestore, "shiftExpenses"),
+    bCollection(firestore, "shiftExpenses", branchId),
     where("recordedAt", ">=", Timestamp.fromDate(start)),
     where("recordedAt", "<=", Timestamp.fromDate(end))
   );

@@ -32,6 +32,7 @@ import { useCheckoutAlarm } from "@/hooks/use-checkout-alarm";
 import type { Booking } from "@/lib/types";
 import {
   BarChart3Icon,
+  BuildingIcon,
   Loader2Icon,
   LogOutIcon,
   MenuIcon,
@@ -139,6 +140,7 @@ const NAV_LINKS: NavLink[] = [
   { href: "/rooms/manage", label: "Manage Rooms", icon: SettingsIcon, ownerOnly: true },
   { href: "/inventory", label: "Inventory", icon: PackageIcon },
   { href: "/reports", label: "Reports", icon: BarChart3Icon },
+  { href: "/branches", label: "All Branches", icon: BuildingIcon, staffManagementOnly: true },
   { href: "/users", label: "Manage Staff", icon: UsersIcon, staffManagementOnly: true },
 ];
 
