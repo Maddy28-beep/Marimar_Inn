@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useBranch } from "@/context/branch-context";
 import { BRANCHES } from "@/lib/branches";
 import { totalExpenses, fetchExpensesInRange } from "@/lib/expenses";
 import {
@@ -96,6 +98,8 @@ const COLUMNS: Column[] = [
 ];
 
 function AllBranchesContent() {
+  const router = useRouter();
+  const { switchBranch } = useBranch();
   const [from, setFrom] = useState(() => toInputValue(new Date()));
   const [to, setTo] = useState(() => toInputValue(new Date()));
   const [result, setResult] = useState<{ key: string; rows: BranchSummary[] | null } | null>(null);
@@ -136,6 +140,7 @@ function AllBranchesContent() {
         <p className="text-sm text-muted-foreground">
           Combined sales and expenses across every branch. Net cash = cash collected minus
           expenses.
+          Click a branch to open its own reports with the full transactions.
         </p>
       </div>
 
@@ -202,7 +207,19 @@ function AllBranchesContent() {
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id} className="border-b">
-                    <td className="px-3 py-2 font-medium">{r.name}</td>
+                    <td className="px-3 py-2 font-medium">
+                      <button
+                        type="button"
+                        className="text-left underline-offset-2 hover:underline"
+                        title={`Open ${r.name} reports with full transactions`}
+                        onClick={() => {
+                          switchBranch(r.id);
+                          router.push("/reports");
+                        }}
+                      >
+                        {r.name}
+                      </button>
+                    </td>
                     {COLUMNS.map((c) => (
                       <td
                         key={c.label}
