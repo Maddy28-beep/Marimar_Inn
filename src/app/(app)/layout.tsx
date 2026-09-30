@@ -140,7 +140,7 @@ const NAV_LINKS: NavLink[] = [
   { href: "/rooms/manage", label: "Manage Rooms", icon: SettingsIcon, ownerOnly: true },
   { href: "/inventory", label: "Inventory", icon: PackageIcon },
   { href: "/reports", label: "Reports", icon: BarChart3Icon },
-  { href: "/branches", label: "All Branches", icon: BuildingIcon, staffManagementOnly: true },
+  { href: "/branches", label: "Branches", icon: BuildingIcon, staffManagementOnly: true },
   { href: "/users", label: "Manage Staff", icon: UsersIcon, staffManagementOnly: true },
 ];
 
@@ -247,8 +247,8 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="hidden shrink-0 items-center gap-2 xl:flex">
-          <HeaderClock />
-          <Separator orientation="vertical" className="h-5" />
+          <HeaderClock className="hidden 2xl:inline" />
+          <Separator orientation="vertical" className="hidden h-5 2xl:block" />
           <div className="flex items-center gap-2">
             <BranchSwitcher />
             <OnlineStatus />
