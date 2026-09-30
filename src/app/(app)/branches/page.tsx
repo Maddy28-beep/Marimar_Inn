@@ -19,7 +19,8 @@ import {
 } from "@/lib/reports";
 import { fetchStoreSalesInRange } from "@/lib/store-sales";
 import { fetchTransactionsInRange } from "@/lib/transactions";
-import { Loader2Icon } from "lucide-react";
+import { exportToExcel, formatReportDate } from "@/lib/export";
+import { DownloadIcon, Loader2Icon } from "lucide-react";
 
 interface BranchSummary {
   id: string;
@@ -105,6 +106,43 @@ function AllBranchesContent() {
   const [result, setResult] = useState<{ key: string; rows: BranchSummary[] | null } | null>(null);
   const key = `${from}|${to}`;
 
+  async function handleExport() {
+    if (!rows) return;
+    const total: Record<string, unknown> = { branch: "All branches" };
+    const data = rows.map((r) => {
+      const row: Record<string, unknown> = { branch: r.name };
+      for (const c of COLUMNS) row[c.label] = c.pick(r);
+      return row;
+    });
+    for (const c of COLUMNS) total[c.label] = sum(c.pick);
+    const range =
+      from === to
+        ? formatReportDate(from)
+        : `${formatReportDate(from)} to ${formatReportDate(to)}`;
+    await exportToExcel(`marimar-all-branches-${from}${from === to ? "" : `_to_${to}`}`, [
+      {
+        name: "All Branches",
+        title: "Marimar Inn - All Branches",
+        subtitle: range,
+        tables: [
+          {
+            columns: [
+              { header: "Branch", key: "branch", width: 18, format: "text", bold: true },
+              ...COLUMNS.map((c) => ({
+                header: c.label,
+                key: c.label,
+                width: 16,
+                format: c.money ? ("currency" as const) : ("integer" as const),
+              })),
+            ],
+            rows: [...data, total],
+            emphasizeLastRow: true,
+          },
+        ],
+      },
+    ]);
+  }
+
   useEffect(() => {
     let cancelled = false;
     const start = startOfDay(parseInput(from));
@@ -179,6 +217,10 @@ function AllBranchesContent() {
           onClick={() => setRange(startOfMonth(new Date()), endOfMonth(new Date()))}
         >
           This month
+        </Button>
+        <Button variant="outline" onClick={handleExport} disabled={!rows}>
+          <DownloadIcon className="size-4" />
+          Export Excel
         </Button>
       </div>
 
