@@ -12,6 +12,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { PrinterStatus } from "@/components/printer-status";
 import { CashDrawerControl } from "@/components/cash-drawer-control";
+import { VISIBLE_BRANCHES } from "@/lib/branches";
 import { BranchSwitcher } from "@/components/branch-switcher";
 import { BranchProvider } from "@/context/branch-context";
 import { OnlineStatus } from "@/components/online-status";
@@ -208,6 +209,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const visibleLinks = NAV_LINKS.filter((link) => {
+    if (link.href === "/branches" && VISIBLE_BRANCHES.length <= 1) return false;
     if (link.staffManagementOnly) return canManageStaff(appUser?.role);
     return !link.ownerOnly || isOwnerLikeRole(appUser?.role);
   });

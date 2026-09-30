@@ -6,7 +6,7 @@ import { ProtectedRoute } from "@/components/auth/protected-route";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useBranch } from "@/context/branch-context";
-import { BRANCHES } from "@/lib/branches";
+import { VISIBLE_BRANCHES } from "@/lib/branches";
 import { totalExpenses, fetchExpensesInRange } from "@/lib/expenses";
 import {
   computeDailySalesReport,
@@ -147,7 +147,7 @@ function AllBranchesContent() {
     let cancelled = false;
     const start = startOfDay(parseInput(from));
     const end = endOfDay(parseInput(to));
-    Promise.all(BRANCHES.map((b) => summarizeBranch(b.id, b.name, start, end)))
+    Promise.all(VISIBLE_BRANCHES.map((b) => summarizeBranch(b.id, b.name, start, end)))
       .then((rows) => {
         if (!cancelled) setResult({ key, rows });
       })

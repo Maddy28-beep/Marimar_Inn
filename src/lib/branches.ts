@@ -10,6 +10,9 @@ import type { UserRole } from "@/lib/types";
 export interface Branch {
   id: string;
   name: string;
+  // Hidden branches are fully built but kept out of every screen (switcher,
+  // staff assignment, All Branches totals). Remove the flag to turn one on.
+  hidden?: boolean;
 }
 
 // The first branch is the original, live Marimar Inn — its data stays in the
@@ -20,14 +23,16 @@ export const DEFAULT_BRANCH_ID = "marimar-1";
 
 export const BRANCHES: Branch[] = [
   { id: "marimar-1", name: "Marimar 1" },
-  { id: "marimar-2", name: "Marimar 2" },
-  { id: "marimar-3", name: "Marimar 3" },
+  { id: "marimar-2", name: "Marimar 2", hidden: true },
+  { id: "marimar-3", name: "Marimar 3", hidden: true },
 ];
+
+export const VISIBLE_BRANCHES: Branch[] = BRANCHES.filter((b) => !b.hidden);
 
 const STORAGE_KEY = "marimar.activeBranch";
 
 export function isValidBranchId(id: string | null | undefined): id is string {
-  return !!id && BRANCHES.some((b) => b.id === id);
+  return !!id && VISIBLE_BRANCHES.some((b) => b.id === id);
 }
 
 export function branchName(id: string): string {
@@ -65,7 +70,7 @@ export function setActiveBranchId(id: string) {
  *  to them (accounts with none assigned stay on the original branch). */
 export function allowedBranchIds(role: UserRole, branchIds?: string[]): string[] {
   if (role === "owner" || role === "admin" || role === "superadmin") {
-    return BRANCHES.map((b) => b.id);
+    return VISIBLE_BRANCHES.map((b) => b.id);
   }
   const assigned = (branchIds ?? []).filter(isValidBranchId);
   return assigned.length > 0 ? assigned : [DEFAULT_BRANCH_ID];

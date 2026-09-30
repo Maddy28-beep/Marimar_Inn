@@ -24,7 +24,7 @@ import { createStaffUser, updateStaffUser, type StaffUser } from "@/lib/users";
 import type { UserRole } from "@/lib/types";
 import { canManageStaff, roleLabel, STAFF_ROLE_OPTIONS } from "@/lib/roles";
 import { useAuth } from "@/context/auth-context";
-import { BRANCHES, DEFAULT_BRANCH_ID } from "@/lib/branches";
+import { VISIBLE_BRANCHES, DEFAULT_BRANCH_ID } from "@/lib/branches";
 import { Loader2Icon } from "lucide-react";
 
 interface UserFormDialogProps {
@@ -177,6 +177,7 @@ export function UserFormDialog({ user, onClose }: UserFormDialogProps) {
               </SelectContent>
             </Select>
           </div>
+          {VISIBLE_BRANCHES.length > 1 && (
           <div className="flex flex-col gap-1.5">
             <Label>Branches</Label>
             {seesAllBranches ? (
@@ -185,7 +186,7 @@ export function UserFormDialog({ user, onClose }: UserFormDialogProps) {
               </p>
             ) : (
               <div className="flex flex-wrap gap-3">
-                {BRANCHES.map((b) => (
+                {VISIBLE_BRANCHES.map((b) => (
                   <label key={b.id} className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -199,6 +200,7 @@ export function UserFormDialog({ user, onClose }: UserFormDialogProps) {
               </div>
             )}
           </div>
+          )}
         </div>
 
         <DialogFooter>
