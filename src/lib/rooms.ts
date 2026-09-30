@@ -1,5 +1,4 @@
 import {
-  collection,
   deleteDoc,
   doc,
   onSnapshot,
@@ -10,6 +9,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { bCollection, bDoc } from "@/lib/branches";
 import { DEFAULT_RATE_PACKAGES, type RatePackage, type Room, type RoomStatus, type RoomType } from "@/lib/types";
 
 function requireDb() {
@@ -19,7 +19,7 @@ function requireDb() {
 
 export function subscribeToRooms(onChange: (rooms: Room[]) => void) {
   const firestore = requireDb();
-  const q = query(collection(firestore, "rooms"));
+  const q = query(bCollection(firestore, "rooms"));
   return onSnapshot(q, (snapshot) => {
     const rooms = snapshot.docs.map(
       (d) => d.data({ serverTimestamps: "estimate" }) as Room
@@ -39,7 +39,7 @@ export interface NewRoomInput {
 
 export async function createRoom(input: NewRoomInput) {
   const firestore = requireDb();
-  const ref = doc(collection(firestore, "rooms"));
+  const ref = doc(bCollection(firestore, "rooms"));
   const room: Omit<Room, "lastUpdated"> & { lastUpdated: ReturnType<typeof serverTimestamp> } = {
     roomId: ref.id,
     roomNumber: input.roomNumber,
@@ -53,7 +53,7 @@ export async function createRoom(input: NewRoomInput) {
 
 export async function updateRoom(roomId: string, input: NewRoomInput) {
   const firestore = requireDb();
-  await updateDoc(doc(firestore, "rooms", roomId), {
+  await updateDoc(bDoc(firestore, "rooms", roomId), {
     roomNumber: input.roomNumber,
     floor: input.floor,
     type: input.type,
@@ -62,7 +62,7 @@ export async function updateRoom(roomId: string, input: NewRoomInput) {
 
 export async function updateRoomStatus(roomId: string, status: RoomStatus) {
   const firestore = requireDb();
-  await updateDoc(doc(firestore, "rooms", roomId), {
+  await updateDoc(bDoc(firestore, "rooms", roomId), {
     status,
     lastUpdated: serverTimestamp(),
   });
@@ -70,7 +70,7 @@ export async function updateRoomStatus(roomId: string, status: RoomStatus) {
 
 export async function deleteRoom(roomId: string) {
   const firestore = requireDb();
-  await deleteDoc(doc(firestore, "rooms", roomId));
+  await deleteDoc(bDoc(firestore, "rooms", roomId));
 }
 
 interface SeedRoomSpec {
@@ -94,7 +94,9 @@ export async function seedInitialRooms() {
   const rooms = buildSeedRooms();
 
   for (const spec of rooms) {
-    const ref = doc(collection(firestore, "rooms"));
+    // Deterministic id per room number so a double-tap (or two tablets) on a
+    // new branch's "Seed" button can't create duplicate rooms.
+    const ref = bDoc(firestore, "rooms", `room-${spec.roomNumber}`);
     const room: Omit<Room, "lastUpdated"> & { lastUpdated: ReturnType<typeof serverTimestamp> } = {
       roomId: ref.id,
       roomNumber: spec.roomNumber,
@@ -111,7 +113,7 @@ export async function seedInitialRooms() {
 
 export function subscribeToRatePackages(onChange: (packages: RatePackage[]) => void) {
   const firestore = requireDb();
-  const q = query(collection(firestore, "ratePackages"));
+  const q = query(bCollection(firestore, "ratePackages"));
   return onSnapshot(q, (snapshot) => {
     const packages = snapshot.docs.map(
       (d) => d.data({ serverTimestamps: "estimate" }) as RatePackage
@@ -128,14 +130,14 @@ export interface RatePackageInput {
 
 export async function createRatePackage(input: RatePackageInput) {
   const firestore = requireDb();
-  const ref = doc(collection(firestore, "ratePackages"));
+  const ref = doc(bCollection(firestore, "ratePackages"));
   const pkg: RatePackage = { packageId: ref.id, hours: input.hours, price: input.price };
   await setDoc(ref, pkg);
 }
 
 export async function updateRatePackage(packageId: string, input: RatePackageInput) {
   const firestore = requireDb();
-  await updateDoc(doc(firestore, "ratePackages", packageId), {
+  await updateDoc(bDoc(firestore, "ratePackages", packageId), {
     hours: input.hours,
     price: input.price,
   });
@@ -143,14 +145,14 @@ export async function updateRatePackage(packageId: string, input: RatePackageInp
 
 export async function deleteRatePackage(packageId: string) {
   const firestore = requireDb();
-  await deleteDoc(doc(firestore, "ratePackages", packageId));
+  await deleteDoc(bDoc(firestore, "ratePackages", packageId));
 }
 
 export async function seedDefaultRatePackages() {
   const firestore = requireDb();
   const batch = writeBatch(firestore);
   for (const spec of DEFAULT_RATE_PACKAGES) {
-    const ref = doc(collection(firestore, "ratePackages"));
+    const ref = doc(bCollection(firestore, "ratePackages"));
     const pkg: RatePackage = { packageId: ref.id, hours: spec.hours, price: spec.price };
     batch.set(ref, pkg);
   }

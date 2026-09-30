@@ -1,5 +1,4 @@
 import {
-  collection,
   doc,
   getDoc,
   increment,
@@ -11,6 +10,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { bCollection, bDoc } from "@/lib/branches";
 import type { AppNotification, InventoryItem, StockRequest, UserRole } from "@/lib/types";
 import { syncLowStockNotification } from "@/lib/notifications";
 
@@ -41,8 +41,8 @@ export interface CreateStockRequestInput {
 export async function createStockRequest(input: CreateStockRequestInput): Promise<string> {
   const firestore = requireDb();
   const { item } = input;
-  const requestRef = doc(collection(firestore, "stockRequests"));
-  const notificationRef = doc(firestore, "notifications", `stock-request-${requestRef.id}`);
+  const requestRef = doc(bCollection(firestore, "stockRequests"));
+  const notificationRef = bDoc(firestore, "notifications", `stock-request-${requestRef.id}`);
 
   const request: Omit<StockRequest, "requestedAt"> & {
     requestedAt: ReturnType<typeof serverTimestamp>;
@@ -84,7 +84,7 @@ export async function createStockRequest(input: CreateStockRequestInput): Promis
 
 export function subscribeToPendingStockRequests(onChange: (requests: StockRequest[]) => void) {
   const firestore = requireDb();
-  const q = query(collection(firestore, "stockRequests"), where("status", "==", "pending"));
+  const q = query(bCollection(firestore, "stockRequests"), where("status", "==", "pending"));
   return onSnapshot(q, (snapshot) => {
     const list = snapshot.docs.map(
       (d) => d.data({ serverTimestamps: "estimate" }) as StockRequest
@@ -97,7 +97,7 @@ export function subscribeToPendingStockRequests(onChange: (requests: StockReques
 async function resolveStockRequestNotification(stockRequestId: string) {
   try {
     const firestore = requireDb();
-    await updateDoc(doc(firestore, "notifications", `stock-request-${stockRequestId}`), {
+    await updateDoc(bDoc(firestore, "notifications", `stock-request-${stockRequestId}`), {
       resolved: true,
     });
   } catch {
@@ -114,8 +114,8 @@ async function resolveStockRequestNotification(stockRequestId: string) {
  */
 export async function approveStockRequest(request: StockRequest, actor: StockRequestActor) {
   const firestore = requireDb();
-  const requestRef = doc(firestore, "stockRequests", request.stockRequestId);
-  const itemRef = doc(firestore, "inventory", request.itemId);
+  const requestRef = bDoc(firestore, "stockRequests", request.stockRequestId);
+  const itemRef = bDoc(firestore, "inventory", request.itemId);
 
   const itemSnap = await getDoc(itemRef);
   if (!itemSnap.exists()) {
@@ -147,7 +147,7 @@ export async function denyStockRequest(
 ) {
   const firestore = requireDb();
   const batch = writeBatch(firestore);
-  batch.update(doc(firestore, "stockRequests", request.stockRequestId), {
+  batch.update(bDoc(firestore, "stockRequests", request.stockRequestId), {
     status: "denied",
     resolvedBy: actor.uid,
     resolvedByName: actor.name,

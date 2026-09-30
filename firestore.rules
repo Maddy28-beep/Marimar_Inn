@@ -53,6 +53,11 @@ service cloud.firestore {
       return isStaff() && getUserRole() != 'supervisor';
     }
 
+    // Every collection below except users is branch-scoped: the original
+    // branch lives at the root (/rooms/...), the others under
+    // /branches/{id}/rooms/... — the {path=**} prefix makes each block apply
+    // to both locations with identical rules.
+
     // ============================================
     // USERS COLLECTION
     // ============================================
@@ -67,7 +72,7 @@ service cloud.firestore {
       // role to "owner". The very first Owner is created via the Firebase
       // console instead, which bypasses these rules.
       allow create, update: if isOwnerOrAdmin() &&
-        request.resource.data.keys().hasOnly(['role', 'displayName', 'email', 'createdAt', 'active']) &&
+        request.resource.data.keys().hasOnly(['role', 'displayName', 'email', 'createdAt', 'active', 'branchIds']) &&
         request.resource.data.role is string &&
         request.resource.data.displayName is string &&
         request.resource.data.email is string &&
@@ -79,7 +84,7 @@ service cloud.firestore {
     // ============================================
     // ROOMS COLLECTION
     // ============================================
-    match /rooms/{roomId} {
+    match /{path=**}/rooms/{roomId} {
       // All authenticated users can read rooms
       allow read: if isAuthenticated();
 
@@ -106,7 +111,7 @@ service cloud.firestore {
     // ============================================
     // BOOKINGS COLLECTION
     // ============================================
-    match /bookings/{bookingId} {
+    match /{path=**}/bookings/{bookingId} {
       // All authenticated users can read bookings
       allow read: if isAuthenticated();
 
@@ -150,7 +155,7 @@ service cloud.firestore {
     // ============================================
     // INVENTORY COLLECTION
     // ============================================
-    match /inventory/{itemId} {
+    match /{path=**}/inventory/{itemId} {
       // All authenticated users can read inventory
       allow read: if isAuthenticated();
 
@@ -181,7 +186,7 @@ service cloud.firestore {
     // ============================================
     // RATE PACKAGES COLLECTION
     // ============================================
-    match /ratePackages/{packageId} {
+    match /{path=**}/ratePackages/{packageId} {
       // All authenticated users can read rate packages (needed by check-in)
       allow read: if isAuthenticated();
 
@@ -192,7 +197,7 @@ service cloud.firestore {
     // ============================================
     // INVENTORY CATEGORIES COLLECTION
     // ============================================
-    match /inventoryCategories/{categoryId} {
+    match /{path=**}/inventoryCategories/{categoryId} {
       // All authenticated users can read the category list (needed to
       // populate the category picker when adding/editing an item)
       allow read: if isAuthenticated();
@@ -204,7 +209,7 @@ service cloud.firestore {
     // ============================================
     // TRANSACTIONS COLLECTION (Audit Log)
     // ============================================
-    match /transactions/{transactionId} {
+    match /{path=**}/transactions/{transactionId} {
       // All authenticated users can read transactions
       allow read: if isAuthenticated();
 
@@ -222,7 +227,7 @@ service cloud.firestore {
     // ============================================
     // NOTIFICATIONS COLLECTION
     // ============================================
-    match /notifications/{notificationId} {
+    match /{path=**}/notifications/{notificationId} {
       // All authenticated users can read notifications
       allow read: if isAuthenticated();
 
@@ -246,7 +251,7 @@ service cloud.firestore {
     // VOID REQUESTS (cashier-requested void, owner approval — either the
     // whole room booking, or one already-paid-for order item on it)
     // ============================================
-    match /voidRequests/{voidRequestId} {
+    match /{path=**}/voidRequests/{voidRequestId} {
       allow read: if isAuthenticated();
 
       allow create: if canVoid() &&
@@ -280,7 +285,7 @@ service cloud.firestore {
     // STOCK REQUESTS (cashier-requested "add stock", owner approval —
     // inventory quantity only changes once approved, see approveStockRequest())
     // ============================================
-    match /stockRequests/{stockRequestId} {
+    match /{path=**}/stockRequests/{stockRequestId} {
       allow read: if isAuthenticated();
 
       allow create: if isStaff() &&
@@ -314,7 +319,7 @@ service cloud.firestore {
     // ============================================
     // SHIFT EXPENSES (cash taken from the drawer)
     // ============================================
-    match /shiftExpenses/{expenseId} {
+    match /{path=**}/shiftExpenses/{expenseId} {
       allow read: if isAuthenticated();
 
       // Staff can add an expense for themselves only — amount and a short
@@ -342,7 +347,7 @@ service cloud.firestore {
     // ============================================
     // STORE SALES (walk-in items, no room)
     // ============================================
-    match /storeSales/{saleId} {
+    match /{path=**}/storeSales/{saleId} {
       allow read: if isAuthenticated();
 
       allow create: if isStaff() &&
@@ -363,7 +368,7 @@ service cloud.firestore {
     // ============================================
     // SETTINGS COLLECTION (System Settings)
     // ============================================
-    match /settings/{settingId} {
+    match /{path=**}/settings/{settingId} {
       // All authenticated users can read settings
       allow read: if isAuthenticated();
 

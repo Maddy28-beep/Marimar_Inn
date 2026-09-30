@@ -1,5 +1,6 @@
-import { collection, getDocs, query, Timestamp, where } from "firebase/firestore";
+import { getDocs, query, Timestamp, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { bCollection } from "@/lib/branches";
 import { amenityOnlyLabel, bookingExtras } from "@/lib/booking-extras";
 import { referenceNumberFor } from "@/lib/receipt-printer";
 import { paymentBreakdown, type PaymentPortions } from "@/lib/bookings";
@@ -89,7 +90,7 @@ export async function fetchBookingsInRange(
 ): Promise<Booking[]> {
   const firestore = requireDb();
   const q = query(
-    collection(firestore, "bookings"),
+    bCollection(firestore, "bookings"),
     where(field, ">=", Timestamp.fromDate(start)),
     where(field, "<=", Timestamp.fromDate(end))
   );
@@ -107,7 +108,7 @@ export async function fetchBookingsInRange(
  */
 export async function fetchActiveBookings(): Promise<Booking[]> {
   const firestore = requireDb();
-  const q = query(collection(firestore, "bookings"), where("status", "==", "active"));
+  const q = query(bCollection(firestore, "bookings"), where("status", "==", "active"));
   const snap = await getDocs(q);
   return snap.docs.map((d) => d.data() as Booking);
 }

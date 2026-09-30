@@ -1,5 +1,4 @@
 import {
-  collection,
   doc,
   getDoc,
   increment,
@@ -11,6 +10,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { bCollection, bDoc } from "@/lib/branches";
 import type { AppNotification, Booking, InventoryItem, OrderItem, UserRole, VoidRequest } from "@/lib/types";
 import { resolveCheckoutReminder, syncLowStockNotification } from "@/lib/notifications";
 import { stockUnitsFor } from "@/lib/inventory";
@@ -52,8 +52,8 @@ export interface CreateOrderItemVoidRequestInput {
 export async function createVoidRequest(input: CreateVoidRequestInput): Promise<string> {
   const firestore = requireDb();
   const { booking } = input;
-  const requestRef = doc(collection(firestore, "voidRequests"));
-  const notificationRef = doc(firestore, "notifications", `void-request-${requestRef.id}`);
+  const requestRef = doc(bCollection(firestore, "voidRequests"));
+  const notificationRef = bDoc(firestore, "notifications", `void-request-${requestRef.id}`);
 
   const request: Omit<VoidRequest, "requestedAt"> & {
     requestedAt: ReturnType<typeof serverTimestamp>;
@@ -105,8 +105,8 @@ export async function createVoidRequest(input: CreateVoidRequestInput): Promise<
 export async function createOrderItemVoidRequest(input: CreateOrderItemVoidRequestInput): Promise<string> {
   const firestore = requireDb();
   const { booking, item } = input;
-  const requestRef = doc(collection(firestore, "voidRequests"));
-  const notificationRef = doc(firestore, "notifications", `void-request-${requestRef.id}`);
+  const requestRef = doc(bCollection(firestore, "voidRequests"));
+  const notificationRef = bDoc(firestore, "notifications", `void-request-${requestRef.id}`);
 
   const request: Omit<VoidRequest, "requestedAt"> & {
     requestedAt: ReturnType<typeof serverTimestamp>;
@@ -165,7 +165,7 @@ export function subscribeToPendingVoidRequests(
   onChange: (byBookingId: Map<string, VoidRequest[]>) => void
 ) {
   const firestore = requireDb();
-  const q = query(collection(firestore, "voidRequests"), where("status", "==", "pending"));
+  const q = query(bCollection(firestore, "voidRequests"), where("status", "==", "pending"));
   return onSnapshot(q, (snapshot) => {
     const byBookingId = new Map<string, VoidRequest[]>();
     for (const docSnap of snapshot.docs) {
@@ -181,7 +181,7 @@ export function subscribeToPendingVoidRequests(
 async function resolveVoidRequestNotification(voidRequestId: string) {
   try {
     const firestore = requireDb();
-    await updateDoc(doc(firestore, "notifications", `void-request-${voidRequestId}`), {
+    await updateDoc(bDoc(firestore, "notifications", `void-request-${voidRequestId}`), {
       resolved: true,
     });
   } catch {
@@ -208,9 +208,9 @@ export async function approveVoidRequest(request: VoidRequest, actor: VoidReques
   }
 
   const firestore = requireDb();
-  const requestRef = doc(firestore, "voidRequests", request.voidRequestId);
-  const bookingRef = doc(firestore, "bookings", request.bookingId);
-  const roomRef = doc(firestore, "rooms", request.roomId);
+  const requestRef = bDoc(firestore, "voidRequests", request.voidRequestId);
+  const bookingRef = bDoc(firestore, "bookings", request.bookingId);
+  const roomRef = bDoc(firestore, "rooms", request.roomId);
 
   const bookingSnap = await getDoc(bookingRef);
   if (!bookingSnap.exists() || (bookingSnap.data() as Booking).status !== "active") {
@@ -249,11 +249,11 @@ export async function approveVoidRequest(request: VoidRequest, actor: VoidReques
  */
 async function approveOrderItemVoidRequest(request: VoidRequest, actor: VoidRequestActor) {
   const firestore = requireDb();
-  const requestRef = doc(firestore, "voidRequests", request.voidRequestId);
-  const bookingRef = doc(firestore, "bookings", request.bookingId);
+  const requestRef = bDoc(firestore, "voidRequests", request.voidRequestId);
+  const bookingRef = bDoc(firestore, "bookings", request.bookingId);
   const itemId = request.itemId;
   if (!itemId) throw new Error("This request is missing its item — deny it instead.");
-  const itemRef = doc(firestore, "inventory", itemId);
+  const itemRef = bDoc(firestore, "inventory", itemId);
   let resultingItem: InventoryItem | null = null;
 
   // getDoc + writeBatch (not runTransaction) — see approveVoidRequest() above.
@@ -313,7 +313,7 @@ export async function denyVoidRequest(
 ) {
   const firestore = requireDb();
   const batch = writeBatch(firestore);
-  batch.update(doc(firestore, "voidRequests", request.voidRequestId), {
+  batch.update(bDoc(firestore, "voidRequests", request.voidRequestId), {
     status: "denied",
     resolvedBy: actor.uid,
     resolvedByName: actor.name,

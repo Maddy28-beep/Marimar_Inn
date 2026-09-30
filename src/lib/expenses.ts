@@ -1,5 +1,4 @@
 import {
-  collection,
   deleteDoc,
   doc,
   getDocs,
@@ -10,6 +9,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { bCollection, bDoc } from "@/lib/branches";
 import type { ShiftExpense, UserRole } from "@/lib/types";
 
 function requireDb() {
@@ -30,7 +30,7 @@ export function totalExpenses(expenses: ShiftExpense[]): number {
 export async function fetchExpensesInRange(start: Date, end: Date): Promise<ShiftExpense[]> {
   const firestore = requireDb();
   const q = query(
-    collection(firestore, "shiftExpenses"),
+    bCollection(firestore, "shiftExpenses"),
     where("recordedAt", ">=", Timestamp.fromDate(start)),
     where("recordedAt", "<=", Timestamp.fromDate(end))
   );
@@ -81,7 +81,7 @@ export async function recordShiftExpenses(input: {
   const cashierName = input.cashierName.trim() || "Staff";
   const batch = writeBatch(firestore);
   for (const item of items) {
-    const ref = doc(collection(firestore, "shiftExpenses"));
+    const ref = doc(bCollection(firestore, "shiftExpenses"));
     batch.set(ref, {
       expenseId: ref.id,
       amount: item.amount,
@@ -98,5 +98,5 @@ export async function recordShiftExpenses(input: {
 
 export async function deleteShiftExpense(expenseId: string): Promise<void> {
   const firestore = requireDb();
-  await deleteDoc(doc(firestore, "shiftExpenses", expenseId));
+  await deleteDoc(bDoc(firestore, "shiftExpenses", expenseId));
 }

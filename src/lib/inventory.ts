@@ -1,5 +1,4 @@
 import {
-  collection,
   deleteDoc,
   doc,
   getDoc,
@@ -12,6 +11,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { bCollection, bDoc } from "@/lib/branches";
 import type { InventoryCategory, InventoryItem, UserRole } from "@/lib/types";
 import { syncLowStockNotification } from "@/lib/notifications";
 
@@ -22,7 +22,7 @@ function requireDb() {
 
 export function subscribeToInventory(onChange: (items: InventoryItem[]) => void) {
   const firestore = requireDb();
-  const q = query(collection(firestore, "inventory"), orderBy("name"));
+  const q = query(bCollection(firestore, "inventory"), orderBy("name"));
   return onSnapshot(q, (snapshot) => {
     onChange(
       snapshot.docs.map((d) => d.data({ serverTimestamps: "estimate" }) as InventoryItem)
@@ -65,7 +65,7 @@ export interface ItemActor {
 
 export async function createItem(input: NewItemInput, actor: ItemActor) {
   const firestore = requireDb();
-  const ref = doc(collection(firestore, "inventory"));
+  const ref = doc(bCollection(firestore, "inventory"));
   const item: Omit<InventoryItem, "lastUpdated" | "createdAt"> & {
     lastUpdated: ReturnType<typeof serverTimestamp>;
     createdAt: ReturnType<typeof serverTimestamp>;
@@ -90,7 +90,7 @@ export async function createItem(input: NewItemInput, actor: ItemActor) {
 
 export async function updateItem(itemId: string, input: NewItemInput) {
   const firestore = requireDb();
-  await updateDoc(doc(firestore, "inventory", itemId), {
+  await updateDoc(bDoc(firestore, "inventory", itemId), {
     name: input.name,
     category: input.category,
     sellingPrice: input.sellingPrice,
@@ -115,7 +115,7 @@ export async function updateItem(itemId: string, input: NewItemInput) {
 
 export async function restockItem(itemId: string, addQuantity: number) {
   const firestore = requireDb();
-  const ref = doc(firestore, "inventory", itemId);
+  const ref = bDoc(firestore, "inventory", itemId);
   await updateDoc(ref, {
     quantity: increment(addQuantity),
     lastUpdated: serverTimestamp(),
@@ -128,12 +128,12 @@ export async function restockItem(itemId: string, addQuantity: number) {
 
 export async function deleteItem(itemId: string) {
   const firestore = requireDb();
-  await deleteDoc(doc(firestore, "inventory", itemId));
+  await deleteDoc(bDoc(firestore, "inventory", itemId));
 }
 
 export function subscribeToCategories(onChange: (categories: InventoryCategory[]) => void) {
   const firestore = requireDb();
-  const q = query(collection(firestore, "inventoryCategories"), orderBy("name"));
+  const q = query(bCollection(firestore, "inventoryCategories"), orderBy("name"));
   return onSnapshot(q, (snapshot) => {
     onChange(
       snapshot.docs.map((d) => d.data({ serverTimestamps: "estimate" }) as InventoryCategory)
@@ -150,12 +150,12 @@ export async function createCategory(name: string) {
   const firestore = requireDb();
   const trimmed = name.trim().replace(/\//g, "-");
   if (!trimmed) throw new Error("Category name is required.");
-  const ref = doc(firestore, "inventoryCategories", trimmed);
+  const ref = bDoc(firestore, "inventoryCategories", trimmed);
   await setDoc(ref, { categoryId: trimmed, name: trimmed, createdAt: serverTimestamp() });
   return trimmed;
 }
 
 export async function deleteCategory(categoryId: string) {
   const firestore = requireDb();
-  await deleteDoc(doc(firestore, "inventoryCategories", categoryId));
+  await deleteDoc(bDoc(firestore, "inventoryCategories", categoryId));
 }

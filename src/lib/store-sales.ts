@@ -1,5 +1,4 @@
 import {
-  collection,
   doc,
   getDoc,
   getDocs,
@@ -11,6 +10,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { bCollection, bDoc } from "@/lib/branches";
 import { methodContribution } from "@/lib/bookings";
 import { syncLowStockNotification } from "@/lib/notifications";
 import { stockUnitsFor } from "@/lib/inventory";
@@ -41,8 +41,8 @@ export async function createStoreSale(input: StoreSaleInput): Promise<StoreSale>
   const cartItems = input.cartItems.filter((line) => line.quantity > 0);
   if (cartItems.length === 0) throw new Error("Add at least one item.");
 
-  const saleRef = doc(collection(firestore, "storeSales"));
-  const itemRefs = cartItems.map((line) => doc(firestore, "inventory", line.itemId));
+  const saleRef = doc(bCollection(firestore, "storeSales"));
+  const itemRefs = cartItems.map((line) => bDoc(firestore, "inventory", line.itemId));
   const lowStock: InventoryItem[] = [];
   let items: OrderItem[] = [];
   let totalAmount = 0;
@@ -133,7 +133,7 @@ export async function createStoreSale(input: StoreSaleInput): Promise<StoreSale>
 export async function fetchStoreSalesInRange(start: Date, end: Date): Promise<StoreSale[]> {
   const firestore = requireDb();
   const q = query(
-    collection(firestore, "storeSales"),
+    bCollection(firestore, "storeSales"),
     where("soldAt", ">=", Timestamp.fromDate(start)),
     where("soldAt", "<=", Timestamp.fromDate(end))
   );

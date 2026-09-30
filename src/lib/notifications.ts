@@ -1,6 +1,5 @@
 import {
   arrayUnion,
-  collection,
   doc,
   getDoc,
   onSnapshot,
@@ -12,6 +11,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { bCollection, bDoc } from "@/lib/branches";
 import type { AppNotification, Booking, InventoryItem, Room } from "@/lib/types";
 import {
   hoursElapsed,
@@ -26,7 +26,7 @@ function requireDb() {
 
 export function subscribeToNotifications(onChange: (notifications: AppNotification[]) => void) {
   const firestore = requireDb();
-  const q = query(collection(firestore, "notifications"), where("resolved", "==", false));
+  const q = query(bCollection(firestore, "notifications"), where("resolved", "==", false));
   return onSnapshot(q, (snapshot) => {
     const list = snapshot.docs.map(
       (d) => d.data({ serverTimestamps: "estimate" }) as AppNotification
@@ -40,7 +40,7 @@ export function subscribeToNotifications(onChange: (notifications: AppNotificati
 
 export async function markAsRead(notificationId: string, uid: string) {
   const firestore = requireDb();
-  await updateDoc(doc(firestore, "notifications", notificationId), {
+  await updateDoc(bDoc(firestore, "notifications", notificationId), {
     readBy: arrayUnion(uid),
   });
 }
@@ -50,7 +50,7 @@ export async function markAllAsRead(notificationIds: string[], uid: string) {
   const firestore = requireDb();
   const batch = writeBatch(firestore);
   for (const id of notificationIds) {
-    batch.update(doc(firestore, "notifications", id), { readBy: arrayUnion(uid) });
+    batch.update(bDoc(firestore, "notifications", id), { readBy: arrayUnion(uid) });
   }
   await batch.commit();
 }
@@ -66,7 +66,7 @@ export async function syncLowStockNotification(
   item: Pick<InventoryItem, "itemId" | "name" | "quantity" | "minStockLevel" | "unlimited">
 ) {
   const firestore = requireDb();
-  const ref = doc(firestore, "notifications", `low-stock-${item.itemId}`);
+  const ref = bDoc(firestore, "notifications", `low-stock-${item.itemId}`);
   const snap = await getDoc(ref);
 
   // An unlimited item (e.g. hot water) is never low stock by definition —
@@ -125,7 +125,7 @@ export async function syncCheckoutReminder(booking: Booking, room: Room, now: Da
   if (remaining > CHECKOUT_WARNING_HOURS) return;
 
   const firestore = requireDb();
-  const ref = doc(firestore, "notifications", `checkout-reminder-${booking.bookingId}`);
+  const ref = bDoc(firestore, "notifications", `checkout-reminder-${booking.bookingId}`);
   const pastExtendCutoff = remaining <= -EXTEND_OVERDUE_CUTOFF_HOURS;
   const overdue = remaining <= 0;
   const critical = !overdue && remaining <= CHECKOUT_CRITICAL_HOURS;
@@ -163,7 +163,7 @@ export async function syncCheckoutReminder(booking: Booking, room: Room, now: Da
 
 export async function resolveCheckoutReminder(bookingId: string) {
   const firestore = requireDb();
-  const ref = doc(firestore, "notifications", `checkout-reminder-${bookingId}`);
+  const ref = bDoc(firestore, "notifications", `checkout-reminder-${bookingId}`);
   const snap = await getDoc(ref);
   if (!snap.exists()) return;
   if ((snap.data() as AppNotification).resolved) return;

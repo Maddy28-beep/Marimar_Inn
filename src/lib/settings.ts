@@ -1,5 +1,6 @@
 import { doc, getDoc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { bDoc } from "@/lib/branches";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -51,12 +52,12 @@ export async function setDrawerPin(pin: string) {
   }
   const firestore = requireDb();
   const pinHash = await hashPin(digits);
-  await setDoc(doc(firestore, "settings", DRAWER_DOC_ID), { pinHash }, { merge: true });
+  await setDoc(bDoc(firestore, "settings", DRAWER_DOC_ID), { pinHash }, { merge: true });
 }
 
 export async function verifyDrawerPin(pin: string): Promise<boolean> {
   const firestore = requireDb();
-  const snap = await getDoc(doc(firestore, "settings", DRAWER_DOC_ID));
+  const snap = await getDoc(bDoc(firestore, "settings", DRAWER_DOC_ID));
   if (!snap.exists()) return false;
   const stored = String(snap.data().pinHash ?? "")
     .trim()
@@ -74,7 +75,7 @@ export async function verifyDrawerPin(pin: string): Promise<boolean> {
 export function subscribeToDrawerPinConfigured(onChange: (configured: boolean) => void) {
   const firestore = requireDb();
   return onSnapshot(
-    doc(firestore, "settings", DRAWER_DOC_ID),
+    bDoc(firestore, "settings", DRAWER_DOC_ID),
     (snap) => {
       onChange(snap.exists() && !!snap.data()?.pinHash);
     },

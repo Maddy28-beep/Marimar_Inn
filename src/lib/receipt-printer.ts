@@ -9,7 +9,13 @@ import {
   type StoreSale,
 } from "@/lib/types";
 import { bookingExtras, isAmenityItem } from "@/lib/booking-extras";
+import { DEFAULT_BRANCH_ID, branchName, getActiveBranchId } from "@/lib/branches";
 import { paymentPortionLines } from "@/lib/bookings";
+
+function receiptTitle(): string {
+  const id = getActiveBranchId();
+  return id === DEFAULT_BRANCH_ID ? "Marimar Inn" : `Marimar Inn - ${branchName(id)}`;
+}
 
 type PrinterKind = "bluetooth" | "serial" | "rawbt" | "native";
 
@@ -935,7 +941,7 @@ function guestReceiptEncoder(booking: Booking, room: Room, extras: ReceiptExtras
   encoder
     .initialize()
     .align("center")
-    .line("Marimar Inn")
+    .line(receiptTitle())
     .line("This is not an official receipt")
     .line(`Ref: ${referenceNumberFor(booking.bookingId)}`)
     .newline()
@@ -1046,7 +1052,7 @@ function storeSaleReceiptEncoder(sale: StoreSale, extras: StoreSaleReceiptExtras
   encoder
     .initialize()
     .align("center")
-    .line("Marimar Inn")
+    .line(receiptTitle())
     .line("This is not an official receipt")
     .line("Store sale")
     .line(`Ref: ${referenceNumberFor(sale.saleId)}`)
@@ -1129,7 +1135,7 @@ function extensionReceiptEncoder(
   encoder
     .initialize()
     .align("center")
-    .line("Marimar Inn")
+    .line(receiptTitle())
     .line("Extension Receipt")
     .line(`Ref: ${referenceNumberFor(booking.bookingId)}`)
     .newline()
@@ -1230,7 +1236,7 @@ function orderReceiptEncoder(booking: Booking, room: Room, extras: OrderReceiptE
   encoder
     .initialize()
     .align("center")
-    .line("Marimar Inn")
+    .line(receiptTitle())
     .line("Order Receipt")
     .line(`Ref: ${referenceNumberFor(booking.bookingId)}`)
     .newline()
@@ -1333,7 +1339,7 @@ function balancePaymentReceiptEncoder(booking: Booking, room: Room, extras: Bala
   encoder
     .initialize()
     .align("center")
-    .line("Marimar Inn")
+    .line(receiptTitle())
     .line("Balance Payment")
     .line(`Ref: ${referenceNumberFor(booking.bookingId)}`)
     .newline()
@@ -1479,7 +1485,7 @@ function dailySalesReceiptEncoder(data: DailySalesReceiptData) {
   encoder
     .initialize()
     .align("center")
-    .line("Marimar Inn")
+    .line(receiptTitle())
     .line("Daily Sales Report");
 
   if (data.dutyTime === "FULL DAY") encoder.line("FULL DAY");
@@ -1666,7 +1672,7 @@ function testPageEncoder() {
   encoder
     .initialize()
     .align("center")
-    .line("Marimar Inn")
+    .line(receiptTitle())
     .line("Printer test")
     .newline()
     .align("left")

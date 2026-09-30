@@ -164,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: firebaseUser.email,
         displayName: data.displayName ?? firebaseUser.email,
         role: data.role,
+        branchIds: Array.isArray(data.branchIds) ? data.branchIds : undefined,
       };
       setAppUser(nextAppUser);
       cacheAppUser(nextAppUser);

@@ -1,5 +1,4 @@
 import {
-  collection,
   doc,
   getDocs,
   query,
@@ -9,6 +8,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { bCollection } from "@/lib/branches";
 import type { Transaction, TransactionType, UserRole } from "@/lib/types";
 
 function requireDb() {
@@ -40,7 +40,7 @@ export interface RecordTransactionInput {
 export async function recordTransaction(input: RecordTransactionInput): Promise<void> {
   if (input.amount <= 0) return;
   const firestore = requireDb();
-  const ref = doc(collection(firestore, "transactions"));
+  const ref = doc(bCollection(firestore, "transactions"));
   const record = {
     transactionId: ref.id,
     type: input.type,
@@ -66,7 +66,7 @@ export async function recordTransaction(input: RecordTransactionInput): Promise<
 export async function fetchTransactionsInRange(start: Date, end: Date): Promise<Transaction[]> {
   const firestore = requireDb();
   const q = query(
-    collection(firestore, "transactions"),
+    bCollection(firestore, "transactions"),
     where("timestamp", ">=", Timestamp.fromDate(start)),
     where("timestamp", "<=", Timestamp.fromDate(end))
   );

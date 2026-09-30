@@ -1,5 +1,6 @@
 import { doc, getDoc, increment, serverTimestamp, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { bDoc } from "@/lib/branches";
 import type { Booking, InventoryItem, OrderItem } from "@/lib/types";
 import { syncLowStockNotification } from "@/lib/notifications";
 import { stockUnitsFor } from "@/lib/inventory";
@@ -16,8 +17,8 @@ function recalcTotals(items: OrderItem[], totalRoomCharge: number) {
 
 export async function removeOrderItem(bookingId: string, itemId: string) {
   const firestore = requireDb();
-  const bookingRef = doc(firestore, "bookings", bookingId);
-  const itemRef = doc(firestore, "inventory", itemId);
+  const bookingRef = bDoc(firestore, "bookings", bookingId);
+  const itemRef = bDoc(firestore, "inventory", itemId);
   let resultingItem: InventoryItem | null = null;
 
   // getDoc + writeBatch (not runTransaction) — transactions require a live

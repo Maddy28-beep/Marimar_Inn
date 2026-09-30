@@ -1,5 +1,4 @@
 import {
-  collection,
   deleteDoc,
   doc,
   getDoc,
@@ -12,6 +11,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { bCollection, bDoc } from "@/lib/branches";
 import type { Booking, InventoryItem, OrderItem, PaymentMethod, PaymentStatus, UserRole } from "@/lib/types";
 import {
   AMENITY_BLANKET_ID,
@@ -34,7 +34,7 @@ function requireDb() {
 
 export function subscribeToActiveBookings(onChange: (byRoomId: Map<string, Booking>) => void) {
   const firestore = requireDb();
-  const q = query(collection(firestore, "bookings"), where("status", "==", "active"));
+  const q = query(bCollection(firestore, "bookings"), where("status", "==", "active"));
   return onSnapshot(q, (snapshot) => {
     const byRoomId = new Map<string, Booking>();
     for (const docSnap of snapshot.docs) {
@@ -213,9 +213,9 @@ export async function checkIn(input: CheckInInput) {
   const totalRoomCharge = input.packagePrice + extraPersonCount * EXTRA_PERSON_FEE;
   const cartItems = input.cartItems ?? [];
 
-  const bookingRef = doc(collection(firestore, "bookings"));
-  const roomRef = doc(firestore, "rooms", input.roomId);
-  const itemRefs = cartItems.map((line) => doc(firestore, "inventory", line.itemId));
+  const bookingRef = doc(bCollection(firestore, "bookings"));
+  const roomRef = bDoc(firestore, "rooms", input.roomId);
+  const itemRefs = cartItems.map((line) => bDoc(firestore, "inventory", line.itemId));
 
   // Plain getDoc (not tx.get) + writeBatch (not runTransaction) — this used
   // to be one runTransaction, but transactions require a live round-trip
@@ -380,7 +380,7 @@ export async function recordCheckout(
       : { cash: 0, gcash: 0, qrph: 0 };
 
   const batch = writeBatch(firestore);
-  batch.update(doc(firestore, "bookings", booking.bookingId), {
+  batch.update(bDoc(firestore, "bookings", booking.bookingId), {
     status: "checked_out",
     checkOutTime: serverTimestamp(),
     amountPaid: newAmountPaid,
@@ -400,7 +400,7 @@ export async function recordCheckout(
     ...(payment?.gcashReference ? { gcashReference: payment.gcashReference } : {}),
     ...(payment?.qrphReference ? { qrphReference: payment.qrphReference } : {}),
   });
-  batch.update(doc(firestore, "rooms", booking.roomId), {
+  batch.update(bDoc(firestore, "rooms", booking.roomId), {
     status: "cleaning",
     lastUpdated: serverTimestamp(),
   });
@@ -426,11 +426,11 @@ export async function voidBooking(booking: Booking, opts?: { bypassWindow?: bool
   }
   const firestore = requireDb();
   const batch = writeBatch(firestore);
-  batch.update(doc(firestore, "bookings", booking.bookingId), {
+  batch.update(bDoc(firestore, "bookings", booking.bookingId), {
     status: "voided",
     updatedAt: serverTimestamp(),
   });
-  batch.update(doc(firestore, "rooms", booking.roomId), {
+  batch.update(bDoc(firestore, "rooms", booking.roomId), {
     status: "available",
     lastUpdated: serverTimestamp(),
   });
@@ -440,7 +440,7 @@ export async function voidBooking(booking: Booking, opts?: { bypassWindow?: bool
 
 export async function deleteBooking(bookingId: string) {
   const firestore = requireDb();
-  await deleteDoc(doc(firestore, "bookings", bookingId));
+  await deleteDoc(bDoc(firestore, "bookings", bookingId));
 }
 
 export interface ExtendStayPayment {
@@ -471,7 +471,7 @@ export async function extendStay(
     qrph: payment.splitQrphAmount,
   });
 
-  await updateDoc(doc(firestore, "bookings", booking.bookingId), {
+  await updateDoc(bDoc(firestore, "bookings", booking.bookingId), {
     hoursBooked: newHoursBooked,
     totalRoomCharge: newTotalRoomCharge,
     totalAmount: newTotalAmount,
@@ -523,8 +523,8 @@ export async function addOrderToBooking(
 ): Promise<{ items: OrderItem[]; cartTotal: number; amountCollected: number }> {
   if (cartItems.length === 0) throw new Error("Add at least one item.");
   const firestore = requireDb();
-  const bookingRef = doc(firestore, "bookings", booking.bookingId);
-  const itemRefs = cartItems.map((line) => doc(firestore, "inventory", line.itemId));
+  const bookingRef = bDoc(firestore, "bookings", booking.bookingId);
+  const itemRefs = cartItems.map((line) => bDoc(firestore, "inventory", line.itemId));
 
   let resultItems: OrderItem[] = [];
   let cartTotal = 0;
@@ -643,7 +643,7 @@ export async function collectBalance(
   actor: TransactionActor
 ): Promise<{ balance: number; amountCollected: number }> {
   const firestore = requireDb();
-  const bookingRef = doc(firestore, "bookings", booking.bookingId);
+  const bookingRef = bDoc(firestore, "bookings", booking.bookingId);
 
   let balance = 0;
   let amountCollected = 0;
@@ -700,7 +700,7 @@ export async function collectBalance(
  */
 export async function convertToOpenTime(bookingId: string) {
   const firestore = requireDb();
-  await updateDoc(doc(firestore, "bookings", bookingId), {
+  await updateDoc(bDoc(firestore, "bookings", bookingId), {
     openEnded: true,
     updatedAt: serverTimestamp(),
   });
@@ -722,7 +722,7 @@ export async function settleOpenTimeCharge(
   const firestore = requireDb();
   const newTotalAmount = finalRoomCharge + booking.totalFbCharge;
 
-  await updateDoc(doc(firestore, "bookings", booking.bookingId), {
+  await updateDoc(bDoc(firestore, "bookings", booking.bookingId), {
     hoursBooked: actualHoursStayed,
     totalRoomCharge: finalRoomCharge,
     totalAmount: newTotalAmount,

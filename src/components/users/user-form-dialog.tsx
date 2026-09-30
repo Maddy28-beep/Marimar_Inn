@@ -24,6 +24,7 @@ import { createStaffUser, updateStaffUser, type StaffUser } from "@/lib/users";
 import type { UserRole } from "@/lib/types";
 import { canManageStaff, roleLabel, STAFF_ROLE_OPTIONS } from "@/lib/roles";
 import { useAuth } from "@/context/auth-context";
+import { BRANCHES, DEFAULT_BRANCH_ID } from "@/lib/branches";
 import { Loader2Icon } from "lucide-react";
 
 interface UserFormDialogProps {
@@ -39,11 +40,24 @@ export function UserFormDialog({ user, onClose }: UserFormDialogProps) {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
   const [role, setRole] = useState<UserRole>(user?.role ?? "cashier");
+  const [branchIds, setBranchIds] = useState<string[]>(
+    user?.branchIds?.length ? user.branchIds : [DEFAULT_BRANCH_ID]
+  );
   const [submitting, setSubmitting] = useState(false);
+  const seesAllBranches = role === "owner" || role === "admin" || role === "superadmin";
+
+  function toggleBranch(id: string) {
+    setBranchIds((prev) => (prev.includes(id) ? prev.filter((b) => b !== id) : [...prev, id]));
+  }
 
   async function handleSubmit() {
     if (!displayName.trim()) {
       toast.error("Name is required.");
+      return;
+    }
+
+    if (!seesAllBranches && branchIds.length === 0) {
+      toast.error("Pick at least one branch.");
       return;
     }
 
@@ -54,7 +68,7 @@ export function UserFormDialog({ user, onClose }: UserFormDialogProps) {
       }
       setSubmitting(true);
       try {
-        await updateStaffUser(user.uid, { displayName: displayName.trim(), role });
+        await updateStaffUser(user.uid, { displayName: displayName.trim(), role, branchIds });
         toast.success(`${displayName.trim()} updated.`);
         onClose();
       } catch {
@@ -81,6 +95,7 @@ export function UserFormDialog({ user, onClose }: UserFormDialogProps) {
         password,
         displayName: displayName.trim(),
         role,
+        branchIds,
       });
       toast.success(`${displayName} added as ${roleLabel(role)}.`);
       onClose();
@@ -161,6 +176,28 @@ export function UserFormDialog({ user, onClose }: UserFormDialogProps) {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Branches</Label>
+            {seesAllBranches ? (
+              <p className="text-xs text-muted-foreground">
+                Owners and admins can work in every branch.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                {BRANCHES.map((b) => (
+                  <label key={b.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={branchIds.includes(b.id)}
+                      onChange={() => toggleBranch(b.id)}
+                      disabled={submitting}
+                    />
+                    {b.name}
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

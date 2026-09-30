@@ -26,6 +26,7 @@ export interface StaffUser {
   role: UserRole;
   // Absent/true = active — see AppUser.active in types.ts.
   active?: boolean;
+  branchIds?: string[];
 }
 
 export function subscribeToUsers(onChange: (users: StaffUser[]) => void) {
@@ -45,6 +46,7 @@ export function subscribeToUsers(onChange: (users: StaffUser[]) => void) {
           displayName: data.displayName,
           role: data.role,
           active: data.active,
+          branchIds: data.branchIds,
         };
       });
     void syncReservedStaffRoles(users);
@@ -72,6 +74,7 @@ export interface CreateStaffInput {
   password: string;
   displayName: string;
   role: UserRole;
+  branchIds?: string[];
 }
 
 export async function createStaffUser(input: CreateStaffInput) {
@@ -83,6 +86,7 @@ export async function createStaffUser(input: CreateStaffInput) {
     displayName: input.displayName,
     email: input.email,
     createdAt: serverTimestamp(),
+    ...(input.branchIds ? { branchIds: input.branchIds } : {}),
   });
 
   return uid;
@@ -91,6 +95,7 @@ export async function createStaffUser(input: CreateStaffInput) {
 export interface UpdateStaffInput {
   displayName: string;
   role: UserRole;
+  branchIds?: string[];
 }
 
 /**
@@ -105,6 +110,7 @@ export async function updateStaffUser(uid: string, input: UpdateStaffInput) {
   await updateDoc(doc(firestore, "users", uid), {
     displayName: input.displayName,
     role: input.role,
+    ...(input.branchIds ? { branchIds: input.branchIds } : {}),
   });
 }
 

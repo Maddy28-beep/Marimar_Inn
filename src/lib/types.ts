@@ -10,6 +10,9 @@ export interface AppUser {
   // Absent/true = active. Deactivating keeps the account and its role
   // intact (unlike delete) but blocks sign-in until reactivated.
   active?: boolean;
+  // Branches a non-owner account may work in (see lib/branches.ts). Absent
+  // = original branch only; owner/admin always see every branch.
+  branchIds?: string[];
 }
 
 export type RoomStatus = "available" | "occupied" | "cleaning" | "maintenance";
