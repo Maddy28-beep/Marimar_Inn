@@ -131,7 +131,8 @@ service cloud.firestore {
           'paymentMethod', 'gcashReference', 'qrphReference',
           'splitCashAmount', 'splitGcashAmount', 'splitQrphAmount',
           'paymentStatus', 'status', 'checkOutTime', 'items', 'transactions',
-          'specialRequests', 'updatedAt', 'extraPersonCount', 'towelCount', 'blanketCount'
+          'specialRequests', 'updatedAt', 'extraPersonCount', 'towelCount', 'blanketCount',
+          'voidReason', 'reversedAmount', 'reversedByName'
         ]) &&
         // Setting status to "voided" requires owner/admin, OR the existing
         // 7-minute self-serve window for staff who can void (Supervisor is

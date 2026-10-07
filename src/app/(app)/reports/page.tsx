@@ -32,7 +32,8 @@ import { DailySalesTable } from "@/components/reports/daily-sales-table";
 import { AddExpenseForm } from "@/components/expenses/add-expense-form";
 import { OpenDrawerForm } from "@/components/cash-drawer-open";
 import { exportToExcel, formatReportDate, formatReportMonth } from "@/lib/export";
-import { isOwnerLikeRole, visibleStaffName } from "@/lib/roles";
+import { canApproveVoid, isOwnerLikeRole, visibleStaffName } from "@/lib/roles";
+import { voidBookingAsDuplicate } from "@/lib/bookings";
 import {
   deleteShiftExpense,
   fetchExpensesInRange,
@@ -145,6 +146,7 @@ const TRANSACTION_TYPE_LABELS: Record<Transaction["type"], string> = {
   checkout: "Checkout",
   order: "Order",
   payment: "Payment",
+  reversal: "Reversal (duplicate)",
 };
 
 // <input type="time"> gives 24h "HH:MM" — display it the way staff write it
@@ -188,6 +190,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   const [housekeeping, setHousekeeping] = useState("");
   const [loading, setLoading] = useState(true);
   const [thermalPreviewOpen, setThermalPreviewOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -245,7 +248,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
     return () => {
       cancelled = true;
     };
-  }, [dateValue, shift]);
+  }, [dateValue, shift, reloadKey]);
 
   const occupied = rooms?.filter((r) => r.status === "occupied").length ?? 0;
   const totalRooms = rooms?.length ?? 0;
@@ -626,6 +629,30 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
     setExpenses(await fetchExpensesInRange(start, end));
   }
 
+  async function handleMarkDuplicate(bookingId: string) {
+    if (!appUser || !canApproveVoid(appUser.role)) return;
+    const row = salesReport?.rows.find((r) => r.bookingId === bookingId);
+    if (
+      !window.confirm(
+        `Remove Room ${row?.roomNumber ?? ""} (ref ${row?.refNumber ?? ""}) as a DUPLICATE / entered by mistake?\n\n` +
+          "This takes its payment and store items fully off the reports and puts the items back in stock. It can't be undone."
+      )
+    ) {
+      return;
+    }
+    try {
+      await voidBookingAsDuplicate(bookingId, {
+        uid: appUser.uid,
+        name: appUser.displayName ?? appUser.email ?? "Staff",
+        role: appUser.role,
+      });
+      toast.success("Removed as a duplicate — reports updated.");
+      setReloadKey((k) => k + 1);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't remove that booking — please try again.");
+    }
+  }
+
   async function handleRemoveExpense(expenseId: string) {
     try {
       await deleteShiftExpense(expenseId);
@@ -781,6 +808,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
               expenses={expenses}
               canRemoveExpenses={isOwnerLike}
               onRemoveExpense={handleRemoveExpense}
+              onMarkDuplicate={canApproveVoid(appUser?.role) ? handleMarkDuplicate : undefined}
             />
           )}
 

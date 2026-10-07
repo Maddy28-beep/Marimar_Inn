@@ -140,6 +140,12 @@ export interface Booking {
   items: OrderItem[];
   checkOutTime?: Timestamp;
   specialRequests?: string;
+  // Set when an owner/admin cancelled this booking as a duplicate/mistaken
+  // entry — its money and items were zeroed out and reversed, unlike a
+  // normal void (room only). reversedAmount is what was taken off the books.
+  voidReason?: "duplicate";
+  reversedAmount?: number;
+  reversedByName?: string;
   cashierId: string;
   // Snapshot of who checked the guest in and their role at that time — lets
   // the Owner tell who transacted a booking (Owner/Admin/Supervisor/
@@ -274,7 +280,9 @@ export interface StoreSale {
   cashierRole?: UserRole;
 }
 
-export type TransactionType = "checkin" | "extend" | "checkout" | "order" | "payment";
+// "reversal" is a negative copy of an earlier transaction, written when a
+// booking is cancelled as a duplicate (see voidBookingAsDuplicate).
+export type TransactionType = "checkin" | "extend" | "checkout" | "order" | "payment" | "reversal";
 
 // One record per money-collecting event on a booking (check-in payment,
 // extend payment, checkout payment) — a booking's own checkInTime never

@@ -2,6 +2,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   increment,
   onSnapshot,
   query,
@@ -12,7 +13,15 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { bCollection, bDoc } from "@/lib/branches";
-import type { Booking, InventoryItem, OrderItem, PaymentMethod, PaymentStatus, UserRole } from "@/lib/types";
+import type {
+  Booking,
+  InventoryItem,
+  OrderItem,
+  PaymentMethod,
+  PaymentStatus,
+  Transaction,
+  UserRole,
+} from "@/lib/types";
 import {
   AMENITY_BLANKET_ID,
   AMENITY_TOWEL_ID,
@@ -436,6 +445,118 @@ export async function voidBooking(booking: Booking, opts?: { bypassWindow?: bool
   });
   await batch.commit();
   await clearCheckoutReminder(booking.bookingId);
+}
+
+/**
+ * Cancels a booking that was entered by mistake (e.g. the same guest checked
+ * in twice) — unlike voidBooking(), which only cancels the room and leaves
+ * the payment and store items on the books, this takes the booking's whole
+ * amount back out: the booking doc is zeroed, every transaction logged for it
+ * is reversed with a negative copy carrying the ORIGINAL timestamp (so each
+ * day/shift it was counted in nets out correctly), and store items go back
+ * into stock. Owner/admin only — enforced in the UI; the rules also limit
+ * stock increases to elevated staff. The room is only freed if this booking
+ * is still the active one, so cancelling an already-voided duplicate can't
+ * free a room the real booking is sitting in.
+ */
+export async function voidBookingAsDuplicate(bookingId: string, actor: TransactionActor) {
+  const firestore = requireDb();
+  const bookingRef = bDoc(firestore, "bookings", bookingId);
+  const snap = await getDoc(bookingRef);
+  if (!snap.exists()) throw new Error("Booking not found.");
+  const booking = snap.data() as Booking;
+  if (booking.voidReason === "duplicate") {
+    throw new Error("This booking was already cancelled as a duplicate.");
+  }
+  if (booking.status === "checked_out") {
+    throw new Error("A checked-out booking can't be cancelled as a duplicate.");
+  }
+
+  const txSnap = await getDocs(
+    query(bCollection(firestore, "transactions"), where("bookingId", "==", bookingId))
+  );
+  const lines = (booking.items ?? []).filter((line) => !isAmenityLine(line));
+  const itemSnaps = await Promise.all(
+    lines.map((line) => getDoc(bDoc(firestore, "inventory", line.itemId)))
+  );
+
+  const batch = writeBatch(firestore);
+  const now = serverTimestamp();
+
+  const zeroed: Record<string, unknown> = {
+    status: "voided",
+    voidReason: "duplicate",
+    reversedAmount: booking.amountPaid ?? 0,
+    reversedByName: actor.name,
+    totalRoomCharge: 0,
+    totalFbCharge: 0,
+    totalAmount: 0,
+    amountPaid: 0,
+    splitCashAmount: 0,
+    splitGcashAmount: 0,
+    items: [],
+    updatedAt: now,
+  };
+  if (booking.splitQrphAmount !== undefined) zeroed.splitQrphAmount = 0;
+  if (booking.extraPersonCount !== undefined) zeroed.extraPersonCount = 0;
+  if (booking.towelCount !== undefined) zeroed.towelCount = 0;
+  if (booking.blanketCount !== undefined) zeroed.blanketCount = 0;
+  batch.update(bookingRef, zeroed);
+
+  if (booking.status === "active") {
+    batch.update(bDoc(firestore, "rooms", booking.roomId), {
+      status: "available",
+      lastUpdated: now,
+    });
+  }
+
+  for (const tx of txSnap.docs) {
+    const t = tx.data() as Transaction;
+    if (t.type === "reversal") continue;
+    const ref = doc(bCollection(firestore, "transactions"));
+    batch.set(ref, {
+      transactionId: ref.id,
+      type: "reversal",
+      bookingId,
+      roomNumber: t.roomNumber,
+      amount: -t.amount,
+      cashAmount: -(t.cashAmount ?? 0),
+      gcashAmount: -(t.gcashAmount ?? 0),
+      qrphAmount: -(t.qrphAmount ?? 0),
+      cashierId: actor.uid,
+      cashierName: actor.name,
+      ...(actor.role ? { cashierRole: actor.role } : {}),
+      // Original timestamp, so the reversal lands in the same day/shift the
+      // payment was counted in.
+      timestamp: t.timestamp ?? now,
+    });
+  }
+
+  const restored: InventoryItem[] = [];
+  lines.forEach((line, index) => {
+    const itemSnap = itemSnaps[index]!;
+    if (!itemSnap.exists()) return;
+    const item = itemSnap.data() as InventoryItem;
+    // An unlimited item was never decremented when ordered.
+    if (item.unlimited) return;
+    const restoreBy = stockUnitsFor(item, line.quantity);
+    batch.update(itemSnap.ref, { quantity: increment(restoreBy), lastUpdated: now });
+    restored.push({ ...item, quantity: item.quantity + restoreBy });
+  });
+
+  await batch.commit();
+  await clearCheckoutReminder(bookingId);
+  for (const item of restored) {
+    try {
+      await syncLowStockNotification(item);
+    } catch {
+      // Notification sync is best-effort; the books are already correct.
+    }
+  }
+}
+
+function isAmenityLine(line: OrderItem): boolean {
+  return line.itemId === AMENITY_TOWEL_ID || line.itemId === AMENITY_BLANKET_ID;
 }
 
 export async function deleteBooking(bookingId: string) {

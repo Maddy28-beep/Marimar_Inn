@@ -197,6 +197,7 @@ export interface DailySalesRow {
   cashierName?: string;
   cashierRole?: UserRole;
   remarks?: string;
+  voided?: boolean;
 }
 
 export interface DailySalesTotals {
@@ -292,6 +293,7 @@ export function computeDailySalesReport(
         cashierName: booking.cashierName,
         cashierRole: booking.cashierRole,
         remarks: isVoided ? "Voided (room only)" : undefined,
+        voided: isVoided,
       };
     });
 

@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { voidBooking, hoursElapsed, paymentBreakdown, isTooOverdueToExtend, canVoidBooking } from "@/lib/bookings";
+import { voidBooking, voidBookingAsDuplicate, hoursElapsed, paymentBreakdown, isTooOverdueToExtend, canVoidBooking } from "@/lib/bookings";
 import { removeOrderItem } from "@/lib/orders";
 import type { Booking, Room } from "@/lib/types";
 import { formatHours } from "@/lib/time";
@@ -89,6 +89,34 @@ export function RoomDetailDialog({
     try {
       await voidBooking(booking, { bypassWindow: canApproveVoidRole });
       toast.success(`Booking for Room ${room.roomNumber} cancelled.`);
+      onClose();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't cancel the booking — please try again.");
+    } finally {
+      setVoiding(false);
+    }
+  }
+
+  async function handleVoidDuplicate() {
+    if (!canApproveVoidRole || !appUser) return;
+    const amount = booking.amountPaid ?? 0;
+    if (
+      !window.confirm(
+        `Cancel Room ${room.roomNumber} as a DUPLICATE / entered by mistake?\n\n` +
+          `This removes its payment (₱${amount.toLocaleString("en-PH", { minimumFractionDigits: 2 })}) and store items from the sales reports and puts the items back in stock. It can't be undone.\n\n` +
+          `Use normal "Cancel booking" if the guest really cancelled.`
+      )
+    ) {
+      return;
+    }
+    setVoiding(true);
+    try {
+      await voidBookingAsDuplicate(booking.bookingId, {
+        uid: appUser.uid,
+        name: appUser.displayName ?? appUser.email ?? "Staff",
+        role: appUser.role,
+      });
+      toast.success(`Room ${room.roomNumber} booking cancelled as a duplicate.`);
       onClose();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't cancel the booking — please try again.");
@@ -310,16 +338,30 @@ export function RoomDetailDialog({
                 )}
               </div>
             ) : canDirectVoid ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleVoid}
-                disabled={voiding}
-                className="text-muted-foreground"
-              >
-                {voiding && <Loader2Icon className="size-4 animate-spin" />}
-                Cancel booking
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleVoid}
+                  disabled={voiding}
+                  className="text-muted-foreground"
+                >
+                  {voiding && <Loader2Icon className="size-4 animate-spin" />}
+                  Cancel booking
+                </Button>
+                {canApproveVoidRole && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleVoidDuplicate}
+                    disabled={voiding}
+                    className="text-muted-foreground"
+                    title="Entered twice or by mistake — also removes its payment and items from the reports"
+                  >
+                    Cancel as duplicate
+                  </Button>
+                )}
+              </div>
             ) : canTouchVoid ? (
               <Button
                 variant="ghost"

@@ -11,6 +11,7 @@ const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   checkout: "Checkout",
   order: "Order",
   payment: "Payment",
+  reversal: "Reversal (duplicate)",
 };
 
 // Mirrors paymentLabel() below but for a transaction's own cash/gcash/qrph
@@ -87,6 +88,7 @@ export function DailySalesTable({
   expenses = [],
   canRemoveExpenses = false,
   onRemoveExpense,
+  onMarkDuplicate,
 }: {
   report: DailySalesReport;
   // Cash/GCash/QRPh actually collected during this shift's time window —
@@ -105,6 +107,9 @@ export function DailySalesTable({
   expenses?: ShiftExpense[];
   canRemoveExpenses?: boolean;
   onRemoveExpense?: (expenseId: string) => void;
+  // Owner/admin only — offered on voided rows to take a mistaken duplicate's
+  // payment and items fully off the books (see voidBookingAsDuplicate).
+  onMarkDuplicate?: (bookingId: string) => void;
 }) {
   const { rows, totals } = report;
   const expenseTotal = totalExpenses(expenses);
@@ -188,7 +193,19 @@ export function DailySalesTable({
                     {visibleStaffName(row.cashierName, row.cashierRole)}
                   </td>
                   <td className="border p-1" />
-                  <td className="border p-1 whitespace-nowrap">{row.remarks ?? ""}</td>
+                  <td className="border p-1 whitespace-nowrap">
+                    {row.remarks ?? ""}
+                    {row.voided && onMarkDuplicate && (
+                      <button
+                        type="button"
+                        className="ml-2 rounded border px-1 text-[10px] text-muted-foreground hover:bg-muted print:hidden"
+                        title="Entered by mistake? Remove its payment and items from the reports"
+                        onClick={() => onMarkDuplicate(row.bookingId)}
+                      >
+                        Remove as duplicate
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))
             )}
