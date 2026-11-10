@@ -3,7 +3,7 @@ import { db } from "@/lib/firebase";
 import { bCollection } from "@/lib/branches";
 import { amenityOnlyLabel, bookingExtras } from "@/lib/booking-extras";
 import { referenceNumberFor } from "@/lib/receipt-printer";
-import { paymentBreakdown, type PaymentPortions } from "@/lib/bookings";
+import { paymentBreakdown, wholePesoKept, type PaymentPortions } from "@/lib/bookings";
 import type { Booking, PaymentMethod, Room, RoomType, ShiftExpense, StoreSale, Transaction, UserRole } from "@/lib/types";
 
 function requireDb() {
@@ -65,15 +65,27 @@ function voidedRoomPortionCollected(booking: Booking): PaymentPortions {
   if (booking.status !== "voided" || !booking.amountPaid) {
     return { cash: 0, gcash: 0, qrph: 0 };
   }
-  const reportedPaid = booking.totalFbCharge ?? 0; // matches the row's totalPaid for a voided booking
-  const excludeAmount = Math.max(0, booking.amountPaid - reportedPaid);
-  if (excludeAmount <= 0) return { cash: 0, gcash: 0, qrph: 0 };
-  const fraction = excludeAmount / booking.amountPaid;
   const portions = paymentBreakdown(booking);
+  // Recorded at void time: how the money that stays (the store items' share)
+  // was actually paid — everything else is the cancelled room charge.
+  const recorded =
+    booking.voidKeptCash !== undefined ||
+    booking.voidKeptGcash !== undefined ||
+    booking.voidKeptQrph !== undefined;
+  // Voided before that was recorded: whole-peso cash-first estimate instead
+  // of the old proportional split, which produced centavo amounts that
+  // matched no real payment.
+  const kept = recorded
+    ? {
+        cash: booking.voidKeptCash ?? 0,
+        gcash: booking.voidKeptGcash ?? 0,
+        qrph: booking.voidKeptQrph ?? 0,
+      }
+    : wholePesoKept(portions, Math.min(booking.amountPaid, booking.totalFbCharge ?? 0));
   return {
-    cash: portions.cash * fraction,
-    gcash: portions.gcash * fraction,
-    qrph: portions.qrph * fraction,
+    cash: Math.max(0, portions.cash - kept.cash),
+    gcash: Math.max(0, portions.gcash - kept.gcash),
+    qrph: Math.max(0, portions.qrph - kept.qrph),
   };
 }
 

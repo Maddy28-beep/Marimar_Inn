@@ -14,6 +14,7 @@ import { bCollection, bDoc } from "@/lib/branches";
 import type { AppNotification, Booking, InventoryItem, OrderItem, UserRole, VoidRequest } from "@/lib/types";
 import { resolveCheckoutReminder, syncLowStockNotification } from "@/lib/notifications";
 import { stockUnitsFor } from "@/lib/inventory";
+import { planVoidKept, voidKeptFields, type KeptMethod } from "@/lib/bookings";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -201,7 +202,11 @@ async function resolveVoidRequestNotification(voidRequestId: string) {
  * matter — an accepted tradeoff on a single-tablet deployment with no
  * concurrent writer to actually race against.
  */
-export async function approveVoidRequest(request: VoidRequest, actor: VoidRequestActor) {
+export async function approveVoidRequest(
+  request: VoidRequest,
+  actor: VoidRequestActor,
+  keptMethod?: KeptMethod
+) {
   if (request.target === "order_item") {
     await approveOrderItemVoidRequest(request, actor);
     return;
@@ -219,8 +224,15 @@ export async function approveVoidRequest(request: VoidRequest, actor: VoidReques
     );
   }
 
+  // Resolved before any write so an ambiguous case fails cleanly and the
+  // reviewer can be asked how the store items were paid.
+  const kept = planVoidKept(bookingSnap.data() as Booking, keptMethod);
   const batch = writeBatch(firestore);
-  batch.update(bookingRef, { status: "voided", updatedAt: serverTimestamp() });
+  batch.update(bookingRef, {
+    status: "voided",
+    ...voidKeptFields(kept),
+    updatedAt: serverTimestamp(),
+  });
   batch.update(roomRef, { status: "available", lastUpdated: serverTimestamp() });
   batch.update(requestRef, {
     status: "approved",

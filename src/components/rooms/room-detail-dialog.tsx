@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { voidBooking, voidBookingAsDuplicate, hoursElapsed, paymentBreakdown, isTooOverdueToExtend, canVoidBooking } from "@/lib/bookings";
+import { KeptMethodRequiredError, voidBooking, voidBookingAsDuplicate, hoursElapsed, paymentBreakdown, isTooOverdueToExtend, canVoidBooking } from "@/lib/bookings";
 import { removeOrderItem } from "@/lib/orders";
 import type { Booking, Room } from "@/lib/types";
 import { formatHours } from "@/lib/time";
@@ -23,6 +23,8 @@ import { OrderPickerDialog } from "@/components/inventory/order-picker-dialog";
 import { ExtendStayDialog } from "@/components/rooms/extend-stay-dialog";
 import { CollectPaymentDialog } from "@/components/rooms/collect-payment-dialog";
 import { VoidRequestDialog } from "@/components/rooms/void-request-dialog";
+import { KeptMethodDialog } from "@/components/rooms/kept-method-dialog";
+import type { KeptMethod } from "@/lib/bookings";
 import { OrderItemVoidRequestDialog } from "@/components/rooms/order-item-void-request-dialog";
 import { VoidRequestReviewDialog } from "@/components/notifications/void-request-review-dialog";
 import type { OrderItem } from "@/lib/types";
@@ -45,6 +47,7 @@ export function RoomDetailDialog({
   const { pendingVoidRequestsByBookingId } = useFrontDesk();
   const now = useNowTick(1000);
   const [voiding, setVoiding] = useState(false);
+  const [keptChoice, setKeptChoice] = useState<{ amount: number; choices: KeptMethod[] } | null>(null);
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
   const [orderPickerOpen, setOrderPickerOpen] = useState(false);
   const [extendOpen, setExtendOpen] = useState(false);
@@ -85,13 +88,23 @@ export function RoomDetailDialog({
     if (!window.confirm(`Cancel this booking for Room ${room.roomNumber}? This frees up the room without checking out.`)) {
       return;
     }
+    await runVoid();
+  }
+
+  async function runVoid(keptMethod?: KeptMethod) {
     setVoiding(true);
     try {
-      await voidBooking(booking, { bypassWindow: canApproveVoidRole });
+      await voidBooking(booking, { bypassWindow: canApproveVoidRole, keptMethod });
       toast.success(`Booking for Room ${room.roomNumber} cancelled.`);
       onClose();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't cancel the booking — please try again.");
+      if (error instanceof KeptMethodRequiredError) {
+        // More than one payment method could have covered the store items
+        // that stay on the books — ask instead of guessing.
+        setKeptChoice({ amount: error.keptAmount, choices: error.choices });
+      } else {
+        toast.error(error instanceof Error ? error.message : "Couldn't cancel the booking — please try again.");
+      }
     } finally {
       setVoiding(false);
     }
@@ -404,6 +417,19 @@ export function RoomDetailDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {keptChoice && (
+        <KeptMethodDialog
+          amount={keptChoice.amount}
+          choices={keptChoice.choices}
+          busy={voiding}
+          onCancel={() => setKeptChoice(null)}
+          onChoose={(method) => {
+            setKeptChoice(null);
+            void runVoid(method);
+          }}
+        />
+      )}
 
       {orderPickerOpen && (
         <OrderPickerDialog

@@ -144,6 +144,14 @@ export interface Booking {
   // entry — its money and items were zeroed out and reversed, unlike a
   // normal void (room only). reversedAmount is what was taken off the books.
   voidReason?: "duplicate";
+  // How the money that STAYS on a room-only void (the store items' share of
+  // amountPaid) was actually paid, recorded when the booking was voided. The
+  // reports subtract everything else — the room charge — per method, so no
+  // estimate or centavo rounding is needed. Absent on bookings voided before
+  // this existed (see voidedRoomPortionCollected in lib/reports.ts).
+  voidKeptCash?: number;
+  voidKeptGcash?: number;
+  voidKeptQrph?: number;
   reversedAmount?: number;
   reversedByName?: string;
   cashierId: string;

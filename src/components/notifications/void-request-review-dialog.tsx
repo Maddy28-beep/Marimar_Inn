@@ -13,6 +13,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { approveVoidRequest, denyVoidRequest } from "@/lib/void-requests";
+import { KeptMethodRequiredError, type KeptMethod } from "@/lib/bookings";
+import { KeptMethodDialog } from "@/components/rooms/kept-method-dialog";
 import { useAuth } from "@/context/auth-context";
 import { syncNote, useOnlineStatus } from "@/hooks/use-online-status";
 import { visibleStaffName } from "@/lib/roles";
@@ -39,6 +41,11 @@ export function VoidRequestReviewDialog({ requests, onClose }: VoidRequestReview
   const [busyId, setBusyId] = useState<string | null>(null);
   const [denyingId, setDenyingId] = useState<string | null>(null);
   const [denyNote, setDenyNote] = useState("");
+  const [keptChoice, setKeptChoice] = useState<{
+    request: VoidRequest;
+    amount: number;
+    choices: KeptMethod[];
+  } | null>(null);
 
   async function handleApprove(request: VoidRequest) {
     if (!appUser) return;
@@ -47,19 +54,33 @@ export function VoidRequestReviewDialog({ requests, onClose }: VoidRequestReview
       ? `Remove ${request.itemQuantity}× ${request.itemName} (₱${(request.itemSubtotal ?? 0).toFixed(2)}) from Room ${request.roomNumber}'s order? This was already paid for — you'll need to hand that back to the guest.`
       : `Approve voiding Room ${request.roomNumber} — ${request.guestName}? This frees up the room without checking out.`;
     if (!window.confirm(confirmMessage)) return;
+    await runApprove(request);
+  }
+
+  async function runApprove(request: VoidRequest, keptMethod?: KeptMethod) {
+    if (!appUser) return;
+    const isOrderItem = request.target === "order_item";
     setBusyId(request.voidRequestId);
     try {
-      await approveVoidRequest(request, {
-        uid: appUser.uid,
-        name: appUser.displayName ?? appUser.email ?? "Owner",
-      });
+      await approveVoidRequest(
+        request,
+        {
+          uid: appUser.uid,
+          name: appUser.displayName ?? appUser.email ?? "Owner",
+        },
+        keptMethod
+      );
       toast.success(
         (isOrderItem
           ? `${request.itemName} removed from Room ${request.roomNumber}'s order.`
           : `Room ${request.roomNumber} voided.`) + syncNote(isOnline)
       );
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't approve the void request.");
+      if (error instanceof KeptMethodRequiredError) {
+        setKeptChoice({ request, amount: error.keptAmount, choices: error.choices });
+      } else {
+        toast.error(error instanceof Error ? error.message : "Couldn't approve the void request.");
+      }
     } finally {
       setBusyId(null);
     }
@@ -89,6 +110,7 @@ export function VoidRequestReviewDialog({ requests, onClose }: VoidRequestReview
   }
 
   return (
+    <>
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
@@ -190,5 +212,19 @@ export function VoidRequestReviewDialog({ requests, onClose }: VoidRequestReview
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    {keptChoice && (
+      <KeptMethodDialog
+        amount={keptChoice.amount}
+        choices={keptChoice.choices}
+        busy={busyId !== null}
+        onCancel={() => setKeptChoice(null)}
+        onChoose={(method) => {
+          const { request } = keptChoice;
+          setKeptChoice(null);
+          void runApprove(request, method);
+        }}
+      />
+    )}
+    </>
   );
 }

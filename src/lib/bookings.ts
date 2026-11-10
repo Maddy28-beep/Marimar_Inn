@@ -429,14 +429,89 @@ export async function recordCheckout(
   });
 }
 
-export async function voidBooking(booking: Booking, opts?: { bypassWindow?: boolean }) {
+export type KeptMethod = "cash" | "gcash" | "qrph";
+
+const KEPT_METHODS: KeptMethod[] = ["cash", "gcash", "qrph"];
+
+/** Thrown when a room-only void can't tell how the store items were paid. */
+export class KeptMethodRequiredError extends Error {
+  readonly keptAmount: number;
+  readonly choices: KeptMethod[];
+  constructor(keptAmount: number, choices: KeptMethod[]) {
+    super("Choose how the store items were paid.");
+    this.name = "KeptMethodRequiredError";
+    this.keptAmount = keptAmount;
+    this.choices = choices;
+  }
+}
+
+/**
+ * Whole-peso fallback for bookings voided before the kept split was
+ * recorded: the items' share is taken from cash first, then GCash, then
+ * QRPh, never spread proportionally (which produced centavo amounts that
+ * matched no real payment).
+ */
+export function wholePesoKept(paid: PaymentPortions, kept: number): PaymentPortions {
+  let remaining = kept;
+  const out: PaymentPortions = { cash: 0, gcash: 0, qrph: 0 };
+  for (const method of KEPT_METHODS) {
+    const take = Math.min(paid[method], remaining);
+    out[method] = take;
+    remaining -= take;
+  }
+  return out;
+}
+
+/**
+ * A room-only void keeps the store items on the books, which means part of
+ * what the guest paid stays as real revenue — this works out how much, and
+ * by which method. If exactly one method paid at least that much it's
+ * unambiguous; if several could have, the caller must say which
+ * (KeptMethodRequiredError); if none alone could, fall back to whole pesos.
+ */
+export function planVoidKept(
+  booking: Pick<
+    Booking,
+    | "paymentMethod"
+    | "amountPaid"
+    | "totalFbCharge"
+    | "splitCashAmount"
+    | "splitGcashAmount"
+    | "splitQrphAmount"
+  >,
+  keptMethod?: KeptMethod
+): PaymentPortions {
+  const paid = paymentBreakdown(booking);
+  const kept = Math.min(booking.amountPaid ?? 0, booking.totalFbCharge ?? 0);
+  const none: PaymentPortions = { cash: 0, gcash: 0, qrph: 0 };
+  if (kept <= 0) return none;
+  const feasible = KEPT_METHODS.filter((m) => paid[m] + 0.005 >= kept);
+  if (feasible.length === 1) return { ...none, [feasible[0]!]: kept };
+  if (feasible.length > 1) {
+    if (keptMethod && feasible.includes(keptMethod)) return { ...none, [keptMethod]: kept };
+    throw new KeptMethodRequiredError(kept, feasible);
+  }
+  return wholePesoKept(paid, kept);
+}
+
+export function voidKeptFields(kept: PaymentPortions) {
+  return { voidKeptCash: kept.cash, voidKeptGcash: kept.gcash, voidKeptQrph: kept.qrph };
+}
+
+export async function voidBooking(
+  booking: Booking,
+  opts?: { bypassWindow?: boolean; keptMethod?: KeptMethod }
+) {
   if (!opts?.bypassWindow && !canVoidBooking(booking, new Date())) {
     throw new Error("Cancel is only allowed in the first 7 minutes. Check out instead.");
   }
   const firestore = requireDb();
+  // Resolved before any write so an ambiguous case fails cleanly.
+  const kept = planVoidKept(booking, opts?.keptMethod);
   const batch = writeBatch(firestore);
   batch.update(bDoc(firestore, "bookings", booking.bookingId), {
     status: "voided",
+    ...voidKeptFields(kept),
     updatedAt: serverTimestamp(),
   });
   batch.update(bDoc(firestore, "rooms", booking.roomId), {
