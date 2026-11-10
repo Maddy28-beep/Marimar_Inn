@@ -286,11 +286,21 @@ export interface StoreSale {
   cashierId: string;
   cashierName: string;
   cashierRole?: UserRole;
+  // Audit trail of payment-method corrections (see lib/payment-changes.ts).
+  methodChanges?: {
+    at: Timestamp;
+    byId: string;
+    byName: string;
+    from: string;
+    to: string;
+  }[];
 }
 
 // "reversal" is a negative copy of an earlier transaction, written when a
 // booking is cancelled as a duplicate (see voidBookingAsDuplicate).
-export type TransactionType = "checkin" | "extend" | "checkout" | "order" | "payment" | "reversal";
+// "method_change" carries the per-method difference when a payment's method
+// is corrected (amount 0, see lib/payment-changes.ts).
+export type TransactionType = "checkin" | "extend" | "checkout" | "order" | "payment" | "reversal" | "method_change";
 
 // One record per money-collecting event on a booking (check-in payment,
 // extend payment, checkout payment) — a booking's own checkInTime never
@@ -312,4 +322,8 @@ export interface Transaction {
   cashierName: string;
   cashierRole?: UserRole;
   timestamp: Timestamp;
+  // method_change only: which transaction's method this corrects, and a
+  // readable "from -> to" note.
+  correctsTransactionId?: string;
+  note?: string;
 }

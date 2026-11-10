@@ -363,7 +363,15 @@ service cloud.firestore {
         request.resource.data.amountPaid is number &&
         request.resource.data.cashierId == request.auth.uid;
 
-      allow update: if false;
+      // Staff may only correct HOW a sale was paid (method, split, references,
+      // and the history entry) — never the items or amounts. The amount-
+      // preserving check and the same-day limit for cashiers are enforced in
+      // the app (lib/payment-changes.ts); every change is recorded.
+      allow update: if isStaff() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'paymentMethod', 'splitCashAmount', 'splitGcashAmount', 'splitQrphAmount',
+          'gcashReference', 'qrphReference', 'methodChanges'
+        ]);
       allow delete: if isElevatedStaff();
     }
 

@@ -210,6 +210,7 @@ export interface DailySalesRow {
   cashierRole?: UserRole;
   remarks?: string;
   voided?: boolean;
+  isStoreSale?: boolean;
 }
 
 export interface DailySalesTotals {
@@ -337,6 +338,7 @@ export function computeDailySalesReport(
       splitQrphAmount: sale.splitQrphAmount,
       cashierName: sale.cashierName,
       cashierRole: sale.cashierRole,
+      isStoreSale: true,
     });
   }
 

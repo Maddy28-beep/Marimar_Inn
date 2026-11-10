@@ -34,6 +34,8 @@ import { OpenDrawerForm } from "@/components/cash-drawer-open";
 import { exportToExcel, formatReportDate, formatReportMonth } from "@/lib/export";
 import { canApproveVoid, isOwnerLikeRole, visibleStaffName } from "@/lib/roles";
 import { voidBookingAsDuplicate } from "@/lib/bookings";
+import { ChangePaymentMethodDialog } from "@/components/reports/change-payment-method-dialog";
+import type { DailySalesRow } from "@/lib/reports";
 import {
   deleteShiftExpense,
   fetchExpensesInRange,
@@ -147,6 +149,7 @@ const TRANSACTION_TYPE_LABELS: Record<Transaction["type"], string> = {
   order: "Order",
   payment: "Payment",
   reversal: "Reversal (duplicate)",
+  method_change: "Method change",
 };
 
 // <input type="time"> gives 24h "HH:MM" — display it the way staff write it
@@ -191,6 +194,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   const [loading, setLoading] = useState(true);
   const [thermalPreviewOpen, setThermalPreviewOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [changeMethodRow, setChangeMethodRow] = useState<DailySalesRow | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -809,6 +813,19 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
               canRemoveExpenses={isOwnerLike}
               onRemoveExpense={handleRemoveExpense}
               onMarkDuplicate={canApproveVoid(appUser?.role) ? handleMarkDuplicate : undefined}
+              onChangePaymentMethod={
+                appUser?.role === "cashier" || canApproveVoid(appUser?.role)
+                  ? setChangeMethodRow
+                  : undefined
+              }
+            />
+          )}
+
+          {changeMethodRow && (
+            <ChangePaymentMethodDialog
+              row={changeMethodRow}
+              onClose={() => setChangeMethodRow(null)}
+              onDone={() => setReloadKey((k) => k + 1)}
             />
           )}
 

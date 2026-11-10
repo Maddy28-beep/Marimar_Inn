@@ -12,15 +12,19 @@ const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   order: "Order",
   payment: "Payment",
   reversal: "Reversal (duplicate)",
+  method_change: "Method change",
 };
 
 // Mirrors paymentLabel() below but for a transaction's own cash/gcash/qrph
 // split instead of a booking row's running totals.
 function transactionPaymentLabel(t: Transaction): string {
   const parts: string[] = [];
-  if (t.cashAmount > 0) parts.push(`Cash ${peso(t.cashAmount)}`);
-  if (t.gcashAmount > 0) parts.push(`GCash ${peso(t.gcashAmount)}`);
-  if (t.qrphAmount > 0) parts.push(`QRPh ${peso(t.qrphAmount)}`);
+  // Not just > 0: method-change entries carry negative per-method
+  // differences (e.g. Cash -250 + QRPh +250).
+  const signed = (n: number) => (n < 0 ? `-${peso(-n)}` : peso(n));
+  if (t.cashAmount !== 0) parts.push(`Cash ${signed(t.cashAmount)}`);
+  if (t.gcashAmount !== 0) parts.push(`GCash ${signed(t.gcashAmount)}`);
+  if (t.qrphAmount !== 0) parts.push(`QRPh ${signed(t.qrphAmount)}`);
   return parts.join(" + ") || peso(t.amount);
 }
 
@@ -89,6 +93,7 @@ export function DailySalesTable({
   canRemoveExpenses = false,
   onRemoveExpense,
   onMarkDuplicate,
+  onChangePaymentMethod,
 }: {
   report: DailySalesReport;
   // Cash/GCash/QRPh actually collected during this shift's time window —
@@ -110,6 +115,9 @@ export function DailySalesTable({
   // Owner/admin only — offered on voided rows to take a mistaken duplicate's
   // payment and items fully off the books (see voidBookingAsDuplicate).
   onMarkDuplicate?: (bookingId: string) => void;
+  // Shown on non-voided rows to cashiers/owners — fixes the payment method
+  // (never the amount); the caller decides who may use it.
+  onChangePaymentMethod?: (row: DailySalesRow) => void;
 }) {
   const { rows, totals } = report;
   const expenseTotal = totalExpenses(expenses);
@@ -188,6 +196,16 @@ export function DailySalesTable({
                     {paymentLabel(row)}
                     {row.gcashReference ? ` (GCash ${row.gcashReference})` : ""}
                     {row.qrphReference ? ` (QRPh ${row.qrphReference})` : ""}
+                    {!row.voided && onChangePaymentMethod && (
+                      <button
+                        type="button"
+                        className="ml-2 rounded border px-1 text-[10px] text-muted-foreground hover:bg-muted print:hidden"
+                        title="Wrong payment method? Fix it — the amount stays the same"
+                        onClick={() => onChangePaymentMethod(row)}
+                      >
+                        Change
+                      </button>
+                    )}
                   </td>
                   <td className="border p-1 whitespace-nowrap">
                     {visibleStaffName(row.cashierName, row.cashierRole)}
