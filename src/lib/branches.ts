@@ -23,7 +23,7 @@ export const DEFAULT_BRANCH_ID = "marimar-1";
 
 export const BRANCHES: Branch[] = [
   { id: "marimar-1", name: "Marimar 1" },
-  { id: "marimar-2", name: "Marimar 2", hidden: true },
+  { id: "marimar-2", name: "Marimar 2" },
   { id: "marimar-3", name: "Marimar 3", hidden: true },
 ];
 
