@@ -82,16 +82,65 @@ const SANTA_COMPANIONS = [
   { message: "Merry Christmas from Marimar Inn!", delay: "-18s" },
 ];
 
-/** Three immediately visible companions. CSS handles every step, without timers. */
+/** Three companions patrol every rendered row; layout is measured only on resize. */
 export function SantaRunner() {
-  const { showSanta } = useContext(ChristmasMotionContext);
+  const { motion, showSanta } = useContext(ChristmasMotionContext);
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    const grid = track?.parentElement?.querySelector<HTMLElement>(".room-grid-surface");
+    if (!motion || !track || !grid) return;
+
+    let animations: Animation[] = [];
+    let previousRows = "";
+    function updatePatrol() {
+      if (!track || !grid) return;
+      const rows = [...new Set(Array.from(grid.children)
+        .filter((child): child is HTMLElement => child instanceof HTMLElement)
+        .map((child) => child.offsetTop))].sort((a, b) => a - b);
+      const signature = rows.join(",");
+      if (signature === previousRows) return;
+      previousRows = signature;
+      animations.forEach((animation) => animation.cancel());
+      animations = [];
+      if (rows.length <= 1) return;
+
+      const firstRow = rows[0];
+      const steps = rows.length - 1;
+      const keyframes: Keyframe[] = rows.flatMap((top, index) => {
+        const transform = `translate3d(0, ${top - firstRow}px, 0)`;
+        const arrival = { transform, offset: index / steps };
+        // Walk along each row, then take a short step down/up to the next.
+        return index === steps ? [arrival] : [arrival, { transform, offset: (index + 0.8) / steps }];
+      });
+      const duration = steps * 6_000;
+      animations = Array.from(track.querySelectorAll<HTMLElement>(".santa-row-travel"))
+        .map((companion, index) => companion.animate(keyframes, {
+          duration,
+          iterations: Infinity,
+          direction: "alternate",
+          easing: "linear",
+          delay: -(index / SANTA_COMPANIONS.length) * duration,
+        }));
+    }
+
+    updatePatrol();
+    const observer = new ResizeObserver(updatePatrol);
+    observer.observe(grid);
+    return () => {
+      observer.disconnect();
+      animations.forEach((animation) => animation.cancel());
+    };
+  }, [motion, showSanta]);
+
   if (!showSanta) return null;
 
   return (
-    <div className="santa-track" aria-hidden="true">
+    <div ref={trackRef} className="santa-track" aria-hidden="true">
       {SANTA_COMPANIONS.map((santa) => (
+        <div className="santa-row-travel" key={santa.message}>
         <div
-          key={santa.message}
           className="santa-visit"
           style={{
             animationDelay: santa.delay,
@@ -104,6 +153,7 @@ export function SantaRunner() {
               <SantaCharacter />
             </div>
           </div>
+        </div>
         </div>
       ))}
     </div>

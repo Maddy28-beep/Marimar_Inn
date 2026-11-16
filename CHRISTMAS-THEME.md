@@ -19,14 +19,16 @@ business calculations, routes, and Android source are unchanged.
 - No new dependencies, images, animation framework, canvas, or frame callbacks.
 - Room/store card backdrop blur removed; surfaces use static gradients.
 - Seven small snow particles (four on narrow screens); lights animate opacity.
-- Three small Santa SVGs appear immediately across the first room rows. Each
-  walks back and forth on a 26-second CSS cycle, with staggered positions and
-  different greetings. Travel, limbs, and particles use transforms and opacity;
-  there are no scheduling timers or JavaScript animation loops.
+- Three small Santa SVGs patrol every rendered room row, with staggered
+  positions and different greetings. A ResizeObserver measures actual row
+  positions when the grid changes size, and native Web Animations move each
+  companion between those rows, continuing back up after reaching the last.
+  Horizontal travel, limbs, and particles use CSS transforms and opacity;
+  there are no scheduling timers or JavaScript animation frame loops.
 - On phones, travel uses a six-second pass with no midpoint pause, making
   movement across the room cards easier to notice on small screens.
 - Effects stop when the page is hidden or reduced motion is enabled.
-- On phones, the three Santas walk directly over separate room-card rows,
+- On phones, the three Santas walk directly over all room-card rows,
   across the full grid width. They are smaller than on desktop, stay below
   room-number headers, and never intercept taps. There is no separate strip.
   Reduced motion keeps them stationary; the pause control can hide them.

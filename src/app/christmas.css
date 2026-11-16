@@ -127,9 +127,8 @@
 [data-festive-motion="off"] .christmas-snow { display: none; }
 .santa-track { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 5; border-radius: 16px;  }
 .santa-track { --santa-width: 140px; }
+.santa-row-travel { position: absolute; top: 0; left: 0; width: 100%; }
 .santa-visit { position: absolute; top: 24px; left: 0; width: 100%; animation: santa-patrol 26s ease-in-out infinite alternate; }
-.santa-visit:nth-child(2) { top: min(180px, 46%); }
-.santa-visit:nth-child(3) { top: min(336px, 86%); }
 .santa-figure { width: var(--santa-width); }
 .santa-character { width: 85px; margin-inline: auto; position: relative; animation: santa-facing 52s step-end infinite; }
 .santa-character svg { width: 85px; height: 78px; }
@@ -159,8 +158,6 @@
   /* Walk over the room rows on phones too; there is no separate parade strip. */
   .santa-track { --santa-width: 72px; }
   .santa-track .santa-visit { top: 56px; width: 100%; animation-name: santa-phone-patrol; animation-duration: 6s; animation-timing-function: linear; will-change: transform; }
-  .santa-track .santa-visit:nth-child(2) { top: min(212px, 46%); }
-  .santa-track .santa-visit:nth-child(3) { top: min(368px, 86%); }
   .santa-character { width: 64px; animation-duration: 12s; }
   .santa-character svg { width: 64px; height: 59px; }
   .santa-message, .santa-trail { display: none; }
@@ -171,12 +168,9 @@
   .christmas-shell:not([data-festive-motion="on"]) *, .christmas-shell:not([data-festive-motion="on"]) *::before, .christmas-shell:not([data-festive-motion="on"]) *::after { animation: none !important; transition-duration: 0s !important; }
 }
 [data-festive-motion="off"] .santa-track * { animation: none; }
-[data-festive-motion="off"] .santa-visit:nth-child(1) { transform: translateX(calc(15% - var(--santa-width) / 2)); }
-[data-festive-motion="off"] .santa-visit:nth-child(2) { transform: translateX(calc(50% - var(--santa-width) / 2)); }
-[data-festive-motion="off"] .santa-visit:nth-child(3) { transform: translateX(calc(85% - var(--santa-width) / 2)); }
-@media (max-width: 640px) {
-  [data-festive-motion="off"] .santa-track .santa-visit { transform: translateX(calc(50% - var(--santa-width) / 2)); }
-}
+[data-festive-motion="off"] .santa-row-travel:nth-child(1) .santa-visit { transform: translateX(calc(15% - var(--santa-width) / 2)); }
+[data-festive-motion="off"] .santa-row-travel:nth-child(2) .santa-visit { transform: translateX(calc(50% - var(--santa-width) / 2)); }
+[data-festive-motion="off"] .santa-row-travel:nth-child(3) .santa-visit { transform: translateX(calc(85% - var(--santa-width) / 2)); }
 [data-festive-motion="off"] :is(.christmas-page-enter, .animate-bed-sway, .animate-broom-sweep, .animate-wrench-turn) { animation: none; }
 @media print {
   .christmas-ribbon, .christmas-garland, .christmas-snow, .santa-track { display: none !important; }
