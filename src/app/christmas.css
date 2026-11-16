@@ -166,8 +166,9 @@
   .santa-message, .santa-trail { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .christmas-snow { display: none !important; }
-  .christmas-shell *, .christmas-shell *::before, .christmas-shell *::after { animation: none !important; transition-duration: 0s !important; }
+  /* Honor the system by default; an explicit Enable action may opt in. */
+  .christmas-shell:not([data-festive-motion="on"]) .christmas-snow { display: none !important; }
+  .christmas-shell:not([data-festive-motion="on"]) *, .christmas-shell:not([data-festive-motion="on"]) *::before, .christmas-shell:not([data-festive-motion="on"]) *::after { animation: none !important; transition-duration: 0s !important; }
 }
 [data-festive-motion="off"] .santa-track * { animation: none; }
 [data-festive-motion="off"] .santa-visit:nth-child(1) { transform: translateX(calc(15% - var(--santa-width) / 2)); }

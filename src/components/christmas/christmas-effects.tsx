@@ -1,38 +1,66 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { PauseIcon, PlayIcon, SparklesIcon } from "lucide-react";
 
 const ChristmasMotionContext = createContext({ motion: false, showSanta: true });
+type MotionChoice = "system" | "on" | "off";
+const MOTION_STORAGE_KEY = "marimar.christmas.motion";
 
 /** Seasonal presentation only. No timers run while hidden or motion is disabled. */
 export function ChristmasEffects({ children }: { children: ReactNode }) {
-  const [paused, setPaused] = useState(false);
+  const [choice, setChoice] = useState<MotionChoice>("system");
+  const choiceRef = useRef<MotionChoice>("system");
   const [canAnimate, setCanAnimate] = useState(false);
 
   useEffect(() => {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
     function sync() {
-      setCanAnimate(!preference.matches && document.visibilityState === "visible");
+      try {
+        const saved = window.localStorage.getItem(MOTION_STORAGE_KEY);
+        if (saved === "on" || saved === "off") choiceRef.current = saved;
+      } catch {
+        // The in-memory choice still works when storage is unavailable.
+      }
+      setChoice(choiceRef.current);
+      setCanAnimate(
+        document.visibilityState === "visible" &&
+        (choiceRef.current === "on" || (choiceRef.current === "system" && !preference.matches))
+      );
     }
     sync();
-    preference.addEventListener("change", sync);
+    if (preference.addEventListener) preference.addEventListener("change", sync);
+    else preference.addListener(sync);
     document.addEventListener("visibilitychange", sync);
+    window.addEventListener("storage", sync);
     return () => {
-      preference.removeEventListener("change", sync);
+      if (preference.removeEventListener) preference.removeEventListener("change", sync);
+      else preference.removeListener(sync);
       document.removeEventListener("visibilitychange", sync);
+      window.removeEventListener("storage", sync);
     };
   }, []);
 
-  const motion = canAnimate && !paused;
+  const motion = canAnimate;
+  function toggleMotion() {
+    const next = motion ? "off" : "on";
+    choiceRef.current = next;
+    setChoice(next);
+    setCanAnimate(next === "on" && document.visibilityState === "visible");
+    try {
+      window.localStorage.setItem(MOTION_STORAGE_KEY, next);
+    } catch {
+      // The switch remains usable even in private/locked-down browser modes.
+    }
+  }
   return (
-    <ChristmasMotionContext.Provider value={{ motion, showSanta: !paused }}>
+    <ChristmasMotionContext.Provider value={{ motion, showSanta: choice !== "off" }}>
       <div className="christmas-shell" data-festive-motion={motion ? "on" : "off"}>
         <div className="christmas-ribbon">
           <span className="christmas-ribbon-greeting"><SparklesIcon aria-hidden="true" /> Merry Christmas &amp; Happy Holidays!</span>
-          <button type="button" className="christmas-motion-control" aria-pressed={paused} onClick={() => setPaused(!paused)}>
-            {paused ? <PlayIcon aria-hidden="true" /> : <PauseIcon aria-hidden="true" />}
-            <span>{paused ? "Enable festive motion" : "Pause festive motion"}</span>
+          <button type="button" className="christmas-motion-control" aria-label="Festive motion" aria-pressed={motion} onClick={toggleMotion}>
+            {motion ? <PauseIcon aria-hidden="true" /> : <PlayIcon aria-hidden="true" />}
+            <span>{motion ? "Pause festive motion" : "Enable festive motion"}</span>
           </button>
         </div>
         <div className="christmas-snow" aria-hidden="true">

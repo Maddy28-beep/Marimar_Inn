@@ -28,6 +28,10 @@ business calculations, routes, and Android source are unchanged.
   third of its width per character. They cannot overlap or cover room details.
   Reduced motion keeps the Santas visible but stationary; the pause control
   can hide them entirely.
+- **Enable festive motion** explicitly enables animation even when the device
+  requests reduced motion. The user's on/off choice is saved on this device
+  and restored after reloads. Until a choice is made, the system preference
+  is honored. Hidden pages always stop animation.
 - Header's **Pause festive motion** control also stops the existing animated
   room-status icons. Normal hotel controls stay active.
 - Decorations ignore pointer events, are hidden from accessibility APIs, and
