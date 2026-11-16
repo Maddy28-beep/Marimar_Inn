@@ -142,7 +142,8 @@
 @keyframes holiday-glow { from { opacity: .6; } to { opacity: 1; } }
 @keyframes holiday-page-in { from { opacity: .75; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 @keyframes holiday-snow { 0% { transform: translate3d(0, -20px, 0); opacity: 0; } 10% { opacity: .2; } 85% { opacity: .2; } 100% { transform: translate3d(25px, 95vh, 0); opacity: 0; } }
-@keyframes santa-patrol { 0% { transform: translateX(0); } 45%, 55% { transform: translateX(calc(50% - var(--santa-width) / 2)); } 100% { transform: translateX(calc(100% - var(--santa-width))); } }
+@keyframes santa-patrol { 0% { transform: translate3d(0, 0, 0); } 45%, 55% { transform: translate3d(calc(50% - 70px), 0, 0); } 100% { transform: translate3d(calc(100% - 140px), 0, 0); } }
+@keyframes santa-phone-patrol { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(calc(100% - 72px), 0, 0); } }
 @keyframes santa-facing { 0% { transform: scaleX(1); } 50% { transform: scaleX(-1); } }
 @keyframes santa-stride { from { transform: rotate(-23deg); } to { transform: rotate(23deg); } }
 @keyframes santa-bounce { from { transform: translateY(0); } to { transform: translateY(-2px); } }
@@ -155,13 +156,12 @@
   .christmas-welcome-actions { align-items: flex-start; }
   .christmas-welcome-actions > span { display: none; }
   .christmas-snow i:nth-child(even) { display: none; }
-  /* Keep the whole parade in view, above the cards, without covering data. */
-  .christmas-grid-wrap { display: flex; flex-direction: column; gap: 8px; }
-  .santa-track { --santa-width: 72px; position: relative; inset: auto; order: -1; height: 78px; flex-shrink: 0; border: 1px solid var(--border); background: linear-gradient(110deg, var(--secondary), var(--background)); }
-  .santa-track .santa-visit { top: 8px; width: 33.333333%; }
-  .santa-track .santa-visit:nth-child(2) { left: 33.333333%; }
-  .santa-track .santa-visit:nth-child(3) { left: 66.666667%; }
-  .santa-character { width: 64px; }
+  /* Walk over the room rows on phones too; there is no separate parade strip. */
+  .santa-track { --santa-width: 72px; }
+  .santa-track .santa-visit { top: 56px; width: 100%; animation-name: santa-phone-patrol; animation-duration: 6s; animation-timing-function: linear; will-change: transform; }
+  .santa-track .santa-visit:nth-child(2) { top: min(212px, 46%); }
+  .santa-track .santa-visit:nth-child(3) { top: min(368px, 86%); }
+  .santa-character { width: 64px; animation-duration: 12s; }
   .santa-character svg { width: 64px; height: 59px; }
   .santa-message, .santa-trail { display: none; }
 }

@@ -23,11 +23,13 @@ business calculations, routes, and Android source are unchanged.
   walks back and forth on a 26-second CSS cycle, with staggered positions and
   different greetings. Travel, limbs, and particles use transforms and opacity;
   there are no scheduling timers or JavaScript animation loops.
+- On phones, travel uses a six-second pass with no midpoint pause, making
+  movement across the room cards easier to notice on small screens.
 - Effects stop when the page is hidden or reduced motion is enabled.
-- On phones, the three Santas use a compact lane above the cards, with one
-  third of its width per character. They cannot overlap or cover room details.
-  Reduced motion keeps the Santas visible but stationary; the pause control
-  can hide them entirely.
+- On phones, the three Santas walk directly over separate room-card rows,
+  across the full grid width. They are smaller than on desktop, stay below
+  room-number headers, and never intercept taps. There is no separate strip.
+  Reduced motion keeps them stationary; the pause control can hide them.
 - **Enable festive motion** explicitly enables animation even when the device
   requests reduced motion. The user's on/off choice is saved on this device
   and restored after reloads. Until a choice is made, the system preference
