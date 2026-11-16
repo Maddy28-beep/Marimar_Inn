@@ -48,48 +48,43 @@ export function ChristmasGarland() {
   return <div className="christmas-garland" aria-hidden="true">{Array.from({ length: 16 }, (_, i) => <i key={i} />)}</div>;
 }
 
-const MESSAGES = [
-  "Ho Ho Ho! Merry Christmas!",
-  "Santa is checking the rooms!",
-  "Merry Christmas from Marimar Inn!",
-  "Santa approved this room! 🎁",
+const SANTA_COMPANIONS = [
+  { message: "Ho Ho Ho! Merry Christmas!", delay: "-6s" },
+  { message: "Santa is checking the rooms!", delay: "-32s" },
+  { message: "Merry Christmas from Marimar Inn!", delay: "-18s" },
 ];
 
-/** One small SVG, animated only during a visit; no frame loops or dependencies. */
+/** Three immediately visible companions. CSS handles every step, without timers. */
 export function SantaRunner() {
   const motion = useContext(ChristmasMotionContext);
-  const [visit, setVisit] = useState<{ message: string; reverse: boolean } | null>(null);
+  if (!motion) return null;
 
-  useEffect(() => {
-    if (!motion) return;
-    let timer: ReturnType<typeof setTimeout>;
-    let finished = false;
-    function schedule(delay: number) {
-      timer = setTimeout(() => {
-        if (finished) return;
-        setVisit({ message: MESSAGES[Math.floor(Math.random() * MESSAGES.length)], reverse: Math.random() < 0.35 });
-        timer = setTimeout(() => {
-          setVisit(null);
-          schedule(65_000 + Math.random() * 50_000);
-        }, 18_000);
-      }, delay);
-    }
-    schedule(9_000 + Math.random() * 6_000);
-    return () => {
-      finished = true;
-      clearTimeout(timer);
-      setVisit(null);
-    };
-  }, [motion]);
-
-  if (!motion || !visit) return null;
   return (
     <div className="santa-track" aria-hidden="true">
-      <div className={`santa-visit${visit.reverse ? " santa-reverse" : ""}`}>
-        <div className="santa-figure">
-        <span className="santa-message">{visit.message}</span>
-        <div className="santa-character">
-          <span className="santa-trail">✦ · ❄ · ✧</span>
+      {SANTA_COMPANIONS.map((santa, index) => (
+        <div
+          key={santa.message}
+          className="santa-visit"
+          style={{
+            top: `min(${24 + index * 156}px, ${index * 40 + 6}%)`,
+            animationDelay: santa.delay,
+          }}
+        >
+          <div className="santa-figure">
+            <span className="santa-message">{santa.message}</span>
+            <div className="santa-character" style={{ animationDelay: santa.delay }}>
+              <span className="santa-trail">✦ · ❄ · ✧</span>
+              <SantaCharacter />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SantaCharacter() {
+  return (
           <svg viewBox="0 0 130 120" width="104" height="96" fill="none" focusable="false">
             <ellipse cx="67" cy="112" rx="33" ry="4" fill="#14532d" opacity=".12" />
             <path d="M35 39C8 34 7 72 29 79L51 69Z" fill="#9b7936" stroke="#7d6027" strokeWidth="2" />
@@ -110,9 +105,5 @@ export function SantaRunner() {
               <ellipse cx="69" cy="39" rx="5" ry="3.5" fill="#e8a78b" /><path d="M64 48Q69 52 74 47" stroke="#991b1b" strokeWidth="1.8" strokeLinecap="round" />
             </g>
           </svg>
-        </div>
-        </div>
-      </div>
-    </div>
   );
 }

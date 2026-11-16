@@ -19,11 +19,11 @@ business calculations, routes, and Android source are unchanged.
 - No new dependencies, images, animation framework, canvas, or frame callbacks.
 - Room/store card backdrop blur removed; surfaces use static gradients.
 - Seven small snow particles (four on narrow screens); lights animate opacity.
-- Santa is a single small SVG, mounted only during an 18-second visit. The
-  first visit starts after 9–15 seconds; subsequent visits have 65–115-second
-  gaps. Direction and greeting vary. Travel, limbs, and particles use CSS
-  transforms and opacity.
-- Timers and effects stop when the page is hidden or reduced motion is enabled.
+- Three small Santa SVGs appear immediately across the first room rows. Each
+  walks back and forth on a 26-second CSS cycle, with staggered positions and
+  different greetings. Travel, limbs, and particles use transforms and opacity;
+  there are no scheduling timers or JavaScript animation loops.
+- Effects stop when the page is hidden or reduced motion is enabled.
 - Header's **Pause festive motion** control also stops the existing animated
   room-status icons. Normal hotel controls stay active.
 - Decorations ignore pointer events, are hidden from accessibility APIs, and
