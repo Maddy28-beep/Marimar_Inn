@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { PauseIcon, PlayIcon, SparklesIcon } from "lucide-react";
 
-const ChristmasMotionContext = createContext(false);
+const ChristmasMotionContext = createContext({ motion: false, showSanta: true });
 
 /** Seasonal presentation only. No timers run while hidden or motion is disabled. */
 export function ChristmasEffects({ children }: { children: ReactNode }) {
@@ -26,7 +26,7 @@ export function ChristmasEffects({ children }: { children: ReactNode }) {
 
   const motion = canAnimate && !paused;
   return (
-    <ChristmasMotionContext.Provider value={motion}>
+    <ChristmasMotionContext.Provider value={{ motion, showSanta: !paused }}>
       <div className="christmas-shell" data-festive-motion={motion ? "on" : "off"}>
         <div className="christmas-ribbon">
           <span className="christmas-ribbon-greeting"><SparklesIcon aria-hidden="true" /> Merry Christmas &amp; Happy Holidays!</span>
@@ -56,17 +56,16 @@ const SANTA_COMPANIONS = [
 
 /** Three immediately visible companions. CSS handles every step, without timers. */
 export function SantaRunner() {
-  const motion = useContext(ChristmasMotionContext);
-  if (!motion) return null;
+  const { showSanta } = useContext(ChristmasMotionContext);
+  if (!showSanta) return null;
 
   return (
     <div className="santa-track" aria-hidden="true">
-      {SANTA_COMPANIONS.map((santa, index) => (
+      {SANTA_COMPANIONS.map((santa) => (
         <div
           key={santa.message}
           className="santa-visit"
           style={{
-            top: `min(${24 + index * 156}px, ${index * 40 + 6}%)`,
             animationDelay: santa.delay,
           }}
         >

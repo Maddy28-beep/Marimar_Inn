@@ -24,6 +24,10 @@ business calculations, routes, and Android source are unchanged.
   different greetings. Travel, limbs, and particles use transforms and opacity;
   there are no scheduling timers or JavaScript animation loops.
 - Effects stop when the page is hidden or reduced motion is enabled.
+- On phones, the three Santas use a compact lane above the cards, with one
+  third of its width per character. They cannot overlap or cover room details.
+  Reduced motion keeps the Santas visible but stationary; the pause control
+  can hide them entirely.
 - Header's **Pause festive motion** control also stops the existing animated
   room-status icons. Normal hotel controls stay active.
 - Decorations ignore pointer events, are hidden from accessibility APIs, and
