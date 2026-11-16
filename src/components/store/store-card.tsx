@@ -10,10 +10,10 @@ export function StoreCard({ onClick }: { onClick: () => void }) {
       className={cn(
         // display:block with the layout on the inner <div> — see CARD_SHELL
         // in room-card.tsx (WebKit shrink-wraps a flex <button>'s children).
-        // Same three-band structure as the room cards (top band, sheet row,
+        // Same lightweight three-band structure as the room cards (top band, sheet row,
         // body) at the same h-36 so the grid reads as one set, but with a
         // single wide label instead of two pillows — it's a counter, not a bed.
-        "relative block h-36 w-full overflow-hidden rounded-2xl border text-left shadow-lg shadow-black/5 backdrop-blur-md backdrop-saturate-150 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl dark:shadow-black/20 dark:ring-white/10",
+        "christmas-room-card relative block h-36 w-full overflow-hidden rounded-2xl border text-left ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 dark:ring-white/10",
         "border-sky-500/30 bg-sky-500/10"
       )}
     >

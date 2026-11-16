@@ -12,6 +12,7 @@ import { BrandLogo } from "@/components/brand-logo";
 import { BrandMark } from "@/components/brand-mark";
 import { primeAlarmAudio } from "@/lib/alarm";
 import { Loader2Icon, TriangleAlertIcon } from "lucide-react";
+import { ChristmasGarland } from "@/components/christmas/christmas-effects";
 
 function firebaseAuthErrorMessage(error: unknown): string {
   if (error instanceof Error && !("code" in error)) {
@@ -79,11 +80,10 @@ export default function LoginPage() {
 
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
-      <div className="relative hidden overflow-hidden bg-[#0f3d3e] lg:flex lg:flex-col lg:items-center lg:justify-center">
+      <div className="christmas-login-brand relative hidden overflow-hidden bg-[#14532d] lg:flex lg:flex-col lg:items-center lg:justify-center">
+        <ChristmasGarland />
         {/* Soft glows echo the plaque's own magenta/teal, positioned as if
             radiating from the mark itself rather than dropped in the corners. */}
-        <div className="pointer-events-none absolute top-1/2 left-1/2 size-[26rem] -translate-x-[62%] -translate-y-[70%] rounded-full bg-[#9d2a6a]/20 blur-[100px]" />
-        <div className="pointer-events-none absolute top-1/2 left-1/2 size-[26rem] -translate-x-[38%] -translate-y-[30%] rounded-full bg-[#1a6b6d]/30 blur-[100px]" />
 
         <div className="relative flex flex-col items-center px-10 text-center">
           <BrandLogo className="h-40 w-auto drop-shadow-[0_0_18px_rgba(255,255,255,0.2)]" priority />
@@ -92,10 +92,12 @@ export default function LoginPage() {
             <p className="text-xs tracking-[0.28em] uppercase">Front desk</p>
             <span className="h-px w-8 bg-teal-100/30" />
           </div>
+          <p className="mt-10 font-serif text-2xl text-[#fff3c7]">A season of warm welcomes.</p>
+          <p className="mt-3 text-xs tracking-wide text-white/70">Merry Christmas &amp; Happy Holidays!</p>
         </div>
       </div>
 
-      <div className="flex flex-col items-center justify-center bg-[#f6f1ea] px-6 py-12">
+      <div className="flex flex-col items-center justify-center bg-background px-6 py-12">
         <div className="w-full max-w-[400px]">
           <div className="mb-8 flex flex-col items-center text-center lg:mb-10 lg:items-start lg:text-left">
             <BrandMark className="mb-6 lg:hidden" textClassName="text-xl" />
@@ -148,7 +150,7 @@ export default function LoginPage() {
             <Button
               type="submit"
               disabled={submitting}
-              className="mt-1 h-10 w-full bg-[#0f3d3e] text-white hover:bg-[#16494a]"
+              className="mt-1 h-10 w-full"
             >
               {submitting && <Loader2Icon className="size-4 animate-spin" />}
               Sign in

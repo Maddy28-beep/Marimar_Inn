@@ -1,5 +1,7 @@
 "use client";
 
+import { SantaRunner } from "@/components/christmas/christmas-effects";
+
 import { useCallback, useMemo, useState } from "react";
 import { useAuth } from "@/context/auth-context";
 import { useFrontDesk } from "@/context/front-desk-context";
@@ -199,6 +201,7 @@ export function RoomGrid() {
         </Select>
       </div>
 
+      <div className="christmas-grid-wrap">
       <div className="room-grid-surface grid auto-rows-[9rem] grid-cols-2 gap-3 rounded-2xl p-3 sm:grid-cols-3 md:grid-cols-5">
         {(!search.trim() || "store".includes(search.trim().toLowerCase())) &&
           statusFilter === "all" &&
@@ -212,6 +215,8 @@ export function RoomGrid() {
             onSelect={handleRoomClick}
           />
         ))}
+      </div>
+      <SantaRunner />
       </div>
 
       {dialog?.kind === "check-in" && appUser && (

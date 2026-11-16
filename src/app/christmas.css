@@ -1,0 +1,168 @@
+/* Seasonal presentation layer. Remove its layout import and decorative
+   components to restore the original theme. Status utility colors stay intact. */
+[data-season="christmas"] {
+  --background: #fffdf5;
+  --foreground: #23382c;
+  --card: #ffffff;
+  --card-foreground: #23382c;
+  --popover: #fffefa;
+  --popover-foreground: #23382c;
+  --primary: #14532d;
+  --primary-foreground: #ffffff;
+  --secondary: #e8f3ea;
+  --secondary-foreground: #14532d;
+  --muted: #f0f3eb;
+  --muted-foreground: #58695e;
+  --accent: #e8f3ea;
+  --accent-foreground: #14532d;
+  --destructive: #991b1b;
+  --border: #dce5d9;
+  --input: #cbd9cb;
+  --ring: #166534;
+  --chart-1: #166534;
+  --chart-2: #b48b25;
+  --chart-3: #991b1b;
+  --chart-4: #608571;
+  --chart-5: #476a86;
+  --radius: .8rem;
+  --holiday-gold: #d4af37;
+  --holiday-pine: #14532d;
+  --holiday-soft-gold: #f6efd6;
+}
+
+.dark [data-season="christmas"] {
+  --background: #101e17;
+  --foreground: #eef3e9;
+  --card: #192c21;
+  --card-foreground: #eef3e9;
+  --popover: #192c21;
+  --popover-foreground: #eef3e9;
+  --primary: #a8d4b4;
+  --primary-foreground: #102a1a;
+  --secondary: #263d2e;
+  --secondary-foreground: #e0efdf;
+  --muted: #203326;
+  --muted-foreground: #b2c0b3;
+  --accent: #2c4433;
+  --accent-foreground: #f4f5e9;
+  --destructive: #f09393;
+  --border: #37503e;
+  --input: #48604d;
+  --ring: #b6cd9d;
+  --holiday-soft-gold: #34402a;
+}
+
+.christmas-shell { min-height: 100vh; position: relative; isolation: isolate; }
+.christmas-ribbon {
+  position: relative; z-index: 2; display: flex; align-items: center;
+  justify-content: space-between; gap: 12px; min-height: 36px;
+  padding: 5px clamp(12px, 2vw, 24px); background: #14532d; color: #fff8db;
+  border-bottom: 1px solid #d4af3766; font-size: 11px; letter-spacing: .045em;
+}
+.christmas-ribbon-greeting { display: inline-flex; align-items: center; gap: 8px; }
+.christmas-ribbon svg { width: 13px; height: 13px; flex-shrink: 0; color: #e9cd79; }
+.christmas-motion-control { display: inline-flex; align-items: center; gap: 6px; padding: 5px 7px; border-radius: 5px; cursor: pointer; font-size: 10px; letter-spacing: .015em; }
+.christmas-motion-control:hover { background: #ffffff15; }
+.christmas-motion-control:focus-visible { outline: 2px solid #e9cd79; outline-offset: 2px; }
+.christmas-header { position: relative; padding-top: 15px; background: var(--card); box-shadow: 0 3px 16px #14532d06; }
+.christmas-garland { pointer-events: none; position: absolute; top: 0; left: 0; right: 0; height: 10px; display: flex; justify-content: space-around; border-top: 2px solid #315d3e; overflow: visible; }
+.christmas-garland i { width: 5px; height: 8px; border-radius: 2px 2px 5px 5px; background: #d4af37; box-shadow: 0 0 5px #d4af3755; transform: rotate(-12deg); }
+.christmas-garland i:nth-child(3n) { background: #b45445; box-shadow: 0 0 5px #b4544544; transform: rotate(12deg); }
+.christmas-garland i:nth-child(3n + 1) { background: #8aa98d; box-shadow: 0 0 5px #8aa98d55; }
+[data-festive-motion="on"] .christmas-garland i { animation: holiday-glow 5s ease-in-out infinite alternate; }
+.christmas-garland i:nth-child(even) { animation-delay: -2.5s; }
+.christmas-nav-link { transition: background-color .18s, color .18s; border: 1px solid transparent; }
+.christmas-nav-link:hover { color: var(--primary); background: var(--secondary); }
+.christmas-nav-link[aria-current="page"] { color: #fff; background: #166534; border-color: #14532d; box-shadow: inset 0 -2px #d4af37; }
+.christmas-main { position: relative; background: radial-gradient(ellipse at 95% 0, #d4af3709, transparent 45%), var(--background); }
+.christmas-login-brand { background-image: radial-gradient(ellipse at 50% 40%, #2d7046, transparent 65%); }
+.christmas-page-enter { animation: holiday-page-in .22s ease-out both; }
+.christmas-welcome {
+  position: relative; overflow: hidden; border: 1px solid var(--border); border-radius: 16px;
+  background: linear-gradient(110deg, var(--card) 20%, var(--secondary) 100%);
+  padding: clamp(18px, 2.5vw, 28px); box-shadow: 0 6px 24px #14532d04;
+}
+.christmas-welcome::after { content: "✧"; position: absolute; right: 20%; top: -38px; font: 180px/1 Georgia, serif; color: #d4af3719; pointer-events: none; }
+.christmas-eyebrow { display: flex; align-items: center; gap: 7px; font-size: 10px; line-height: 1.5; font-weight: 650; letter-spacing: .19em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 8px; }
+.christmas-eyebrow svg { width: 14px; height: 14px; color: #a17b1f; }
+.christmas-welcome h1 { font-family: Georgia, "Times New Roman", serif; font-size: clamp(26px, 2.6vw, 36px); font-weight: 400; line-height: 1.2; color: var(--primary); }
+.christmas-welcome-copy { max-width: 520px; margin-top: 9px; font-size: 13px; line-height: 1.7; color: var(--muted-foreground); }
+.christmas-welcome-signoff { font-family: Georgia, serif; font-style: italic; color: var(--primary); margin-top: 10px; font-size: 15px; }
+.christmas-welcome-actions { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
+.christmas-welcome-actions > span { color: var(--muted-foreground); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+.christmas-expense-button { min-height: 36px; padding-inline: 14px; box-shadow: 0 3px 0 #d4af37; }
+.christmas-grid-wrap { position: relative; }
+[data-season="christmas"] .room-grid-surface { background: linear-gradient(135deg, var(--secondary), var(--background) 60%, var(--holiday-soft-gold)); border: 1px solid var(--border); padding-bottom: 16px; }
+.christmas-room-card { isolation: isolate; box-shadow: 0 2px 6px #23382c08, inset 0 0 0 1px #d4af3740; backdrop-filter: none; background-image: linear-gradient(135deg, #ffffff80, transparent 70%); }
+.christmas-room-card:hover { box-shadow: 0 5px 12px #23382c15, 0 0 0 1px #d4af3755; }
+/* A gift-wrap edge and pine/gift illustration add Christmas character without
+   adding DOM nodes, animation layers, or changing any status background. */
+.christmas-room-card::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; z-index: 2; background: repeating-linear-gradient(110deg, #14532d 0 9px, #fffdf5 9px 13px, #b48b25 13px 17px, #fffdf5 17px 21px, #991b1b 21px 30px, #fffdf5 30px 34px); pointer-events: none; }
+.christmas-room-card::after { content: ""; position: absolute; right: 3px; bottom: 5px; width: 66px; height: 54px; z-index: -1; background: url("/christmas/card-trim.svg") center / contain no-repeat; opacity: .8; pointer-events: none; }
+.christmas-room-card > div { position: relative; z-index: 0; }
+.christmas-room-card > div > div:first-child { box-shadow: inset 0 4px 0 #fffdf540; }
+.dark .christmas-room-card::after { opacity: .65; }
+@media (max-width: 640px) {
+  .christmas-room-card::after { width: 49px; height: 40px; opacity: .65; }
+}
+
+/* Shared primitives cover every management screen and portal-rendered dialog. */
+[data-season="christmas"] [data-slot="card"] { box-shadow: 0 3px 12px #14532d05; }
+[data-season="christmas"] :is([data-slot="dialog-content"], [data-slot="sheet-content"]) { border: 1px solid var(--border); border-top: 3px solid var(--holiday-gold); box-shadow: 0 16px 50px #102d1a26; }
+[data-season="christmas"] :is([data-slot="dialog-title"], [data-slot="card-title"], [data-slot="sheet-title"]) { color: var(--primary); }
+[data-season="christmas"] :is([data-slot="select-content"], [data-slot="popover-content"]) { border: 1px solid var(--border); box-shadow: 0 8px 24px #14532d12; }
+[data-season="christmas"] :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"]) { background-color: var(--card); transition: border-color .15s, box-shadow .15s; }
+[data-season="christmas"] :is(input, textarea, button, a):focus-visible { outline-offset: 3px; }
+[data-season="christmas"] .christmas-main table thead { background: var(--secondary); color: var(--secondary-foreground); }
+[data-season="christmas"] .christmas-main table th { font-size: 11px; letter-spacing: .025em; }
+[data-season="christmas"] .christmas-main table tbody tr:nth-child(even) { background-color: color-mix(in srgb, var(--secondary) 28%, transparent); }
+[data-season="christmas"] .christmas-main table tbody tr:hover { background-color: var(--secondary); }
+[data-season="christmas"] [data-slot="tabs-trigger"][data-active] { box-shadow: inset 0 -2px var(--holiday-gold); color: var(--primary); }
+[data-season="christmas"] [data-slot="skeleton"] { background-color: var(--secondary); }
+
+/* Seven tiny flakes, transform/opacity only. Never a full-screen composited layer. */
+.christmas-snow { pointer-events: none; position: fixed; inset: 0; z-index: 1; overflow: hidden; }
+.christmas-snow i { position: absolute; top: -20px; font-size: 10px; font-style: normal; color: #6f9177; opacity: 0; }
+[data-festive-motion="on"] .christmas-snow i { animation: holiday-snow linear infinite; }
+[data-festive-motion="off"] .christmas-snow { display: none; }
+.santa-track { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 5; border-radius: 16px;  }
+.santa-visit { position: absolute; bottom: 2px; left: 0; width: 100%; animation: santa-cross 18s linear both; }
+.santa-figure { width: 180px; }
+.santa-reverse { animation-name: santa-cross-reverse; }
+.santa-character { width: 104px; margin-inline: auto; position: relative; }
+.santa-reverse .santa-character { transform: scaleX(-1); }
+.santa-message { display: block; width: max-content; max-width: 175px; margin: 0 auto -5px; padding: 6px 9px; background: #fffdf5; color: #14532d; border: 1px solid #d4af3780; box-shadow: 0 3px 8px #14532d15; border-radius: 10px 10px 10px 2px; font-size: 10px; line-height: 1.3; text-align: center; }
+.santa-trail { position: absolute; left: -24px; top: 55px; color: #b28a28; font-size: 15px; animation: santa-sparkle 1.4s ease-in-out infinite alternate; }
+.santa-leg { transform-box: view-box; transform-origin: 64px 84px; animation: santa-stride .48s ease-in-out infinite alternate; }
+.santa-leg-back { animation-delay: -.48s; }
+.santa-wave { transform-origin: 77px 57px; animation: santa-wave 2s ease-in-out infinite; }
+.santa-body { animation: santa-bounce .48s ease-in-out infinite alternate; }
+@keyframes holiday-glow { from { opacity: .6; } to { opacity: 1; } }
+@keyframes holiday-page-in { from { opacity: .75; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@keyframes holiday-snow { 0% { transform: translate3d(0, -20px, 0); opacity: 0; } 10% { opacity: .2; } 85% { opacity: .2; } 100% { transform: translate3d(25px, 95vh, 0); opacity: 0; } }
+@keyframes santa-cross { 0% { transform: translateX(-185px); opacity: 0; } 6% { opacity: 1; } 44%, 54% { transform: translateX(calc(47% - 90px)); opacity: 1; } 94% { opacity: 1; } 100% { transform: translateX(calc(100% + 5px)); opacity: 0; } }
+@keyframes santa-cross-reverse { 0% { transform: translateX(calc(100% + 5px)); opacity: 0; } 6% { opacity: 1; } 44%, 54% { transform: translateX(calc(53% - 90px)); opacity: 1; } 94% { opacity: 1; } 100% { transform: translateX(-185px); opacity: 0; } }
+@keyframes santa-stride { from { transform: rotate(-23deg); } to { transform: rotate(23deg); } }
+@keyframes santa-bounce { from { transform: translateY(0); } to { transform: translateY(-2px); } }
+@keyframes santa-wave { 0%, 65%, 100% { transform: rotate(0); } 75%, 90% { transform: rotate(-22deg); } 82% { transform: rotate(8deg); } }
+@keyframes santa-sparkle { from { opacity: .2; transform: translateX(0); } to { opacity: .85; transform: translateX(-5px); } }
+@media (max-width: 640px) {
+  .christmas-ribbon { gap: 4px; font-size: 9px; letter-spacing: 0; }
+  .christmas-ribbon-greeting { gap: 4px; }
+  .christmas-motion-control { font-size: 9px; gap: 4px; padding-inline: 3px; }
+  .christmas-welcome-actions { align-items: flex-start; }
+  .christmas-welcome-actions > span { display: none; }
+  .christmas-snow i:nth-child(even) { display: none; }
+  .santa-character { width: 85px; }
+  .santa-character svg { width: 85px; height: 78px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .santa-track, .christmas-snow { display: none !important; }
+  .christmas-shell *, .christmas-shell *::before, .christmas-shell *::after { animation: none !important; transition-duration: 0s !important; }
+}
+[data-festive-motion="off"] :is(.christmas-page-enter, .animate-bed-sway, .animate-broom-sweep, .animate-wrench-turn) { animation: none; }
+@media print {
+  .christmas-ribbon, .christmas-garland, .christmas-snow, .santa-track { display: none !important; }
+  .christmas-main table :is(th, td) { background: white; color: black; }
+}
+

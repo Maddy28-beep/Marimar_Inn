@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="88" height="72" viewBox="0 0 88 72" fill="none">
+  <!-- Static, shared decoration: one cached asset for every room card. -->
+  <path d="M14 65C35 64 55 58 73 41" stroke="#9C7C2E" stroke-width="1.4" stroke-linecap="round"/>
+  <g stroke="#356744" stroke-width="2.2" stroke-linecap="round">
+    <path d="M25 63L20 55M25 63L17 66M34 61L28 50M34 61L24 66M43 58L37 46M43 58L32 65M52 54L47 42M52 54L41 62M61 49L59 38M61 49L50 58"/>
+  </g>
+  <path d="M66 26C57 19 58 12 64 13C69 14 70 21 70 26C74 16 82 15 82 21C82 27 72 28 66 26Z" fill="#991B1B"/>
+  <path d="M69 26L63 34L70 32L73 35L74 27" fill="#B73630"/>
+  <rect x="59" y="36" width="24" height="22" rx="2" fill="#B73630"/>
+  <rect x="57" y="32" width="28" height="7" rx="2" fill="#991B1B"/>
+  <path d="M70 32H74V58H70Z" fill="#E2BE58"/>
+  <circle cx="53" cy="56" r="2.8" fill="#991B1B"/>
+  <circle cx="58" cy="59" r="2.3" fill="#B73630"/>
+  <path d="M41 11V23M35 17H47M37 13L45 21M45 13L37 21" stroke="#AC882B" stroke-width="1.2" stroke-linecap="round"/>
+  <path d="M17 31L18.5 36.5L24 38L18.5 39.5L17 45L15.5 39.5L10 38L15.5 36.5Z" fill="#B3933F"/>
+  <circle cx="51" cy="30" r="1.4" fill="#B3933F"/>
+</svg>

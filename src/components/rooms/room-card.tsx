@@ -21,8 +21,8 @@ import { BedDoubleIcon, BroomIcon, WrenchIcon } from "lucide-react";
 //     guest / countdown / balance / tap hint
 //   - footboard: the progress bar along the very bottom edge
 //
-// Glassmorphism shell kept from before (backdrop-blur + soft inset ring +
-// hover lift) so the bed still reads as one translucent object.
+// Static seasonal gradients replace backdrop blur to keep older tablets
+// responsive. The original status colors and compact bed layout stay intact.
 //
 // The <button> is display:block and CARD_INNER does the flex-col: WebKit
 // (iPhone) doesn't lay out a flex <button>'s children like Blink does — it
@@ -30,7 +30,7 @@ import { BedDoubleIcon, BroomIcon, WrenchIcon } from "lucide-react";
 // iPhone. An explicit w-full on a real <div> child sidesteps that.
 const CARD_INNER = "flex h-full w-full flex-col";
 const CARD_SHELL =
-  "relative block h-36 w-full overflow-hidden rounded-2xl border text-left shadow-lg shadow-black/5 backdrop-blur-md backdrop-saturate-150 ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl dark:shadow-black/20 dark:ring-white/10";
+  "christmas-room-card relative block h-36 w-full overflow-hidden rounded-2xl border text-left ring-1 ring-inset ring-white/25 transition-all duration-200 hover:-translate-y-0.5 dark:ring-white/10";
 
 const PILLOW =
   "flex h-6 flex-1 items-center justify-center gap-1 rounded-xl bg-white/85 shadow-sm ring-1 ring-black/5 dark:bg-white/15 dark:ring-white/10";

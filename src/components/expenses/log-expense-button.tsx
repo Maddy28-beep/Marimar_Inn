@@ -17,7 +17,7 @@ export function LogExpenseButton() {
 
   return (
     <>
-      <Button onClick={() => setOpen(true)}>
+      <Button className="christmas-expense-button" onClick={() => setOpen(true)}>
         <WalletIcon className="size-4" />
         Log expense
       </Button>

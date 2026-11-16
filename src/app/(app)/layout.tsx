@@ -43,6 +43,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
+import { ChristmasEffects, ChristmasGarland } from "@/components/christmas/christmas-effects";
 import { cn } from "@/lib/utils";
 
 function HeaderClock({ className }: { className?: string }) {
@@ -215,8 +216,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
   });
 
   return (
+    <ChristmasEffects>
     <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between gap-2 border-b bg-card px-3 py-2 sm:px-4 xl:px-6 xl:py-3">
+      <header className="christmas-header flex flex-wrap items-center justify-between gap-2 border-b bg-card px-3 py-2 sm:px-4 xl:px-6 xl:py-3">
+        <ChristmasGarland />
         {/* overflow-hidden is a deliberate safety net: nav links use
             whitespace-nowrap and don't wrap, so if this row is ever too
             narrow for its content (a new header item added, a tighter
@@ -236,8 +239,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={link.href}
                 href={link.href}
+                aria-current={pathname === link.href ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-sm font-medium text-muted-foreground hover:text-foreground",
+                  "christmas-nav-link flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-sm font-medium text-muted-foreground hover:text-foreground",
                   pathname === link.href && "bg-muted text-foreground"
                 )}
               >
@@ -272,7 +276,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1 sm:gap-2 xl:hidden">
+        <div className="flex w-full max-w-full shrink-0 flex-wrap items-center justify-between gap-1 sm:w-auto sm:justify-start sm:gap-2 xl:hidden">
           <BranchSwitcher />
           <OnlineStatus />
           <PrinterStatus />
@@ -330,8 +334,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
                 key={link.href}
                 href={link.href}
                 onClick={() => setMenuOpen(false)}
+                aria-current={pathname === link.href ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground",
+                  "christmas-nav-link flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground",
                   pathname === link.href && "bg-muted text-foreground"
                 )}
               >
@@ -349,8 +354,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </SheetContent>
       </Sheet>
 
-      <main className="flex-1 bg-muted/20 p-4 sm:p-6">{children}</main>
+      <main className="christmas-main flex-1 p-4 sm:p-6"><div className="christmas-page-enter">{children}</div></main>
     </div>
+    </ChristmasEffects>
   );
 }
 
