@@ -11,6 +11,7 @@ import {
 import { bookingExtras, isAmenityItem } from "@/lib/booking-extras";
 import { DEFAULT_BRANCH_ID, branchName, getActiveBranchId } from "@/lib/branches";
 import { paymentPortionLines } from "@/lib/bookings";
+import { RECEIPT_LOGO_BASE64, RECEIPT_LOGO_HEIGHT, RECEIPT_LOGO_WIDTH } from "@/lib/receipt-logo";
 
 function receiptTitle(): string {
   const id = getActiveBranchId();
@@ -149,6 +150,31 @@ class EscPosBuilder {
     this.push(0x1b, 0x4d, 0x00); // Font A
     this.push(0x1b, 0x45, 0x01); // bold
     return this;
+  }
+
+  /**
+   * Prints the Marimar lotus as a raster image (GS v 0). Centered, with a
+   * blank line after. `force` ignores the on/off setting (printer test).
+   */
+  logo(force = false) {
+    if (!force && !isLogoEnabled()) return this;
+    let binary: string;
+    try {
+      binary = atob(RECEIPT_LOGO_BASE64);
+    } catch {
+      return this;
+    }
+    const bytesPerRow = RECEIPT_LOGO_WIDTH / 8;
+    this.push(0x1b, 0x61, 0x01); // center
+    this.push(
+      0x1d, 0x76, 0x30, 0x00,
+      bytesPerRow & 0xff, (bytesPerRow >> 8) & 0xff,
+      RECEIPT_LOGO_HEIGHT & 0xff, (RECEIPT_LOGO_HEIGHT >> 8) & 0xff
+    );
+    for (let i = 0; i < binary.length; i++) this.chunks.push(binary.charCodeAt(i));
+    this.push(0x1b, 0x61, this.alignment === "center" ? 1 : this.alignment === "right" ? 2 : 0);
+    this.preview.push({ align: "center", text: "" });
+    return this.push(0x0d, 0x0a);
   }
 
   align(value: "left" | "center" | "right") {
@@ -445,6 +471,27 @@ export function isDrawerEnabled(): boolean {
     return localStorage.getItem(DRAWER_KEY) !== "0";
   } catch {
     return true;
+  }
+}
+
+const LOGO_KEY = "marimar-inn:receipt-logo-enabled";
+
+/** Logo on guest receipts — on by default; per device, like the drawer toggle. */
+export function isLogoEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(LOGO_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function setLogoEnabled(enabled: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(LOGO_KEY, enabled ? "1" : "0");
+  } catch {
+    // Non-fatal.
   }
 }
 
@@ -941,6 +988,7 @@ function guestReceiptEncoder(booking: Booking, room: Room, extras: ReceiptExtras
   encoder
     .initialize()
     .align("center")
+    .logo()
     .line(receiptTitle())
     .line("This is not an official receipt")
     .line(`Ref: ${referenceNumberFor(booking.bookingId)}`)
@@ -1052,6 +1100,7 @@ function storeSaleReceiptEncoder(sale: StoreSale, extras: StoreSaleReceiptExtras
   encoder
     .initialize()
     .align("center")
+    .logo()
     .line(receiptTitle())
     .line("This is not an official receipt")
     .line("Store sale")
@@ -1135,6 +1184,7 @@ function extensionReceiptEncoder(
   encoder
     .initialize()
     .align("center")
+    .logo()
     .line(receiptTitle())
     .line("Extension Receipt")
     .line(`Ref: ${referenceNumberFor(booking.bookingId)}`)
@@ -1236,6 +1286,7 @@ function orderReceiptEncoder(booking: Booking, room: Room, extras: OrderReceiptE
   encoder
     .initialize()
     .align("center")
+    .logo()
     .line(receiptTitle())
     .line("Order Receipt")
     .line(`Ref: ${referenceNumberFor(booking.bookingId)}`)
@@ -1339,6 +1390,7 @@ function balancePaymentReceiptEncoder(booking: Booking, room: Room, extras: Bala
   encoder
     .initialize()
     .align("center")
+    .logo()
     .line(receiptTitle())
     .line("Balance Payment")
     .line(`Ref: ${referenceNumberFor(booking.bookingId)}`)
@@ -1672,6 +1724,7 @@ function testPageEncoder() {
   encoder
     .initialize()
     .align("center")
+    .logo(true)
     .line(receiptTitle())
     .line("Printer test")
     .newline()

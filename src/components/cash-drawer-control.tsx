@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/context/auth-context";
-import { isDrawerEnabled, setDrawerEnabled } from "@/lib/receipt-printer";
+import { isDrawerEnabled, isLogoEnabled, setDrawerEnabled, setLogoEnabled } from "@/lib/receipt-printer";
 import { normalizePin, setDrawerPin, subscribeToDrawerPinConfigured } from "@/lib/settings";
 import { OpenDrawerForm } from "@/components/cash-drawer-open";
 import { isOwnerLikeRole } from "@/lib/roles";
@@ -20,6 +20,7 @@ export function CashDrawerControl() {
   const [newPin, setNewPin] = useState("");
   const [savingPin, setSavingPin] = useState(false);
   const [openOnCash, setOpenOnCash] = useState(() => isDrawerEnabled());
+  const [logoOn, setLogoOn] = useState(() => isLogoEnabled());
 
   useEffect(() => subscribeToDrawerPinConfigured(setConfigured), []);
 
@@ -31,6 +32,17 @@ export function CashDrawerControl() {
       next
         ? "On cash pay: the drawer will open when a guest pays cash."
         : "On cash pay is off. Use Open drawer (with PIN) when you need it."
+    );
+  }
+
+  function handleLogoToggle() {
+    const next = !logoOn;
+    setLogoEnabled(next);
+    setLogoOn(next);
+    toast.success(
+      next
+        ? "Logo will print at the top of receipts on this device."
+        : "Logo is off — receipts print as text only on this device."
     );
   }
 
@@ -85,6 +97,25 @@ export function CashDrawerControl() {
               onClick={handleToggle}
             >
               {openOnCash ? "On" : "Off"}
+            </Button>
+          </div>
+
+          <div className="flex items-start justify-between gap-3 border-t pt-3">
+            <div className="min-w-0">
+              <span className="text-sm font-medium">Logo on receipts</span>
+              <p className="text-xs text-muted-foreground">
+                {logoOn
+                  ? "Prints the logo at the top of guest receipts. Turn off if this printer prints garbled dots."
+                  : "Receipts print as text only on this device."}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant={logoOn ? "default" : "outline"}
+              className="shrink-0"
+              onClick={handleLogoToggle}
+            >
+              {logoOn ? "On" : "Off"}
             </Button>
           </div>
 
