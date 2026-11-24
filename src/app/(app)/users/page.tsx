@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { UserFormDialog } from "@/components/users/user-form-dialog";
 import { roleLabel } from "@/lib/roles";
 import { cn } from "@/lib/utils";
+import { describeFirebaseError } from "@/lib/errors";
 import {
   KeyRoundIcon,
   Loader2Icon,
@@ -47,8 +48,8 @@ function ManageStaffContent() {
     try {
       await resetStaffPassword(user.email);
       toast.success(`Password reset email sent to ${user.email}.`);
-    } catch {
-      toast.error("Couldn't send the reset email — please try again.");
+    } catch (error) {
+      toast.error(describeFirebaseError(error, "Couldn't send the reset email"));
     } finally {
       setBusyKey((current) => (current === key ? null : current));
     }
@@ -72,11 +73,7 @@ function ManageStaffContent() {
       await setStaffActive(user.uid, !isActive);
       toast.success(isActive ? `${user.displayName} deactivated.` : `${user.displayName} reactivated.`);
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? `Couldn't update this account: ${error.message}`
-          : "Couldn't update this account — please try again."
-      );
+      toast.error(describeFirebaseError(error, "Couldn't update this account"));
     } finally {
       setBusyKey((current) => (current === key ? null : current));
     }
@@ -93,8 +90,8 @@ function ManageStaffContent() {
     try {
       await deleteStaffUser(user.uid);
       toast.success(`${user.displayName} removed.`);
-    } catch {
-      toast.error("Couldn't delete the account — please try again.");
+    } catch (error) {
+      toast.error(describeFirebaseError(error, "Couldn't delete the account"));
     } finally {
       setBusyKey((current) => (current === key ? null : current));
     }

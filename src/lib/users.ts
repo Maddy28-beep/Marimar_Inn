@@ -81,13 +81,22 @@ export async function createStaffUser(input: CreateStaffInput) {
   const firestore = requireDb();
   const uid = await createUserOnSecondaryApp(input.email, input.password);
 
-  await setDoc(doc(firestore, "users", uid), {
-    role: input.role,
-    displayName: input.displayName,
-    email: input.email,
-    createdAt: serverTimestamp(),
-    ...(input.branchIds ? { branchIds: input.branchIds } : {}),
-  });
+  try {
+    await setDoc(doc(firestore, "users", uid), {
+      role: input.role,
+      displayName: input.displayName,
+      email: input.email,
+      createdAt: serverTimestamp(),
+      ...(input.branchIds ? { branchIds: input.branchIds } : {}),
+    });
+  } catch (error) {
+    // The sign-in already exists at this point, so simply retrying with the
+    // same email would fail with "already in use" and hide the real cause.
+    const original = (error as { code?: string })?.code;
+    throw new Error(
+      `The sign-in was created but the staff record couldn't be saved${original ? ` (${original})` : ""}. Don't retry with the same email — tell the owner/developer.`
+    );
+  }
 
   return uid;
 }

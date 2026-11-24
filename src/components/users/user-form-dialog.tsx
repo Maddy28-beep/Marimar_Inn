@@ -25,6 +25,7 @@ import type { UserRole } from "@/lib/types";
 import { canManageStaff, roleLabel, STAFF_ROLE_OPTIONS } from "@/lib/roles";
 import { useAuth } from "@/context/auth-context";
 import { VISIBLE_BRANCHES, DEFAULT_BRANCH_ID } from "@/lib/branches";
+import { describeFirebaseError } from "@/lib/errors";
 import { Loader2Icon } from "lucide-react";
 
 interface UserFormDialogProps {
@@ -71,8 +72,8 @@ export function UserFormDialog({ user, onClose }: UserFormDialogProps) {
         await updateStaffUser(user.uid, { displayName: displayName.trim(), role, branchIds });
         toast.success(`${displayName.trim()} updated.`);
         onClose();
-      } catch {
-        toast.error("Couldn't update the account — please try again.");
+      } catch (error) {
+        toast.error(describeFirebaseError(error, "Couldn't update the account"));
       } finally {
         setSubmitting(false);
       }
@@ -100,12 +101,7 @@ export function UserFormDialog({ user, onClose }: UserFormDialogProps) {
       toast.success(`${displayName} added as ${roleLabel(role)}.`);
       onClose();
     } catch (error) {
-      const code = (error as { code?: string })?.code;
-      if (code === "auth/email-already-in-use") {
-        toast.error("An account with that email already exists.");
-      } else {
-        toast.error("Couldn't create the account — please try again.");
-      }
+      toast.error(describeFirebaseError(error, "Couldn't create the account"));
     } finally {
       setSubmitting(false);
     }
