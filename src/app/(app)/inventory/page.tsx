@@ -3,7 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ProtectedRoute } from "@/components/auth/protected-route";
-import { subscribeToInventory, subscribeToCategories, deleteItem, restockItem } from "@/lib/inventory";
+import {
+  subscribeToInventory,
+  subscribeToCategories,
+  deleteItem,
+  restockItem,
+  planCatalogCopy,
+  applyCatalogCopy,
+} from "@/lib/inventory";
+import { DEFAULT_BRANCH_ID, branchName, getActiveBranchId } from "@/lib/branches";
 import { createStockRequest } from "@/lib/stock-requests";
 import type { InventoryCategory, InventoryItem } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -13,8 +21,9 @@ import { ItemFormDialog } from "@/components/inventory/item-form-dialog";
 import { CategoryManagerDialog } from "@/components/inventory/category-manager-dialog";
 import { useAuth } from "@/context/auth-context";
 import { isHiddenSuperadminRole, isOwnerLikeRole } from "@/lib/roles";
+import { describeFirebaseError } from "@/lib/errors";
 import { useOnlineStatus, syncNote } from "@/hooks/use-online-status";
-import { Loader2Icon, PencilIcon, PlusIcon, SearchIcon, SendIcon, TagIcon, Trash2Icon } from "lucide-react";
+import { CopyIcon, Loader2Icon, PencilIcon, PlusIcon, SearchIcon, SendIcon, TagIcon, Trash2Icon } from "lucide-react";
 
 type DialogState = "create" | { item: InventoryItem } | null;
 
@@ -121,6 +130,8 @@ function ManageInventoryContent() {
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [copying, setCopying] = useState(false);
+  const showCopy = canManage && getActiveBranchId() !== DEFAULT_BRANCH_ID;
 
   useEffect(() => subscribeToInventory(setItems), []);
   useEffect(() => subscribeToCategories(setCategories), []);
@@ -145,6 +156,41 @@ function ManageInventoryContent() {
         item.name.toLowerCase().includes(trimmed) || item.category.toLowerCase().includes(trimmed)
     );
   }, [sortedItems, search]);
+
+  async function handleCopyFromMain() {
+    if (!appUser) return;
+    setCopying(true);
+    try {
+      const plan = await planCatalogCopy(DEFAULT_BRANCH_ID);
+      if (plan.items.length === 0) {
+        toast.info(
+          plan.skippedExisting > 0
+            ? `Nothing new to copy — all ${plan.skippedExisting} items from ${branchName(DEFAULT_BRANCH_ID)} are already here.`
+            : `${branchName(DEFAULT_BRANCH_ID)} has no items to copy.`
+        );
+        return;
+      }
+      const skipNote =
+        plan.skippedExisting > 0 ? ` (${plan.skippedExisting} already here will be skipped)` : "";
+      if (
+        !window.confirm(
+          `Copy ${plan.items.length} items from ${branchName(DEFAULT_BRANCH_ID)}${skipNote}? Prices and minimum stock are copied; every quantity starts at 0.`
+        )
+      ) {
+        return;
+      }
+      await applyCatalogCopy(plan, {
+        uid: appUser.uid,
+        name: appUser.displayName ?? appUser.email ?? "Staff",
+        role: appUser.role,
+      });
+      toast.success(`Copied ${plan.items.length} items. Now set each item's stock.`);
+    } catch (error) {
+      toast.error(describeFirebaseError(error, "Couldn't copy the items"));
+    } finally {
+      setCopying(false);
+    }
+  }
 
   async function handleDelete(item: InventoryItem) {
     if (!window.confirm(`Delete ${item.name}? This can't be undone.`)) return;
@@ -172,6 +218,12 @@ function ManageInventoryContent() {
         </div>
         {canManage && (
           <div className="flex gap-2">
+            {showCopy && (
+              <Button variant="outline" onClick={() => void handleCopyFromMain()} disabled={copying}>
+                {copying ? <Loader2Icon className="size-4 animate-spin" /> : <CopyIcon className="size-4" />}
+                Copy items from {branchName(DEFAULT_BRANCH_ID)}
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setCategoryManagerOpen(true)}>
               <TagIcon className="size-4" />
               Manage categories

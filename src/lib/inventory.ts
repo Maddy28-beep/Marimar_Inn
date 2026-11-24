@@ -2,6 +2,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   increment,
   onSnapshot,
   orderBy,
@@ -9,6 +10,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { bCollection, bDoc } from "@/lib/branches";
@@ -153,6 +155,88 @@ export async function createCategory(name: string) {
   const ref = bDoc(firestore, "inventoryCategories", trimmed);
   await setDoc(ref, { categoryId: trimmed, name: trimmed, createdAt: serverTimestamp() });
   return trimmed;
+}
+
+export interface CatalogCopyPlan {
+  items: InventoryItem[];
+  categoryNames: string[];
+  skippedExisting: number;
+}
+
+const nameKey = (name: string) => name.trim().toLowerCase();
+
+/**
+ * What copying another branch's store list into the ACTIVE branch would add.
+ * Read-only. Items whose name already exists here are skipped, so the copy
+ * can be run again without creating duplicates.
+ */
+export async function planCatalogCopy(sourceBranchId: string): Promise<CatalogCopyPlan> {
+  const firestore = requireDb();
+  const [sourceItems, sourceCats, hereItems, hereCats] = await Promise.all([
+    getDocs(bCollection(firestore, "inventory", sourceBranchId)),
+    getDocs(bCollection(firestore, "inventoryCategories", sourceBranchId)),
+    getDocs(bCollection(firestore, "inventory")),
+    getDocs(bCollection(firestore, "inventoryCategories")),
+  ]);
+  const haveNames = new Set(hereItems.docs.map((d) => nameKey(String(d.data().name ?? ""))));
+  const haveCategories = new Set(hereCats.docs.map((d) => d.id));
+  const items: InventoryItem[] = [];
+  let skippedExisting = 0;
+  for (const d of sourceItems.docs) {
+    const item = d.data() as InventoryItem;
+    if (haveNames.has(nameKey(item.name))) skippedExisting++;
+    else items.push(item);
+  }
+  const wanted = new Set<string>([
+    ...sourceCats.docs.map((d) => String(d.data().name ?? d.id)),
+    ...items.map((i) => i.category),
+  ]);
+  const categoryNames = [...wanted].filter((n) => n && !haveCategories.has(n.trim().replace(/\//g, "-")));
+  return { items, categoryNames, skippedExisting };
+}
+
+/**
+ * Copies the planned items into the active branch with every quantity at 0
+ * (each branch counts its own stock). Nothing in the source branch changes.
+ */
+export async function applyCatalogCopy(plan: CatalogCopyPlan, actor: ItemActor) {
+  const firestore = requireDb();
+  const writes: Array<(batch: ReturnType<typeof writeBatch>) => void> = [];
+  for (const name of plan.categoryNames) {
+    const id = name.trim().replace(/\//g, "-");
+    writes.push((batch) =>
+      batch.set(bDoc(firestore, "inventoryCategories", id), {
+        categoryId: id,
+        name: id,
+        createdAt: serverTimestamp(),
+      })
+    );
+  }
+  for (const src of plan.items) {
+    const ref = doc(bCollection(firestore, "inventory"));
+    writes.push((batch) =>
+      batch.set(ref, {
+        itemId: ref.id,
+        name: src.name,
+        category: src.category,
+        sellingPrice: src.sellingPrice,
+        quantity: 0,
+        minStockLevel: src.minStockLevel ?? 0,
+        lastUpdated: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        createdBy: actor.uid,
+        createdByName: actor.name,
+        ...(actor.role ? { createdByRole: actor.role } : {}),
+        ...(src.unlimited ? { unlimited: true } : {}),
+        ...(src.piecesPerSale && src.piecesPerSale > 1 ? { piecesPerSale: src.piecesPerSale } : {}),
+      })
+    );
+  }
+  for (let i = 0; i < writes.length; i += 400) {
+    const batch = writeBatch(firestore);
+    writes.slice(i, i + 400).forEach((w) => w(batch));
+    await batch.commit();
+  }
 }
 
 export async function deleteCategory(categoryId: string) {
