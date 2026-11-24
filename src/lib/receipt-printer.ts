@@ -35,6 +35,8 @@ const SIDE_MARGIN = 3;
 export interface ReceiptPreviewLine {
   align: "left" | "center" | "right";
   text: string;
+  /** Marks the spot where the logo image prints. */
+  logo?: boolean;
 }
 
 interface BleLePrinterProfile {
@@ -173,7 +175,7 @@ class EscPosBuilder {
     );
     for (let i = 0; i < binary.length; i++) this.chunks.push(binary.charCodeAt(i));
     this.push(0x1b, 0x61, this.alignment === "center" ? 1 : this.alignment === "right" ? 2 : 0);
-    this.preview.push({ align: "center", text: "" });
+    this.preview.push({ align: "center", text: "", logo: true });
     return this.push(0x0d, 0x0a);
   }
 

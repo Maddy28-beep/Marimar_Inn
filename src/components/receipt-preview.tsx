@@ -38,20 +38,31 @@ export function ReceiptPreviewStrip({
             fontFamily: 'ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace',
           }}
         >
-          {lines.map((line, index) => (
-            <div
-              key={index}
-              className={
-                line.align === "center"
-                  ? "text-center whitespace-pre"
-                  : line.align === "right"
-                    ? "text-right whitespace-pre"
-                    : "text-left whitespace-pre"
-              }
-            >
-              {line.text || "\u00a0"}
-            </div>
-          ))}
+          {lines.map((line, index) =>
+            line.logo ? (
+              // Grayscale stand-in for the 1-bit logo the thermal printer prints.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={index}
+                src="/logo/icon.png"
+                alt=""
+                className="mx-auto mb-1 h-[4.5rem] w-auto grayscale contrast-125"
+              />
+            ) : (
+              <div
+                key={index}
+                className={
+                  line.align === "center"
+                    ? "text-center whitespace-pre"
+                    : line.align === "right"
+                      ? "text-right whitespace-pre"
+                      : "text-left whitespace-pre"
+                }
+              >
+                {line.text || "\u00a0"}
+              </div>
+            )
+          )}
         </div>
       </div>
     </div>
