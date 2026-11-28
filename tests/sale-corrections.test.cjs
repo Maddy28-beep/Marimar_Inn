@@ -29,7 +29,7 @@ require.extensions[".ts"] = (mod, filename) => {
 };
 
 const { correctHistoricalSale } = require("../src/lib/sale-corrections.ts");
-const { planSaleCorrection, canCorrectSale, effectivePaymentEvents, suggestExtensionRemoval } = require("../src/lib/sale-correction-plan.ts");
+const { planSaleCorrection, canCorrectSale, effectivePaymentEvents, suggestExtensionRemoval, suggestVoidPaymentRemoval } = require("../src/lib/sale-correction-plan.ts");
 const { computeDailySalesReport, computeShiftCollectedTotals, computeMonthlyReport } = require("../src/lib/reports.ts");
 const { fetchPaymentEvents, changeBookingPaymentMethod } = require("../src/lib/payment-changes.ts");
 const { setActiveBranchId } = require("../src/lib/branches.ts");
@@ -330,4 +330,27 @@ test("invalid product selections, excessive payment removals and unknown actions
   }
   assert.throws(() => planSaleCorrection(value, payments, extensionInput({ action: "products", productIndexes: [0], removePayment: { cash: 31, gcash: 0, qrph: 0 } })), /cannot exceed/);
   assert.throws(() => planSaleCorrection(value, payments, extensionInput({ action: "unknown" })), /Choose what/);
+});
+
+test("void suggestions remove a mistaken payment automatically, keep unpaid charges at zero and ask for ambiguous methods", () => {
+  const value = booking({ totalFbCharge: 30, totalAmount: 430, amountPaid: 430, splitCashAmount: 430 });
+  assert.deepEqual(suggestVoidPaymentRemoval(value, [], "room", 400), { cash: 400, gcash: 0, qrph: 0 });
+  assert.deepEqual(suggestVoidPaymentRemoval(value, [], "products", 30), { cash: 30, gcash: 0, qrph: 0 });
+  assert.deepEqual(suggestVoidPaymentRemoval(booking({ amountPaid: 0, splitCashAmount: 0 }), [], "room", 400), { cash: 0, gcash: 0, qrph: 0 });
+  assert.equal(suggestVoidPaymentRemoval(booking({ amountPaid: 300, splitCashAmount: 300 }), [], "room", 400), null);
+  assert.equal(suggestVoidPaymentRemoval(booking({ splitCashAmount: 200, splitGcashAmount: 200 }), [], "room", 400), null);
+  const payments = [payment("checkin-1", "checkin", 200, checkIn), payment("extend-1", "extend", 200, extendedAt)];
+  assert.deepEqual(suggestVoidPaymentRemoval(booking(), payments, "extension", 200), { cash: 200, gcash: 0, qrph: 0 });
+  assert.deepEqual(suggestVoidPaymentRemoval(booking(), payments, "extension", 100), { cash: 100, gcash: 0, qrph: 0 });
+  assert.equal(suggestVoidPaymentRemoval(value, [], "products", NaN), null);
+});
+
+test("voiding an unpaid room does not remove payments or create a negative collection", async () => {
+  const value = booking({ amountPaid: 0, splitCashAmount: 0, paymentStatus: "unpaid" });
+  await seed("marimar-1", value, []);
+  await correctHistoricalSale("VQSI-XKQM", extensionInput({ action: "room", removePayment: suggestVoidPaymentRemoval(value, [], "room", 400) }));
+  const current = await readBooking();
+  assert.equal(current.totalAmount, 0); assert.equal(current.amountPaid, 0); assert.equal(current.status, "voided");
+  assert.equal((await readPayments()).length, 0);
+  assert.equal(computeShiftCollectedTotals(await readPayments(), [], [current]).totalCollected, 0);
 });

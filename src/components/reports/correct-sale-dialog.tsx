@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { canCorrectSale, extensionDetails, planSaleCorrection, suggestExtensionRemoval, type SaleCorrectionInput } from "@/lib/sale-correction-plan";
+import { canCorrectSale, extensionDetails, planSaleCorrection, suggestVoidPaymentRemoval, type SaleCorrectionInput } from "@/lib/sale-correction-plan";
 import { correctHistoricalSale, loadSaleCorrection } from "@/lib/sale-corrections";
 import { isAmenityItem } from "@/lib/booking-extras";
 import type { DailySalesRow } from "@/lib/reports";
@@ -33,7 +33,6 @@ export function CorrectSaleDialog({ row, onClose, onDone }: { row: DailySalesRow
   const [remove, setRemove] = useState({ cash: "0", gcash: "0", qrph: "0" });
   const [reason, setReason] = useState("Extension added by mistake.");
   const [editDetails, setEditDetails] = useState(false);
-  const [paymentChoice, setPaymentChoice] = useState<"mistake" | "received" | "">("");
   const [productChoice, setProductChoice] = useState<"not_given" | "given" | "">("");
   const [duplicateReason, setDuplicateReason] = useState("duplicate");
   const [confirmed, setConfirmed] = useState(false);
@@ -53,17 +52,13 @@ export function CorrectSaleDialog({ row, onClose, onDone }: { row: DailySalesRow
   const productsAnswered = (action !== "duplicate" && action !== "products") || stockItems.length === 0 || productChoice !== "";
   const selectedProductCharge = (sale?.booking.items ?? []).reduce((sum, item, index) => sum + (productIndexes.includes(index) ? item.subtotal : 0), 0);
   const reduction = action === "room" ? sale?.booking.totalRoomCharge ?? 0 : action === "products" ? selectedProductCharge : (extension?.amount ?? 0) - (editDetails ? Number(charge) : 0);
-  const paidMethods = METHODS.filter(method => (sale?.booking[method === "cash" ? "splitCashAmount" : method === "gcash" ? "splitGcashAmount" : "splitQrphAmount"] ?? 0) > 0);
-  // Only suggest a category payment when the whole sale was paid in one method.
-  // Otherwise the owner identifies the incorrect amounts instead of guessing.
-  const categorySuggestion = sale && sale.booking.amountPaid === sale.booking.totalAmount && paidMethods.length === 1
-    ? { cash: 0, gcash: 0, qrph: 0, [paidMethods[0]]: reduction } : null;
-  const suggestedRemoval = action === "extension" && sale && extension ? suggestExtensionRemoval(sale.booking, sale.transactions, reduction) : categorySuggestion;
-  const manualPayment = paymentChoice === "mistake" && suggestedRemoval === null;
+  const suggestedRemoval = sale && action ? suggestVoidPaymentRemoval(sale.booking, sale.transactions, action, reduction) : null;
+  const manualPayment = action !== null && action !== "duplicate" && suggestedRemoval === null;
+  const paymentToRemove = suggestedRemoval ?? { cash: Number(remove.cash), gcash: Number(remove.gcash), qrph: Number(remove.qrph) };
   const input: SaleCorrectionInput | null = sale && action ? {
     action, extensionHours: editDetails ? Number(hours) : 0, extensionAmount: editDetails ? Number(charge) : 0,
     productIndexes,
-    removePayment: { cash: Number(remove.cash), gcash: Number(remove.gcash), qrph: Number(remove.qrph) },
+    removePayment: paymentToRemove,
     // Preview financial effects while the owner is still entering the reason.
     reason: reason.trim() || "Preview correction", expectedUpdatedAt: sale.booking.updatedAt.toMillis(),
     expectedCorrectionCount: sale.booking.saleCorrectionCount ?? 0, restoreStock: productChoice === "not_given",
@@ -75,16 +70,10 @@ export function CorrectSaleDialog({ row, onClose, onDone }: { row: DailySalesRow
     catch (cause) { previewError = cause instanceof Error ? cause.message : "Check the corrected values."; }
   }
   const allowed = canCorrectSale(appUser?.role);
-  const readyToReview = action !== null && (action === "duplicate" || paymentChoice !== "");
+  const readyToReview = action !== null && (action !== "products" || productIndexes.length > 0);
   function change() { setConfirmed(false); }
-  function choosePayment(choice: "mistake" | "received") {
-    setPaymentChoice(choice);
-    const split = choice === "mistake" && suggestedRemoval ? suggestedRemoval : { cash: 0, gcash: 0, qrph: 0 };
-    setRemove({ cash: String(split.cash), gcash: String(split.gcash), qrph: String(split.qrph) });
-    change();
-  }
   function chooseAction(next: SaleCorrectionInput["action"], edit = false) {
-    setAction(next); setEditDetails(edit); setPaymentChoice(""); setConfirmed(false);
+    setAction(next); setEditDetails(edit); setConfirmed(false);
     setProductChoice(""); setDuplicateReason("duplicate");
     setProductIndexes([]);
     setHours(String(edit ? extension?.hours ?? 0 : 0)); setCharge(String(edit ? extension?.amount ?? 0 : 0));
@@ -122,9 +111,10 @@ export function CorrectSaleDialog({ row, onClose, onDone }: { row: DailySalesRow
             { value: "duplicate", label: "Everything", help: "Remove the room, extra hours and all products.", disabled: false },
           ] as const).map(option => <Button key={option.value} type="button" variant="outline" aria-pressed={action === option.value} disabled={option.disabled || sale.booking.voidReason === "duplicate"} className={`h-auto justify-start whitespace-normal p-3 text-left ${action === option.value ? "border-primary bg-primary/5" : ""}`} onClick={() => chooseAction(option.value)}><span><strong className="block">{option.label}</strong><span className="mt-1 block text-xs font-normal text-muted-foreground">{option.disabled ? "Nothing to void here." : option.help}</span></span></Button>)}
         </div>
+        {action && <p className="rounded-lg border bg-primary/5 p-3 text-sm"><strong>Added by mistake. The guest did not pay for it.</strong><span className="mt-1 block">We will remove the wrong charge and any matching wrong payment from the report.</span></p>}
         {!action && <p className="text-sm text-muted-foreground">Choose one above. Nothing changes until you save.</p>}
         {action === "room" && <div className="rounded-lg border p-3 text-sm"><p className="font-semibold">Void only the Room {row.roomNumber} booking</p><p className="mt-1">Remove {peso(reduction)} in room charges, including extra hours and extra-person charges. Store products and their charges will stay.</p><p className="mt-1 text-muted-foreground">This is an old booking. The room&apos;s current guest and status stay the same.</p></div>}
-        {action === "products" && <div className="grid gap-2"><p className="text-sm font-semibold">Which products were added by mistake?</p>{sale.booking.items.map((item, index) => !isAmenityItem(item) && item.quantity > 0 && <label key={index} className="flex items-start gap-2 rounded-lg border p-3 text-sm"><input type="checkbox" className="mt-1" checked={productIndexes.includes(index)} onChange={e => { setProductIndexes(current => e.target.checked ? [...current, index] : current.filter(value => value !== index)); setProductChoice(""); setPaymentChoice(""); setRemove({ cash: "0", gcash: "0", qrph: "0" }); change(); }} /><span>{item.quantity} × {item.name} · {peso(item.subtotal)}</span></label>)}<p className="text-xs text-muted-foreground">Only checked products will be removed. Room charges, towels and blankets stay.</p></div>}
+        {action === "products" && <div className="grid gap-2"><p className="text-sm font-semibold">Which products were added by mistake?</p>{sale.booking.items.map((item, index) => !isAmenityItem(item) && item.quantity > 0 && <label key={index} className="flex items-start gap-2 rounded-lg border p-3 text-sm"><input type="checkbox" className="mt-1" checked={productIndexes.includes(index)} onChange={e => { setProductIndexes(current => e.target.checked ? [...current, index] : current.filter(value => value !== index)); setProductChoice(""); setRemove({ cash: "0", gcash: "0", qrph: "0" }); change(); }} /><span>{item.quantity} × {item.name} · {peso(item.subtotal)}</span></label>)}<p className="text-xs text-muted-foreground">Only checked products will be removed. Room charges, towels and blankets stay.</p></div>}
         {action === "extension" && extension && <>
           <div className="rounded-lg border bg-primary/5 p-3 text-sm">
             <p className="font-semibold">{editDetails ? "Change the extension" : "Remove the accidental extension"}</p>
@@ -132,18 +122,13 @@ export function CorrectSaleDialog({ row, onClose, onDone }: { row: DailySalesRow
             <p className="mt-1 text-muted-foreground">The original {sale.booking.originalPackageHours}-hour booking stays. The guest&apos;s actual checkout time stays the same.</p>
           </div>
           {editDetails && <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5"><Label htmlFor="correct-ext-hours">Extra hours that should stay</Label><Input id="correct-ext-hours" type="number" min="0" max={extension.hours} step="0.5" value={hours} onChange={e => { setHours(e.target.value); setPaymentChoice(""); change(); }} /></div>
-            <div className="grid gap-1.5"><Label htmlFor="correct-ext-charge">Extra charge that should stay</Label><Input id="correct-ext-charge" type="number" min="0" max={extension.amount} step="0.01" value={charge} onChange={e => { setCharge(e.target.value); setPaymentChoice(""); change(); }} /></div>
+            <div className="grid gap-1.5"><Label htmlFor="correct-ext-hours">Extra hours that should stay</Label><Input id="correct-ext-hours" type="number" min="0" max={extension.hours} step="0.5" value={hours} onChange={e => { setHours(e.target.value); change(); }} /></div>
+            <div className="grid gap-1.5"><Label htmlFor="correct-ext-charge">Extra charge that should stay</Label><Input id="correct-ext-charge" type="number" min="0" max={extension.amount} step="0.01" value={charge} onChange={e => { setCharge(e.target.value); change(); }} /></div>
           </div>}
         </>}
         {action && action !== "duplicate" && (action !== "products" || productIndexes.length > 0) && <>
-          <div className="grid gap-2">
-            <p className="text-sm font-semibold">{action === "extension" ? "Did the guest actually pay the extra money?" : "Was a payment also entered by mistake?"}</p>
-            <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm ${paymentChoice === "mistake" ? "border-primary bg-primary/5" : ""}`}><input className="mt-1" type="radio" name="extension-money" checked={paymentChoice === "mistake"} onChange={() => choosePayment("mistake")} /><span><strong>{action === "extension" ? "No — it was only entered by mistake." : "Yes, remove the wrong payment too."}</strong><span className="mt-1 block text-xs text-muted-foreground">Remove only money that was never collected.</span></span></label>
-            <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm ${paymentChoice === "received" ? "border-primary bg-primary/5" : ""}`}><input className="mt-1" type="radio" name="extension-money" checked={paymentChoice === "received"} onChange={() => choosePayment("received")} /><span><strong>{action === "extension" ? "Yes — the guest paid it." : "No, keep the payment on record."}</strong><span className="mt-1 block text-xs text-muted-foreground">Keep money that was really collected. No refund is sent.</span></span></label>
-          </div>
-          {paymentChoice === "mistake" && !manualPayment && <p className="text-sm text-primary">{METHODS.some(method => Number(remove[method]) > 0) ? `We will remove ${METHODS.filter(method => Number(remove[method]) > 0).map(method => `${peso(Number(remove[method]))} ${LABELS[method]}`).join(" + ")} from the payment record.` : "No payment needs removing. Only the charge will change."}</p>}
-          {manualPayment && <div className="grid gap-2 rounded-lg border p-3"><p className="text-sm font-medium">Which payment amount was entered by mistake?</p><p className="text-xs text-muted-foreground">The payment history does not identify one clear amount. Enter the incorrect amount below so we do not remove a real payment.</p><div className="grid grid-cols-3 gap-3">{METHODS.map(method => <div key={method} className="grid gap-1.5"><Label htmlFor={`remove-${method}`}>{LABELS[method]}</Label><Input id={`remove-${method}`} type="number" min="0" step="0.01" value={remove[method]} onChange={e => { setRemove(current => ({ ...current, [method]: e.target.value })); change(); }} /></div>)}</div></div>}
+          {!manualPayment && <p className="text-sm text-primary">{METHODS.some(method => paymentToRemove[method] > 0) ? `Wrong payment to remove: ${METHODS.filter(method => paymentToRemove[method] > 0).map(method => `${peso(paymentToRemove[method])} ${LABELS[method]}`).join(" + ")}.` : "No payment was recorded for this. Only the wrong charge will be removed."}</p>}
+          {manualPayment && <div className="grid gap-2 rounded-lg border p-3"><p className="text-sm font-medium">Which payment amount was entered by mistake?</p><p className="text-xs text-muted-foreground">We cannot tell which payment was wrong. Enter only the amount recorded by mistake. Leave 0 if no payment was recorded for this charge.</p><div className="grid grid-cols-3 gap-3">{METHODS.map(method => <div key={method} className="grid gap-1.5"><Label htmlFor={`remove-${method}`}>{LABELS[method]}</Label><Input id={`remove-${method}`} type="number" min="0" step="0.01" value={remove[method]} onChange={e => { setRemove(current => ({ ...current, [method]: e.target.value })); change(); }} /></div>)}</div></div>}
         </>}
         {action === "duplicate" && <>
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
@@ -187,7 +172,7 @@ export function CorrectSaleDialog({ row, onClose, onDone }: { row: DailySalesRow
         {action === "duplicate" && <p className="text-sm font-medium" role="status">{!productsAnswered ? "First, answer the items question above." : !confirmed ? "To continue: tick the box above, then press “Void booking & sale”." : "To save this change, press “Void booking & sale” below."}</p>}
         {action === "extension" && <Button variant="outline" onClick={() => chooseAction("extension", !editDetails)}>{editDetails ? "Remove all extra hours instead" : "Change only some extra hours or their price"}</Button>}
       </fieldset>}
-      <DialogFooter><Button variant="outline" disabled={submitting} onClick={onClose}>Cancel</Button>{action && <Button variant={action === "duplicate" || action === "room" ? "destructive" : "default"} disabled={submitting || !allowed || !preview || !confirmed || !readyToReview || !productsAnswered || (manualPayment && !METHODS.some(method => Number(remove[method]) > 0)) || reason.trim().length < 5} onClick={() => void save()}>{submitting && <Loader2Icon className="size-4 animate-spin" />}{action === "duplicate" ? "Void booking & sale" : action === "room" ? "Void room only" : action === "products" ? "Void checked products" : editDetails ? "Save changes & update sales" : "Remove extension & update sales"}</Button>}</DialogFooter>
+      <DialogFooter><Button variant="outline" disabled={submitting} onClick={onClose}>Cancel</Button>{action && <Button variant={action === "duplicate" || action === "room" ? "destructive" : "default"} disabled={submitting || !allowed || !preview || !confirmed || !readyToReview || !productsAnswered || reason.trim().length < 5} onClick={() => void save()}>{submitting && <Loader2Icon className="size-4 animate-spin" />}{action === "duplicate" ? "Void booking & sale" : action === "room" ? "Void room only" : action === "products" ? "Void checked products" : editDetails ? "Save changes & update sales" : "Remove extension & update sales"}</Button>}</DialogFooter>
     </DialogContent>
   </Dialog>;
 }

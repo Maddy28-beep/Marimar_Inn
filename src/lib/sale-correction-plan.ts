@@ -71,6 +71,20 @@ export function suggestExtensionRemoval(booking: Booking, transactions: Transact
   return { cash: 0, gcash: 0, qrph: 0, [used[0]]: reduction };
 }
 
+/** A void means the selected charge was not paid; reverse only identifiable records. */
+export function suggestVoidPaymentRemoval(booking: Booking, transactions: Transaction[], action: SaleCorrectionInput["action"], reduction: number): PaymentPortions | null {
+  if (!Number.isFinite(reduction) || reduction < 0) return null;
+  if (action === "extension") return suggestExtensionRemoval(booking, transactions, reduction);
+  const split = paymentBreakdown(booking);
+  if (action === "duplicate") return split;
+  if (booking.amountPaid === 0) return { cash: 0, gcash: 0, qrph: 0 };
+  const methods = METHODS.filter(method => split[method] > 0);
+  if (near(booking.amountPaid, booking.totalAmount) && methods.length === 1 && reduction <= booking.amountPaid) {
+    return { cash: 0, gcash: 0, qrph: 0, [methods[0]]: roundMoney(reduction) };
+  }
+  return null;
+}
+
 export function saleSnapshot(booking: Booking): BookingSaleSnapshot {
   const split = paymentBreakdown(booking);
   return {

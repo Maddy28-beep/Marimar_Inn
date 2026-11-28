@@ -144,11 +144,12 @@ has ended. Cashiers and Supervisors cannot make these financial corrections.
    - **Store products only** removes only checked product lines and keeps
      the room booking, extra hours, towels and blankets.
    - **Everything** removes the whole booking and sale.
-4. For a partial void, say whether a payment was also entered by mistake.
-   Keep money that was actually collected. Identifiable extension payments
-   are suggested automatically; room/product amounts are suggested only for
-   fully paid sales using one payment method. Other cases require the owner
-   to enter the incorrect payment amounts. No refund is performed.
+4. Voiding means the charge was added by mistake and the guest did not pay
+   for it. There is no extra paid/unpaid question. The preview automatically
+   removes identifiable mistaken payments; unpaid charges remove no payment.
+   Room/product amounts are identified for fully paid sales using one method.
+   Ambiguous cases ask for the incorrectly recorded payment amounts; enter
+   zero if none were recorded. No refund is performed.
 5. When removing products, answer whether the guest received them. This
    controls stock returns only. Each checked line removes its full quantity.
 6. Check the new totals and reason, tick the confirmation, and press the
