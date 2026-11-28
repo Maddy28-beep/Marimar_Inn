@@ -33,8 +33,10 @@ import { AddExpenseForm } from "@/components/expenses/add-expense-form";
 import { OpenDrawerForm } from "@/components/cash-drawer-open";
 import { exportToExcel, formatReportDate, formatReportMonth } from "@/lib/export";
 import { canApproveVoid, isOwnerLikeRole, visibleStaffName } from "@/lib/roles";
-import { voidBookingAsDuplicate } from "@/lib/bookings";
 import { ChangePaymentMethodDialog } from "@/components/reports/change-payment-method-dialog";
+import { CorrectSaleDialog } from "@/components/reports/correct-sale-dialog";
+import { SaleCorrectionHistoryDialog } from "@/components/reports/sale-correction-history-dialog";
+import { canCorrectSale } from "@/lib/sale-correction-plan";
 import type { DailySalesRow } from "@/lib/reports";
 import {
   deleteShiftExpense,
@@ -150,6 +152,7 @@ const TRANSACTION_TYPE_LABELS: Record<Transaction["type"], string> = {
   payment: "Payment",
   reversal: "Reversal (duplicate)",
   method_change: "Method change",
+  sale_correction: "Sale correction",
 };
 
 // <input type="time"> gives 24h "HH:MM" — display it the way staff write it
@@ -179,7 +182,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
+function DailyReportTab({ rooms, onSaleCorrected }: { rooms: Room[] | null; onSaleCorrected?: () => void }) {
   const printer = useReceiptPrinter();
   const { appUser } = useAuth();
   const [dateValue, setDateValue] = useState(todayInputValue());
@@ -195,6 +198,8 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   const [thermalPreviewOpen, setThermalPreviewOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [changeMethodRow, setChangeMethodRow] = useState<DailySalesRow | null>(null);
+  const [correctSaleRow, setCorrectSaleRow] = useState<DailySalesRow | null>(null);
+  const [correctionHistoryOpen, setCorrectionHistoryOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -255,6 +260,15 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
   }, [dateValue, shift, reloadKey]);
 
   const occupied = rooms?.filter((r) => r.status === "occupied").length ?? 0;
+  function refreshAfterSaleCorrection() {
+    // Do not allow an old report to be printed while the corrected data loads.
+    setLoading(true);
+    setReport(null);
+    setSalesReport(null);
+    setCollected(null);
+    setReloadKey(k => k + 1);
+    onSaleCorrected?.();
+  }
   const totalRooms = rooms?.length ?? 0;
   const reportDate = formatReportDate(dateValue);
   const reportLabel =
@@ -633,30 +647,6 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
     setExpenses(await fetchExpensesInRange(start, end));
   }
 
-  async function handleMarkDuplicate(bookingId: string) {
-    if (!appUser || !canApproveVoid(appUser.role)) return;
-    const row = salesReport?.rows.find((r) => r.bookingId === bookingId);
-    if (
-      !window.confirm(
-        `Remove Room ${row?.roomNumber ?? ""} (ref ${row?.refNumber ?? ""}) as a DUPLICATE / entered by mistake?\n\n` +
-          "This takes its payment and store items fully off the reports and puts the items back in stock. It can't be undone."
-      )
-    ) {
-      return;
-    }
-    try {
-      await voidBookingAsDuplicate(bookingId, {
-        uid: appUser.uid,
-        name: appUser.displayName ?? appUser.email ?? "Staff",
-        role: appUser.role,
-      });
-      toast.success("Removed as a duplicate — reports updated.");
-      setReloadKey((k) => k + 1);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't remove that booking — please try again.");
-    }
-  }
-
   async function handleRemoveExpense(expenseId: string) {
     try {
       await deleteShiftExpense(expenseId);
@@ -723,6 +713,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
         </div>
         <div className="flex w-full flex-col items-stretch gap-1 sm:items-end xl:w-auto">
           <div className="flex flex-wrap gap-2">
+            {canCorrectSale(appUser?.role) && <Button variant="outline" size="lg" onClick={() => setCorrectionHistoryOpen(true)}>Correction history</Button>}
             <Button variant="outline" size="lg" className="font-semibold" onClick={handleExport} disabled={!report}>
               <DownloadIcon className="size-4" />
               Export Excel
@@ -812,7 +803,7 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
               expenses={expenses}
               canRemoveExpenses={isOwnerLike}
               onRemoveExpense={handleRemoveExpense}
-              onMarkDuplicate={canApproveVoid(appUser?.role) ? handleMarkDuplicate : undefined}
+              onCorrectSale={canCorrectSale(appUser?.role) ? setCorrectSaleRow : undefined}
               onChangePaymentMethod={
                 appUser?.role === "cashier" || canApproveVoid(appUser?.role)
                   ? setChangeMethodRow
@@ -828,6 +819,8 @@ function DailyReportTab({ rooms }: { rooms: Room[] | null }) {
               onDone={() => setReloadKey((k) => k + 1)}
             />
           )}
+          {correctSaleRow && <CorrectSaleDialog key={correctSaleRow.bookingId} row={correctSaleRow} onClose={() => setCorrectSaleRow(null)} onDone={refreshAfterSaleCorrection} />}
+          {correctionHistoryOpen && <SaleCorrectionHistoryDialog start={shiftRange(dateValue, shift)[0]} end={shiftRange(dateValue, shift)[1]} onClose={() => setCorrectionHistoryOpen(false)} />}
 
           {salesReport && (
             <Card className="print:hidden">
@@ -1851,6 +1844,7 @@ function ReportsContent() {
   const { appUser } = useAuth();
   const [rooms, setRooms] = useState<Room[] | null>(null);
   const isOwnerLike = isOwnerLikeRole(appUser?.role);
+  const [saleRevision, setSaleRevision] = useState(0);
 
   useEffect(() => subscribeToRooms(setRooms), []);
 
@@ -1887,19 +1881,19 @@ function ReportsContent() {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="daily" className="min-w-0 pt-3">
-            <DailyReportTab rooms={rooms} />
+            <DailyReportTab rooms={rooms} onSaleCorrected={() => setSaleRevision(n => n + 1)} />
           </TabsContent>
           <TabsContent value="range" className="min-w-0 pt-3">
-            <RangeReportTab />
+            <RangeReportTab key={saleRevision} />
           </TabsContent>
           <TabsContent value="monthly" className="min-w-0 pt-3">
-            <MonthlyReportTab rooms={rooms} />
+            <MonthlyReportTab key={saleRevision} rooms={rooms} />
           </TabsContent>
           <TabsContent value="overdue" className="min-w-0 pt-3">
-            <OverdueReportTab />
+            <OverdueReportTab key={saleRevision} />
           </TabsContent>
           <TabsContent value="inventory" className="min-w-0 pt-3">
-            <InventoryReportTab />
+            <InventoryReportTab key={saleRevision} />
           </TabsContent>
         </Tabs>
       ) : (

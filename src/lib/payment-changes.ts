@@ -5,15 +5,17 @@ import {
   getDoc,
   getDocs,
   query,
+  runTransaction,
   serverTimestamp,
   Timestamp,
   where,
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { bCollection, bDoc } from "@/lib/branches";
+import { bCollection, bDoc, getActiveBranchId } from "@/lib/branches";
 import { paymentBreakdown, type PaymentPortions } from "@/lib/bookings";
 import type { Booking, PaymentMethod, StoreSale, Transaction, UserRole } from "@/lib/types";
+import { effectivePaymentEvents } from "@/lib/sale-correction-plan";
 
 function requireDb() {
   if (!db) throw new Error("Firebase isn't configured.");
@@ -46,8 +48,6 @@ export interface PaymentEvent {
   split: PaymentPortions;
   amount: number;
 }
-
-const CORRECTABLE = new Set(["checkin", "extend", "checkout", "order", "payment"]);
 
 /**
  * Cashiers may fix a payment method on the same calendar day it was taken;
@@ -108,38 +108,17 @@ function assertValidNewSplit(current: PaymentPortions, next: NewPaymentSplit) {
 }
 
 /** Every payment taken on a booking, newest last, with its current split. */
-export async function fetchPaymentEvents(bookingId: string): Promise<PaymentEvent[]> {
+export async function fetchPaymentEvents(bookingId: string, branchId = getActiveBranchId()): Promise<PaymentEvent[]> {
   const firestore = requireDb();
   const snap = await getDocs(
-    query(bCollection(firestore, "transactions"), where("bookingId", "==", bookingId))
+    query(bCollection(firestore, "transactions", branchId), where("bookingId", "==", bookingId))
   );
   const all = snap.docs.map(
     (d) => d.data({ serverTimestamps: "estimate" }) as Transaction & { correctsTransactionId?: string }
   );
-  const events: PaymentEvent[] = [];
-  for (const t of all) {
-    if (!CORRECTABLE.has(t.type) || t.amount <= 0) continue;
-    const split: PaymentPortions = {
-      cash: t.cashAmount ?? 0,
-      gcash: t.gcashAmount ?? 0,
-      qrph: t.qrphAmount ?? 0,
-    };
-    for (const c of all) {
-      if (c.type === "method_change" && c.correctsTransactionId === t.transactionId) {
-        split.cash += c.cashAmount ?? 0;
-        split.gcash += c.gcashAmount ?? 0;
-        split.qrph += c.qrphAmount ?? 0;
-      }
-    }
-    events.push({
-      transactionId: t.transactionId,
-      type: t.type,
-      timestamp: t.timestamp?.toDate?.() ?? new Date(),
-      split,
-      amount: sumSplit(split),
-    });
-  }
-  return events.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  return effectivePaymentEvents(all).filter(event => event.amount > 0.004).map(event => ({
+    ...event, timestamp: event.timestamp.toDate(),
+  }));
 }
 
 /**
@@ -156,7 +135,8 @@ export async function changeBookingPaymentMethod(
   actor: PaymentChangeActor
 ) {
   const firestore = requireDb();
-  const bookingRef = bDoc(firestore, "bookings", bookingId);
+  const branchId = getActiveBranchId();
+  const bookingRef = doc(bCollection(firestore, "bookings", branchId), bookingId);
   const bookingSnap = await getDoc(bookingRef);
   if (!bookingSnap.exists()) throw new Error("Booking not found.");
   const booking = bookingSnap.data() as Booking;
@@ -166,7 +146,7 @@ export async function changeBookingPaymentMethod(
     );
   }
 
-  const events = await fetchPaymentEvents(bookingId);
+  const events = await fetchPaymentEvents(bookingId, branchId);
   const event = events.find((e) => e.transactionId === transactionId);
   if (!event) throw new Error("That payment record wasn't found.");
   if (!canChangePaymentMethod(actor.role, event.timestamp)) {
@@ -187,8 +167,13 @@ export async function changeBookingPaymentMethod(
     qrph: running.qrph + delta.qrph,
   };
 
-  const batch = writeBatch(firestore);
-  const txRef = doc(bCollection(firestore, "transactions"));
+  await runTransaction(firestore, async batch => {
+  const current = await batch.get(bookingRef);
+  const currentBooking = current.data() as Booking | undefined;
+  if (!currentBooking || !currentBooking.updatedAt.isEqual(booking.updatedAt)) {
+    throw new Error("This booking changed. Reopen the payment dialog before saving.");
+  }
+  const txRef = doc(bCollection(firestore, "transactions", branchId));
   batch.set(txRef, {
     transactionId: txRef.id,
     type: "method_change",
@@ -222,7 +207,7 @@ export async function changeBookingPaymentMethod(
   else if (updated.qrph <= 0.004 && booking.qrphReference) bookingUpdate.qrphReference = deleteField();
   batch.update(bookingRef, bookingUpdate);
 
-  await batch.commit();
+  });
 }
 
 /** Same idea for a walk-in store sale — one payment, edited in place with a history entry. */

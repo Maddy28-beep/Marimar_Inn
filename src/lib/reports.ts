@@ -211,6 +211,7 @@ export interface DailySalesRow {
   remarks?: string;
   voided?: boolean;
   isStoreSale?: boolean;
+  bookingStatus?: Booking["status"];
 }
 
 export interface DailySalesTotals {
@@ -305,8 +306,9 @@ export function computeDailySalesReport(
         splitQrphAmount: isVoided ? undefined : booking.splitQrphAmount,
         cashierName: booking.cashierName,
         cashierRole: booking.cashierRole,
-        remarks: isVoided ? "Voided (room only)" : undefined,
+        remarks: [isVoided ? "Voided (room only)" : "", booking.saleCorrectionCount ? `Corrected (${booking.saleCorrectionCount})` : ""].filter(Boolean).join(" · ") || undefined,
         voided: isVoided,
+        bookingStatus: booking.status,
       };
     });
 

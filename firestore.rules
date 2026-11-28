@@ -133,8 +133,30 @@ service cloud.firestore {
           'paymentStatus', 'status', 'checkOutTime', 'items', 'transactions',
           'specialRequests', 'updatedAt', 'extraPersonCount', 'towelCount', 'blanketCount',
           'voidReason', 'reversedAmount', 'reversedByName',
-          'voidKeptCash', 'voidKeptGcash', 'voidKeptQrph'
+          'voidKeptCash', 'voidKeptGcash', 'voidKeptQrph',
+          'lastSaleCorrectionId', 'saleCorrectionCount'
         ]) &&
+        // Completed sales can only be financially corrected by an owner/admin.
+        // Cashiers retain their existing payment-method correction, with the
+        // total paid locked and the method portions required to reconcile.
+        (isOwnerOrAdmin() || !(resource.data.status in ['checked_out', 'voided']) ||
+          (resource.data.status == 'checked_out' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'paymentMethod', 'gcashReference', 'qrphReference',
+              'splitCashAmount', 'splitGcashAmount', 'splitQrphAmount', 'updatedAt'
+            ]) &&
+            request.resource.data.get('splitCashAmount', 0) >= 0 &&
+            request.resource.data.get('splitGcashAmount', 0) >= 0 &&
+            request.resource.data.get('splitQrphAmount', 0) >= 0 &&
+            request.resource.data.get('splitCashAmount', 0) +
+              request.resource.data.get('splitGcashAmount', 0) +
+              request.resource.data.get('splitQrphAmount', 0) <= resource.data.amountPaid + 0.005 &&
+            request.resource.data.get('splitCashAmount', 0) +
+              request.resource.data.get('splitGcashAmount', 0) +
+              request.resource.data.get('splitQrphAmount', 0) >= resource.data.amountPaid - 0.005)) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'lastSaleCorrectionId', 'saleCorrectionCount'
+        ]) || isOwnerOrAdmin()) &&
         // Setting status to "voided" requires owner/admin, OR the existing
         // 7-minute self-serve window for staff who can void (Supervisor is
         // excluded entirely, see canVoid()) — closes the gap where a raw
@@ -219,11 +241,40 @@ service cloud.firestore {
       allow create: if isStaff() &&
         request.resource.data.keys().hasAll([
           'transactionId', 'type', 'bookingId', 'roomNumber', 'amount', 'cashierId', 'timestamp'
-        ]);
+        ]) &&
+        (isOwnerOrAdmin() || (request.resource.data.amount >= 0 && request.resource.data.type != 'reversal')) &&
+        (request.resource.data.type != 'sale_correction' ||
+          (isOwnerOrAdmin() && request.resource.data.cashierId == request.auth.uid &&
+            request.resource.data.amount < 0 &&
+            request.resource.data.cashAmount <= 0 && request.resource.data.gcashAmount <= 0 && request.resource.data.qrphAmount <= 0 &&
+            request.resource.data.amount == request.resource.data.cashAmount + request.resource.data.gcashAmount + request.resource.data.qrphAmount &&
+            request.resource.data.correctsTransactionId is string &&
+            request.resource.data.correctionId is string && request.resource.data.recordedAt == request.time));
 
       // Only owner/admin/supervisor can update/delete transactions
       allow update: if isElevatedStaff();
       allow delete: if isElevatedStaff();
+    }
+
+    // Historical correction audit: owner/admin only, retained permanently.
+    match /{path=**}/saleCorrections/{correctionId} {
+      allow read: if isOwnerOrAdmin();
+      allow create: if isOwnerOrAdmin() &&
+        request.resource.data.keys().hasOnly([
+          'correctionId', 'bookingId', 'roomNumber', 'bookingCheckInTime',
+          'action', 'reason', 'correctedBy', 'correctedByName', 'correctedByRole',
+          'recordedAt', 'before', 'after', 'removedPayments', 'restockedItems'
+        ]) &&
+        request.resource.data.correctionId == correctionId &&
+        request.resource.data.bookingId is string &&
+        request.resource.data.bookingCheckInTime is timestamp &&
+        request.resource.data.action in ['extension', 'duplicate'] &&
+        request.resource.data.correctedBy == request.auth.uid &&
+        request.resource.data.reason is string && request.resource.data.reason.size() >= 5 && request.resource.data.reason.size() <= 500 &&
+        request.resource.data.before is map && request.resource.data.after is map &&
+        request.resource.data.removedPayments is list && request.resource.data.restockedItems is list &&
+        request.resource.data.recordedAt == request.time;
+      allow update, delete: if false;
     }
 
     // ============================================

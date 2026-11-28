@@ -127,3 +127,45 @@ firestore.rules                   # Firestore security rules
 ## Deploy on Vercel
 
 Import the repo in [Vercel](https://vercel.com/new), add the same `NEXT_PUBLIC_FIREBASE_*` environment variables in the project settings, and deploy.
+
+## Correcting a completed sale
+
+Owner, Admin and Superadmin can correct a completed booking after its shift
+has ended. Cashiers and Supervisors cannot make these financial corrections.
+
+1. Select the branch, open **Reports → Daily**, and choose the original date
+   and shift. A night shift belongs to the date on which it starts.
+2. Find the reference and use **Correct sale** in the Remarks column.
+3. Choose **Correct extension** to reduce mistaken extension hours/charges,
+   or **Remove whole duplicate** if the entire booking was entered by mistake.
+4. Specify any incorrectly recorded cash/GCash/QRPh payment to remove. A real
+   payment that was actually collected should remain recorded; this does not
+   perform a refund. Review the exact original payment entries in the preview.
+5. Enter a reason, confirm the before/after values, and save while online.
+
+The booking, payment corrections, optional stock restoration and permanent
+audit record commit together. Payment corrections use the original collection
+timestamps, so past shift totals update correctly, including cross-shift
+extensions. Current room occupancy is never changed by a historical correction.
+Daily reports reload immediately; other report tabs refresh before reuse.
+Excel and printed reports use the refreshed data. **Correction history** keeps
+the original and corrected values, author, reason and time, including removed
+duplicates. Duplicate product stock restoration can be unchecked for products
+that were actually used or delivered. Missing catalogue items are not restored.
+
+Corrections stop if the booking has changed or its payment history does not
+reconcile. Older bookings without an original package snapshot cannot have
+their extensions separated safely. Use front-desk controls for active stays.
+
+Deploy the updated `firestore.rules` to the configured Firebase project before
+using the feature. The audit collection is owner/admin-only and cannot be
+updated or deleted. This implementation does not automatically correct any
+existing live booking.
+
+### Correction tests
+
+With Firebase CLI and Java 11+ installed, run `npm run test:corrections`.
+The suite uses `demo-marimar-corrections` on a local Firestore emulator and
+refuses to run against production. It covers completed extension corrections,
+both branches, original/cross-shift totals, mixed payment methods, duplicate
+stock restoration, stale/concurrent saves, and cashier/supervisor restrictions.

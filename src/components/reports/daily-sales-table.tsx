@@ -13,6 +13,7 @@ const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   payment: "Payment",
   reversal: "Reversal (duplicate)",
   method_change: "Method change",
+  sale_correction: "Sale correction",
 };
 
 // Mirrors paymentLabel() below but for a transaction's own cash/gcash/qrph
@@ -94,6 +95,7 @@ export function DailySalesTable({
   onRemoveExpense,
   onMarkDuplicate,
   onChangePaymentMethod,
+  onCorrectSale,
 }: {
   report: DailySalesReport;
   // Cash/GCash/QRPh actually collected during this shift's time window —
@@ -118,6 +120,7 @@ export function DailySalesTable({
   // Shown on non-voided rows to cashiers/owners — fixes the payment method
   // (never the amount); the caller decides who may use it.
   onChangePaymentMethod?: (row: DailySalesRow) => void;
+  onCorrectSale?: (row: DailySalesRow) => void;
 }) {
   const { rows, totals } = report;
   const expenseTotal = totalExpenses(expenses);
@@ -213,6 +216,11 @@ export function DailySalesTable({
                   <td className="border p-1" />
                   <td className="border p-1 whitespace-nowrap">
                     {row.remarks ?? ""}
+                    {!row.isStoreSale && (row.bookingStatus === "checked_out" || row.bookingStatus === "voided") && onCorrectSale && (
+                      <button type="button" className="ml-2 rounded border border-primary/40 px-1.5 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/10 print:hidden" onClick={() => onCorrectSale(row)}>
+                        Correct sale
+                      </button>
+                    )}
                     {row.voided && onMarkDuplicate && (
                       <button
                         type="button"

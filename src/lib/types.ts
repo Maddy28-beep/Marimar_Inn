@@ -162,6 +162,9 @@ export interface Booking {
   cashierName?: string;
   cashierRole?: UserRole;
   updatedAt: Timestamp;
+  // Historical owner corrections are immutable in the branch's saleCorrections collection.
+  lastSaleCorrectionId?: string;
+  saleCorrectionCount?: number;
 }
 
 export interface InventoryCategory {
@@ -300,7 +303,7 @@ export interface StoreSale {
 // booking is cancelled as a duplicate (see voidBookingAsDuplicate).
 // "method_change" carries the per-method difference when a payment's method
 // is corrected (amount 0, see lib/payment-changes.ts).
-export type TransactionType = "checkin" | "extend" | "checkout" | "order" | "payment" | "reversal" | "method_change";
+export type TransactionType = "checkin" | "extend" | "checkout" | "order" | "payment" | "reversal" | "method_change" | "sale_correction";
 
 // One record per money-collecting event on a booking (check-in payment,
 // extend payment, checkout payment) — a booking's own checkInTime never
@@ -326,4 +329,36 @@ export interface Transaction {
   // readable "from -> to" note.
   correctsTransactionId?: string;
   note?: string;
+  correctionId?: string;
+  recordedAt?: Timestamp;
+}
+
+export interface SaleCorrection {
+  correctionId: string;
+  bookingId: string;
+  roomNumber: string;
+  bookingCheckInTime: Timestamp;
+  action: "extension" | "duplicate";
+  reason: string;
+  correctedBy: string;
+  correctedByName: string;
+  correctedByRole: UserRole;
+  recordedAt: Timestamp;
+  before: BookingSaleSnapshot;
+  after: BookingSaleSnapshot;
+  removedPayments: { transactionId: string; timestamp: Timestamp; cash: number; gcash: number; qrph: number }[];
+  restockedItems: { itemId: string; quantity: number }[];
+}
+
+export interface BookingSaleSnapshot {
+  status: BookingStatus;
+  hoursBooked: number;
+  totalRoomCharge: number;
+  totalFbCharge: number;
+  totalAmount: number;
+  amountPaid: number;
+  cash: number;
+  gcash: number;
+  qrph: number;
+  items: OrderItem[];
 }
