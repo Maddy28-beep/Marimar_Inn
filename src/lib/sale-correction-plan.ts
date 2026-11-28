@@ -48,6 +48,27 @@ export function effectivePaymentEvents(transactions: Transaction[]) {
   }).sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis());
 }
 
+/** Suggest only identifiable extension payments; never guess a split from the whole stay. */
+export function suggestExtensionRemoval(booking: Booking, transactions: Transaction[], reduction: number): PaymentPortions | null {
+  if (!Number.isFinite(reduction) || reduction < 0) return null;
+  const extensionPayments = effectivePaymentEvents(transactions).filter(event => event.type === "extend");
+  const split = extensionPayments.reduce<PaymentPortions>((sum, event) => {
+    METHODS.forEach(method => { sum[method] = roundMoney(sum[method] + event.split[method]); });
+    return sum;
+  }, { cash: 0, gcash: 0, qrph: 0 });
+  const amount = total(split);
+  if (near(amount, reduction)) return split;
+  if (amount < reduction) {
+    // A later checkout may include extension money. Ask for details if the
+    // identifiable extension payments don't explain the recorded overpayment.
+    const excess = roundMoney(Math.max(0, booking.amountPaid - (booking.totalAmount - reduction)));
+    return excess <= amount + 0.004 ? split : null;
+  }
+  const used = METHODS.filter(method => split[method] > 0);
+  if (used.length !== 1) return null;
+  return { cash: 0, gcash: 0, qrph: 0, [used[0]]: reduction };
+}
+
 export function saleSnapshot(booking: Booking): BookingSaleSnapshot {
   const split = paymentBreakdown(booking);
   return {

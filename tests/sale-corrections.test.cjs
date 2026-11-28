@@ -29,7 +29,7 @@ require.extensions[".ts"] = (mod, filename) => {
 };
 
 const { correctHistoricalSale } = require("../src/lib/sale-corrections.ts");
-const { planSaleCorrection, canCorrectSale, effectivePaymentEvents } = require("../src/lib/sale-correction-plan.ts");
+const { planSaleCorrection, canCorrectSale, effectivePaymentEvents, suggestExtensionRemoval } = require("../src/lib/sale-correction-plan.ts");
 const { computeDailySalesReport, computeShiftCollectedTotals, computeMonthlyReport } = require("../src/lib/reports.ts");
 const { fetchPaymentEvents, changeBookingPaymentMethod } = require("../src/lib/payment-changes.ts");
 const { setActiveBranchId } = require("../src/lib/branches.ts");
@@ -144,6 +144,18 @@ test("a partial paid extension can remove the charge while retaining real collec
   await correctHistoricalSale("VQSI-XKQM", extensionInput({ removePayment: { cash: 100, gcash: 0, qrph: 0 } }));
   assert.equal((await readBooking()).amountPaid, 200);
   assert.equal(computeShiftCollectedTotals(await readPayments(), []).cashCollected, 200);
+});
+
+test("simple removal identifies extension payments without guessing or removing an unpaid extension's base payment", () => {
+  const checkin = payment("checkin-1", "checkin", 200, checkIn);
+  const extension = payment("extend-1", "extend", 200, extendedAt);
+  assert.deepEqual(suggestExtensionRemoval(booking(), [checkin, extension], 200), { cash: 200, gcash: 0, qrph: 0 });
+  assert.deepEqual(suggestExtensionRemoval(booking({ amountPaid: 200, splitCashAmount: 200 }), [checkin], 200), { cash: 0, gcash: 0, qrph: 0 });
+  assert.deepEqual(suggestExtensionRemoval(booking({ amountPaid: 300, splitCashAmount: 300 }), [checkin, payment("extend-1", "extend", 100, extendedAt)], 200), { cash: 100, gcash: 0, qrph: 0 });
+  const mixed = [checkin, payment("extend-1", "extend", 100, extendedAt), payment("extend-2", "extend", 100, extendedAt, { cashAmount: 0, gcashAmount: 100 })];
+  assert.equal(suggestExtensionRemoval(booking({ splitCashAmount: 300, splitGcashAmount: 100 }), mixed, 100), null);
+  assert.deepEqual(suggestExtensionRemoval(booking({ splitCashAmount: 300, splitGcashAmount: 100 }), mixed, 200), { cash: 100, gcash: 100, qrph: 0 });
+  assert.equal(suggestExtensionRemoval(booking(), [checkin, payment("checkout-1", "checkout", 200, updatedAt)], 200), null);
 });
 
 test("extension correction preserves extra-person charges, amenities and store items", async () => {

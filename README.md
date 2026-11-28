@@ -135,13 +135,18 @@ has ended. Cashiers and Supervisors cannot make these financial corrections.
 
 1. Select the branch, open **Reports → Daily**, and choose the original date
    and shift. A night shift belongs to the date on which it starts.
-2. Find the reference and use **Correct sale** in the Remarks column.
-3. Choose **Correct extension** to reduce mistaken extension hours/charges,
-   or **Remove whole duplicate** if the entire booking was entered by mistake.
-4. Specify any incorrectly recorded cash/GCash/QRPh payment to remove. A real
-   payment that was actually collected should remain recorded; this does not
-   perform a refund. Review the exact original payment entries in the preview.
-5. Enter a reason, confirm the before/after values, and save while online.
+2. Find the reference and use **Remove extension** next to the extra charge,
+   or **Correct sale** in the Remarks column.
+3. The default action is **Remove the accidental extension**. Answer whether
+   the guest actually paid the extra money. If it was only entered by mistake,
+   identifiable extension payments are filled in automatically. If the money
+   was actually collected, keep that payment recorded; no refund is performed.
+4. Check the new total and the prefilled reason, tick **I checked the new total
+   above**, then select **Remove extension & update sales** while online.
+5. For partial changes, open **Other correction options → Edit hours or price
+   instead**. Use **Entire sale is a duplicate** only when the whole booking
+   was entered by mistake. Ambiguous payments require manual amounts; the app
+   never guesses a mixed split or removes a base payment for an unpaid extension.
 
 The booking, payment corrections, optional stock restoration and permanent
 audit record commit together. Payment corrections use the original collection

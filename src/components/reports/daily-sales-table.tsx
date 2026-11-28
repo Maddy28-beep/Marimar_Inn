@@ -184,6 +184,11 @@ export function DailySalesTable({
                   <td className="border p-1">{row.extensionHours > 0 ? row.extensionHours : ""}</td>
                   <td className="border p-1 text-right whitespace-nowrap">
                     {row.extensionAmount > 0 ? peso(row.extensionAmount) : ""}
+                    {onCorrectSale && row.bookingStatus === "checked_out" && (row.extensionHours > 0 || row.extensionAmount > 0) && (
+                      <button type="button" className="mt-1 ml-auto block rounded border border-primary/40 px-1.5 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/10 print:hidden" onClick={() => onCorrectSale(row)}>
+                        Remove extension
+                      </button>
+                    )}
                   </td>
                   <td className="border p-1 whitespace-nowrap">{row.extrasLabel}</td>
                   <td className="border p-1 text-right whitespace-nowrap">
