@@ -147,6 +147,10 @@ has ended. Cashiers and Supervisors cannot make these financial corrections.
    instead**. Use **Entire sale is a duplicate** only when the whole booking
    was entered by mistake. Ambiguous payments require manual amounts; the app
    never guesses a mixed split or removes a base payment for an unpaid extension.
+6. To remove a whole sale, answer whether its products were given to the guest,
+   choose a reason, tick **Yes, remove this entire sale from the reports**, and
+   select **Remove this sale**. The screen shows how much will be removed from
+   sales and payment records. This does not issue a refund.
 
 The booking, payment corrections, optional stock restoration and permanent
 audit record commit together. Payment corrections use the original collection
@@ -155,8 +159,8 @@ extensions. Current room occupancy is never changed by a historical correction.
 Daily reports reload immediately; other report tabs refresh before reuse.
 Excel and printed reports use the refreshed data. **Correction history** keeps
 the original and corrected values, author, reason and time, including removed
-duplicates. Duplicate product stock restoration can be unchecked for products
-that were actually used or delivered. Missing catalogue items are not restored.
+duplicates. Products are returned to stock only when the owner selects that
+they were not given to the guest. Missing catalogue items are not restored.
 
 Corrections stop if the booking has changed or its payment history does not
 reconcile. Older bookings without an original package snapshot cannot have
