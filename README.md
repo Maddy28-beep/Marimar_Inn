@@ -148,11 +148,13 @@ has ended. Cashiers and Supervisors cannot make these financial corrections.
    was entered by mistake. Ambiguous payments require manual amounts; the app
    never guesses a mixed split or removes a base payment for an unpaid extension.
 6. To remove a whole sale, answer whether its products were given to the guest,
-   choose a reason, tick **Yes, void this room booking and remove its whole sale**,
+   choose a reason, tick **I want to cancel this booking and its whole sale**,
    and select **Void booking & sale**. This marks the past room booking voided
    and removes its charges and payments from totals. The product answer only
    controls stock returns. The current room guest and availability stay the
    same. This does not issue a refund.
+   No changes are saved by answering a question or ticking the box alone;
+   the owner must also press **Void booking & sale**.
 
 The booking, payment corrections, optional stock restoration and permanent
 audit record commit together. Payment corrections use the original collection

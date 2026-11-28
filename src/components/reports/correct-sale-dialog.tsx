@@ -129,28 +129,25 @@ export function CorrectSaleDialog({ row, onClose, onDone }: { row: DailySalesRow
         </>}
         {action === "duplicate" && <>
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
-            <p className="font-semibold">Yes, this voids the Room {row.roomNumber} booking too.</p>
-            <p className="mt-1">The room charge, extra hours, product sales and recorded payments for this booking will all be removed from the totals.</p>
-            <p className="mt-2 text-muted-foreground">This is a past booking. Room {row.roomNumber}&apos;s current guest and availability will stay the same.</p>
-            <p className="mt-2 text-muted-foreground">Use this only when the entire entry was wrong or entered twice. If only the extension is wrong, use the extension option below.</p>
+            <p className="font-semibold">Nothing has changed yet.</p>
+            <p className="mt-1">Void means cancel this old Room {row.roomNumber} booking and remove its whole sale from the totals.</p>
+            <p className="mt-2 text-muted-foreground">Use this if the whole booking was a mistake or was added twice. Today&apos;s guest and room status will stay the same.</p>
           </div>
           {stockItems.length > 0 ? <div className="grid gap-2">
-            <p className="text-sm font-semibold">Were these products actually given to the guest?</p>
-            <p className="text-xs text-muted-foreground">This answer only decides whether to return products to stock. Either choice still voids the room booking and the whole sale.</p>
+            <p className="text-sm font-semibold">Did the guest get these items?</p>
+            <p className="text-xs text-muted-foreground">This question is only about stock. It does not save or cancel anything yet.</p>
             <p className="text-xs text-muted-foreground">{stockItems.map(item => `${item.quantity} × ${item.name}`).join(", ")}</p>
-            <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm ${productChoice === "not_given" ? "border-primary bg-primary/5" : ""}`}><input className="mt-1" type="radio" name="duplicate-products" checked={productChoice === "not_given"} onChange={() => { setProductChoice("not_given"); change(); }} /><span><strong>No — the products were not given.</strong><span className="mt-1 block text-xs text-muted-foreground">Put tracked products back into stock.</span></span></label>
-            <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm ${productChoice === "given" ? "border-primary bg-primary/5" : ""}`}><input className="mt-1" type="radio" name="duplicate-products" checked={productChoice === "given"} onChange={() => { setProductChoice("given"); change(); }} /><span><strong>Yes — the guest received them.</strong><span className="mt-1 block text-xs text-muted-foreground">Keep the stock quantity as it is.</span></span></label>
+            <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm ${productChoice === "not_given" ? "border-primary bg-primary/5" : ""}`}><input className="mt-1" type="radio" name="duplicate-products" checked={productChoice === "not_given"} onChange={() => { setProductChoice("not_given"); change(); }} /><span><strong>No, the guest did not get them.</strong><span className="mt-1 block text-xs text-muted-foreground">Add them back to stock when I save.</span></span></label>
+            <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm ${productChoice === "given" ? "border-primary bg-primary/5" : ""}`}><input className="mt-1" type="radio" name="duplicate-products" checked={productChoice === "given"} onChange={() => { setProductChoice("given"); change(); }} /><span><strong>Yes, the guest got them.</strong><span className="mt-1 block text-xs text-muted-foreground">Do not add them back to stock.</span></span></label>
           </div> : <p className="text-sm text-muted-foreground">No tracked product entries on this sale. Stock will stay the same.</p>}
         </>}
         {preview && readyToReview && <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-          <p className="mb-2 font-semibold">{action === "duplicate" ? "What will happen when you remove it" : `After saving, this sale will be ${peso(preview.after.totalAmount)}.`}</p>
+          <p className="mb-2 font-semibold">{action === "duplicate" ? "After you press the void button:" : `After saving, this sale will be ${peso(preview.after.totalAmount)}.`}</p>
           {action === "duplicate" ? <ul className="grid list-disc gap-1 pl-5">
-            <li>This Room {row.roomNumber} booking will be marked voided.</li>
-            <li>{peso(preview.before.totalAmount)} will be removed from sales.</li>
-            <li>{peso(preview.before.amountPaid)} will be removed from the payment record. This does not issue a refund.</li>
-            <li>The original shift&apos;s sales totals will update automatically.</li>
-            <li>A history of who removed it and why will be kept.</li>
-            {stockItems.length > 0 && productChoice && <li>{productChoice === "not_given" ? "Tracked products will be returned to stock." : "Stock will stay the same."}</li>}
+            <li>This old Room {row.roomNumber} booking will be cancelled (voided).</li>
+            <li>Sales will go down by {peso(preview.before.totalAmount)}. The old shift report will update too.</li>
+            <li>Payments on record will go down by {peso(preview.before.amountPaid)}. No money is sent back to the guest.</li>
+            {stockItems.length > 0 && productChoice && <li>{productChoice === "not_given" ? "Items we can track will be added back to stock." : "Stock will stay the same."}</li>}
           </ul> : <>
           <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
             <dt>Stay hours</dt><dd>{preview.before.hoursBooked} → {preview.after.hoursBooked}</dd>
@@ -159,11 +156,13 @@ export function CorrectSaleDialog({ row, onClose, onDone }: { row: DailySalesRow
           </dl>
           <p className="mt-2 text-xs text-muted-foreground">The original shift&apos;s totals will update automatically. A correction history is kept.</p>
           </>}
+          {action === "duplicate" && <p className="mt-2 text-xs text-muted-foreground">We keep a record of who made this change and why.</p>}
           {preview.removedPayments.length > 0 && <details className="mt-3 border-t pt-2"><summary className="cursor-pointer text-xs">View payment details</summary>{preview.removedPayments.map(payment => <p key={payment.transactionId} className="mt-1 text-xs">{payment.timestamp.toDate().toLocaleString("en-PH")} · {METHODS.filter(method => payment[method] > 0).map(method => `${LABELS[method]} −${peso(payment[method])}`).join(" · ")}</p>)}</details>}
         </div>}
         {previewError && readyToReview && <p role="alert" className="text-sm text-destructive">{previewError}</p>}
         {action === "duplicate" ? <div className="grid gap-1.5"><Label htmlFor="duplicate-reason">Why remove this sale?</Label><select id="duplicate-reason" className="h-10 w-full rounded-lg border bg-card px-3 text-sm" value={duplicateReason} onChange={e => { const choice = e.target.value; setDuplicateReason(choice); setReason(choice === "duplicate" ? "The same sale was entered twice." : choice === "mistake" ? "This sale was entered by mistake." : ""); change(); }}><option value="duplicate">The same sale was entered twice</option><option value="mistake">This sale was entered by mistake</option><option value="other">Another reason</option></select>{duplicateReason === "other" && <><Label className="mt-2" htmlFor="sale-correction-reason">Tell us why</Label><Textarea id="sale-correction-reason" maxLength={500} value={reason} onChange={e => { setReason(e.target.value); change(); }} /></>}</div> : <div className="grid gap-1.5"><Label htmlFor="sale-correction-reason">Why are you fixing this?</Label><Textarea id="sale-correction-reason" maxLength={500} value={reason} onChange={e => { setReason(e.target.value); change(); }} /></div>}
-        {readyToReview && <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /><span>{action === "duplicate" ? "Yes, void this room booking and remove its whole sale." : "I checked the new total above."}</span></label>}
+        {readyToReview && <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /><span>{action === "duplicate" ? "I want to cancel this booking and its whole sale." : "I checked the new total above."}</span></label>}
+        {action === "duplicate" && <p className="text-sm font-medium" role="status">{!productsAnswered ? "First, answer the items question above." : !confirmed ? "To continue: tick the box above, then press “Void booking & sale”." : "To save this change, press “Void booking & sale” below."}</p>}
         <details className="border-t pt-3 text-sm"><summary className="cursor-pointer text-muted-foreground">Other correction options</summary><div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" disabled={!extension || sale.booking.status !== "checked_out" || sale.booking.openEnded} onClick={() => chooseAction("extension")}>Remove accidental extension</Button><Button variant="outline" disabled={!extension || sale.booking.status !== "checked_out" || sale.booking.openEnded} onClick={() => chooseAction("extension", true)}>Edit hours or price instead</Button><Button variant="outline" onClick={() => chooseAction("duplicate")}>Void whole booking & sale</Button></div></details>
       </fieldset>}
       <DialogFooter><Button variant="outline" disabled={submitting} onClick={onClose}>Cancel</Button><Button variant={action === "duplicate" ? "destructive" : "default"} disabled={submitting || !allowed || !preview || !confirmed || !readyToReview || !productsAnswered || (manualPayment && !METHODS.some(method => Number(remove[method]) > 0)) || reason.trim().length < 5} onClick={() => void save()}>{submitting && <Loader2Icon className="size-4 animate-spin" />}{action === "duplicate" ? "Void booking & sale" : editDetails ? "Save changes & update sales" : "Remove extension & update sales"}</Button></DialogFooter>
