@@ -143,7 +143,7 @@ export interface Booking {
   // Set when an owner/admin cancelled this booking as a duplicate/mistaken
   // entry — its money and items were zeroed out and reversed, unlike a
   // normal void (room only). reversedAmount is what was taken off the books.
-  voidReason?: "duplicate";
+  voidReason?: "duplicate" | "room_only";
   // How the money that STAYS on a room-only void (the store items' share of
   // amountPaid) was actually paid, recorded when the booking was voided. The
   // reports subtract everything else — the room charge — per method, so no
@@ -338,7 +338,7 @@ export interface SaleCorrection {
   bookingId: string;
   roomNumber: string;
   bookingCheckInTime: Timestamp;
-  action: "extension" | "duplicate";
+  action: "extension" | "room" | "products" | "duplicate";
   reason: string;
   correctedBy: string;
   correctedByName: string;

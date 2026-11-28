@@ -137,24 +137,24 @@ has ended. Cashiers and Supervisors cannot make these financial corrections.
    and shift. A night shift belongs to the date on which it starts.
 2. Find the reference and use **Remove extension** next to the extra charge,
    or **Correct sale** in the Remarks column.
-3. The default action is **Remove the accidental extension**. Answer whether
-   the guest actually paid the extra money. If it was only entered by mistake,
-   identifiable extension payments are filled in automatically. If the money
-   was actually collected, keep that payment recorded; no refund is performed.
-4. Check the new total and the prefilled reason, tick **I checked the new total
-   above**, then select **Remove extension & update sales** while online.
-5. For partial changes, open **Other correction options → Edit hours or price
-   instead**. Use **Void whole booking & sale** only when the whole booking
-   was entered by mistake. Ambiguous payments require manual amounts; the app
-   never guesses a mixed split or removes a base payment for an unpaid extension.
-6. To remove a whole sale, answer whether its products were given to the guest,
-   choose a reason, tick **I want to cancel this booking and its whole sale**,
-   and select **Void booking & sale**. This marks the past room booking voided
-   and removes its charges and payments from totals. The product answer only
-   controls stock returns. The current room guest and availability stay the
-   same. This does not issue a refund.
-   No changes are saved by answering a question or ticking the box alone;
-   the owner must also press **Void booking & sale**.
+3. The dialog first asks **What do you want to void?** Nothing is selected:
+   - **Extra hours only** keeps the original room package and products.
+   - **Room booking only** voids all room charges, including extensions and
+     extra-person charges, while keeping products, towels and blankets.
+   - **Store products only** removes only checked product lines and keeps
+     the room booking, extra hours, towels and blankets.
+   - **Everything** removes the whole booking and sale.
+4. For a partial void, say whether a payment was also entered by mistake.
+   Keep money that was actually collected. Identifiable extension payments
+   are suggested automatically; room/product amounts are suggested only for
+   fully paid sales using one payment method. Other cases require the owner
+   to enter the incorrect payment amounts. No refund is performed.
+5. When removing products, answer whether the guest received them. This
+   controls stock returns only. Each checked line removes its full quantity.
+6. Check the new totals and reason, tick the confirmation, and press the
+   action button while online. Selecting an option or ticking a box alone
+   never saves a change. Extra-hour edits can also keep some hours or charge
+   using **Change only some extra hours or their price**.
 
 The booking, payment corrections, optional stock restoration and permanent
 audit record commit together. Payment corrections use the original collection

@@ -1,5 +1,5 @@
 import type { Booking, BookingSaleSnapshot, PaymentMethod, Transaction } from "@/lib/types";
-import { bookingExtras } from "@/lib/booking-extras";
+import { bookingExtras, isAmenityItem } from "@/lib/booking-extras";
 import { paymentBreakdown, type PaymentPortions } from "@/lib/bookings";
 
 const METHODS = ["cash", "gcash", "qrph"] as const;
@@ -9,7 +9,8 @@ const total = (split: PaymentPortions) => roundMoney(split.cash + split.gcash + 
 const near = (a: number, b: number) => Math.abs(a - b) < 0.005;
 
 export interface SaleCorrectionInput {
-  action: "extension" | "duplicate";
+  action: "extension" | "room" | "products" | "duplicate";
+  productIndexes?: number[];
   extensionHours: number;
   extensionAmount: number;
   removePayment: PaymentPortions;
@@ -25,6 +26,7 @@ export function canCorrectSale(role: string | null | undefined) {
 }
 
 export function extensionDetails(booking: Booking) {
+  if (booking.status === "voided") return null;
   if (booking.originalPackageHours === undefined || booking.originalPackagePrice === undefined) return null;
   return {
     hours: Math.max(0, booking.hoursBooked - booking.originalPackageHours),
@@ -73,8 +75,8 @@ export function saleSnapshot(booking: Booking): BookingSaleSnapshot {
   const split = paymentBreakdown(booking);
   return {
     status: booking.status, hoursBooked: booking.hoursBooked,
-    totalRoomCharge: booking.totalRoomCharge, totalFbCharge: booking.totalFbCharge,
-    totalAmount: booking.totalAmount, amountPaid: booking.amountPaid,
+    totalRoomCharge: booking.status === "voided" ? 0 : booking.totalRoomCharge, totalFbCharge: booking.totalFbCharge,
+    totalAmount: booking.status === "voided" ? booking.totalFbCharge : booking.totalAmount, amountPaid: booking.amountPaid,
     ...split, items: booking.items ?? [],
   };
 }
@@ -91,7 +93,26 @@ export function planSaleCorrection(booking: Booking, transactions: Transaction[]
   if (input.action === "duplicate") {
     remove = { cash: before.cash, gcash: before.gcash, qrph: before.qrph };
     Object.assign(after, { status: "voided", totalRoomCharge: 0, totalFbCharge: 0, totalAmount: 0, amountPaid: 0, cash: 0, gcash: 0, qrph: 0, items: [] });
-  } else {
+  } else if (input.action === "room" || input.action === "products") {
+    let reduction = 0;
+    if (input.action === "room") {
+      if (booking.status === "voided" || before.totalRoomCharge <= 0) throw new Error("This room booking is already voided or has no room charge.");
+      reduction = before.totalRoomCharge;
+      after.status = "voided";
+      after.totalRoomCharge = 0;
+    } else {
+      const indexes = input.productIndexes ?? [];
+      if (!indexes.length || new Set(indexes).size !== indexes.length || indexes.some(index => !Number.isInteger(index) || index < 0 || index >= before.items.length || isAmenityItem(before.items[index]))) throw new Error("Choose the store products to void.");
+      reduction = roundMoney(indexes.reduce((sum, index) => sum + before.items[index].subtotal, 0));
+      if (reduction <= 0 || reduction > before.totalFbCharge + 0.004) throw new Error("These products do not match the recorded store charge.");
+      after.items = before.items.filter((_, index) => !indexes.includes(index));
+      after.totalFbCharge = roundMoney(before.totalFbCharge - reduction);
+    }
+    if (total(remove) > reduction + 0.004) throw new Error("The removed payment cannot exceed the charge being voided.");
+    after.totalAmount = roundMoney(after.totalRoomCharge + after.totalFbCharge);
+    METHODS.forEach(method => { after[method] = roundMoney(before[method] - remove[method]); });
+    after.amountPaid = roundMoney(before.amountPaid - total(remove));
+  } else if (input.action === "extension") {
     if (booking.status === "voided" || booking.openEnded) throw new Error("Only a completed fixed-package stay can have its extension corrected.");
     const extension = extensionDetails(booking);
     if (!extension) throw new Error("This older booking has no original package snapshot; its extension cannot be safely separated.");
@@ -106,7 +127,7 @@ export function planSaleCorrection(booking: Booking, transactions: Transaction[]
     after.totalAmount = roundMoney(after.totalRoomCharge + before.totalFbCharge);
     METHODS.forEach(method => { after[method] = roundMoney(before[method] - remove[method]); });
     after.amountPaid = roundMoney(before.amountPaid - total(remove));
-  }
+  } else throw new Error("Choose what to void.");
   for (const method of METHODS) {
     if (!Number.isFinite(remove[method]) || remove[method] < 0 || !near(remove[method], roundMoney(remove[method])) || remove[method] > before[method] + 0.004) {
       throw new Error(`The removed ${method} amount must be nonnegative and no higher than what was recorded.`);
@@ -124,7 +145,8 @@ export function planSaleCorrection(booking: Booking, transactions: Transaction[]
 
   // Prefer extension payments, then later collections. The preview shows the
   // exact original dates and methods to be removed before the owner confirms.
-  const ordered = [...events].sort((a, b) => Number(b.type === "extend") - Number(a.type === "extend") || b.timestamp.toMillis() - a.timestamp.toMillis());
+  const preferred = (type: string) => input.action === "products" ? type === "order" : input.action === "room" ? type === "checkin" || type === "extend" : type === "extend";
+  const ordered = [...events].sort((a, b) => Number(preferred(b.type)) - Number(preferred(a.type)) || b.timestamp.toMillis() - a.timestamp.toMillis());
   const remaining = { ...remove };
   const removedPayments = ordered.flatMap(event => {
     const split = { cash: 0, gcash: 0, qrph: 0 };
@@ -145,6 +167,13 @@ export function planSaleCorrection(booking: Booking, transactions: Transaction[]
       amountPaid: after.amountPaid, splitCashAmount: after.cash,
       splitGcashAmount: after.gcash, splitQrphAmount: after.qrph,
       paymentMethod, paymentStatus: after.amountPaid >= after.totalAmount ? "paid" : after.amountPaid > 0 ? "partial" : "unpaid",
+      ...(input.action === "products" ? { items: after.items } : {}),
+      ...(input.action === "room" ? { status: "voided", voidReason: "room_only", extraPersonCount: 0 } : {}),
+      ...(input.action === "room" || (input.action === "products" && booking.status === "voided") ? {
+        voidKeptCash: Math.max(0, (input.action === "room" || booking.voidReason === "room_only" ? before.cash : booking.voidKeptCash ?? before.cash) - remove.cash),
+        voidKeptGcash: Math.max(0, (input.action === "room" || booking.voidReason === "room_only" ? before.gcash : booking.voidKeptGcash ?? before.gcash) - remove.gcash),
+        voidKeptQrph: Math.max(0, (input.action === "room" || booking.voidReason === "room_only" ? before.qrph : booking.voidKeptQrph ?? before.qrph) - remove.qrph),
+      } : {}),
       ...(input.action === "duplicate" ? { status: "voided", voidReason: "duplicate", reversedAmount: before.amountPaid, items: [], extraPersonCount: 0, towelCount: 0, blanketCount: 0, voidKeptCash: 0, voidKeptGcash: 0, voidKeptQrph: 0 } : {}),
     },
   };

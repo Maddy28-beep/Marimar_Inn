@@ -29,7 +29,7 @@ export function SaleCorrectionHistoryDialog({ start, end, onClose }: { start: Da
     {entries?.length === 0 && <p className="py-4 text-sm text-muted-foreground">No corrections for these bookings.</p>}
     {entries?.map(entry => <article key={entry.correctionId} className="rounded-lg border p-3 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2"><strong>Room {entry.roomNumber} · {referenceNumberFor(entry.bookingId)}</strong><span className="text-xs text-muted-foreground">{entry.recordedAt.toDate().toLocaleString("en-PH")}</span></div>
-      <p className="mt-2 font-medium">{entry.action === "duplicate" ? "Whole duplicate removed" : "Extension corrected"}</p>
+      <p className="mt-2 font-medium">{{ duplicate: "Whole sale removed", extension: "Extra hours corrected", room: "Room booking only voided", products: "Selected store products voided" }[entry.action]}</p>
       <p className="mt-1">Hours: {entry.before.hoursBooked} → {entry.after.hoursBooked} · Sale: {peso(entry.before.totalAmount)} → {peso(entry.after.totalAmount)} · Paid: {peso(entry.before.amountPaid)} → {peso(entry.after.amountPaid)}</p>
       <p className="mt-2 whitespace-pre-wrap">{entry.reason}</p>
       <p className="mt-2 text-xs text-muted-foreground">{visibleStaffName(entry.correctedByName, entry.correctedByRole) || "Authorized owner correction"}</p>

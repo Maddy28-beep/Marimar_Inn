@@ -275,7 +275,8 @@ export function computeDailySalesReport(
       // What's still owed for a voided booking is only the items/amenities
       // — the room portion of amountPaid isn't tracked separately, so this
       // is what "recorded revenue" means once the room itself is voided.
-      const totalPaid = isVoided ? totalStoreAmount + extras.amenityAmount : booking.amountPaid ?? 0;
+      const correctedRoomVoid = isVoided && booking.voidReason === "room_only";
+      const totalPaid = isVoided && !correctedRoomVoid ? totalStoreAmount + extras.amenityAmount : booking.amountPaid ?? 0;
       const checkInDate = booking.checkInTime.toDate();
       return {
         bookingId: booking.bookingId,
@@ -301,9 +302,9 @@ export function computeDailySalesReport(
         // Voided rows fall back to the single-method totalPaid above
         // instead of the booking's running split totals, which still
         // include the (now-excluded) room portion.
-        splitCashAmount: isVoided ? undefined : booking.splitCashAmount,
-        splitGcashAmount: isVoided ? undefined : booking.splitGcashAmount,
-        splitQrphAmount: isVoided ? undefined : booking.splitQrphAmount,
+        splitCashAmount: isVoided && !correctedRoomVoid ? undefined : booking.splitCashAmount,
+        splitGcashAmount: isVoided && !correctedRoomVoid ? undefined : booking.splitGcashAmount,
+        splitQrphAmount: isVoided && !correctedRoomVoid ? undefined : booking.splitQrphAmount,
         cashierName: booking.cashierName,
         cashierRole: booking.cashierRole,
         remarks: [isVoided ? "Voided (room only)" : "", booking.saleCorrectionCount ? `Corrected (${booking.saleCorrectionCount})` : ""].filter(Boolean).join(" · ") || undefined,

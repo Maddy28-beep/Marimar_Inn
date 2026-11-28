@@ -41,7 +41,8 @@ export async function correctHistoricalSale(bookingId: string, input: SaleCorrec
     const paymentSnaps = await Promise.all(paymentQuery.docs.map(payment => transaction.get(payment.ref)));
     const payments = paymentSnaps.filter(payment => payment.exists()).map(payment => payment.data() as Transaction);
     const plan = planSaleCorrection(booking, payments, input);
-    const lines = input.action === "duplicate" && input.restoreStock !== false ? (booking.items ?? []).filter(line => !isAmenityItem(line)) : [];
+    const lines = ((input.action === "duplicate" && input.restoreStock !== false) || (input.action === "products" && input.restoreStock === true))
+      ? (booking.items ?? []).filter((line, index) => !isAmenityItem(line) && (input.action === "duplicate" || input.productIndexes?.includes(index))) : [];
     const stockRefs = [...new Set(lines.map(line => line.itemId))].map(id => doc(bCollection(firestore, "inventory", branchId), id));
     const stocks = await Promise.all(stockRefs.map(ref => transaction.get(ref)));
     const stockNotifications = await Promise.all(stocks.map(stock => transaction.get(doc(bCollection(firestore, "notifications", branchId), `low-stock-${stock.id}`))));

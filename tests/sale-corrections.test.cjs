@@ -260,3 +260,74 @@ test("cashier payment-method changes still preserve paid totals; correction audi
   await assertFails(updateDoc(history.ref, { reason: "erase the audit" }));
   await assertFails(deleteDoc(history.ref));
 });
+
+test("room-only void keeps products and their payment, original shift totals and room occupancy", async () => {
+  const items = [{ itemId: "water", name: "Water", unitPrice: 15, quantity: 2, subtotal: 30 }];
+  await seed("marimar-2", booking({ items, totalFbCharge: 30, totalAmount: 430, amountPaid: 430, splitCashAmount: 400, splitGcashAmount: 30, paymentMethod: "split" }), [payment("checkin-1", "checkin", 200, checkIn), payment("extend-1", "extend", 200, extendedAt), payment("order-1", "order", 30, extendedAt, { cashAmount: 0, gcashAmount: 30 })]);
+  await correctHistoricalSale("VQSI-XKQM", extensionInput({ action: "room", removePayment: { cash: 400, gcash: 0, qrph: 0 } }), "marimar-2");
+  const current = await readBooking("marimar-2");
+  assert.equal(current.status, "voided"); assert.equal(current.voidReason, "room_only");
+  assert.equal(current.totalRoomCharge, 0); assert.equal(current.totalAmount, 30); assert.equal(current.amountPaid, 30);
+  assert.deepEqual(current.items, items); assert.equal(current.voidKeptGcash, 30);
+  const row = computeDailySalesReport([current]).rows[0];
+  assert.equal(row.totalRoomAmount, 0); assert.equal(row.totalStoreAmount, 30); assert.equal(row.totalPaid, 30); assert.equal(row.splitGcashAmount, 30);
+  assert.equal(computeShiftCollectedTotals(await readPayments("marimar-2"), [], [current]).totalCollected, 30);
+  assert.equal(computeMonthlyReport([current], [], new Date("2026-11-01")).totalRevenue, 30);
+  assert.equal((await getDoc(doc(backend.db, "branches/marimar-2/rooms/room-9"))).data().status, "occupied");
+});
+
+test("room-only void can retain real money without hiding it or reversing it twice", async () => {
+  const items = [{ itemId: "water", name: "Water", unitPrice: 15, quantity: 2, subtotal: 30 }];
+  await seed("marimar-1", booking({ items, totalFbCharge: 30, totalAmount: 430, amountPaid: 430, splitCashAmount: 430 }), [payment("checkin-1", "checkin", 200, checkIn), payment("extend-1", "extend", 200, extendedAt), payment("order-1", "order", 30, extendedAt)]);
+  await correctHistoricalSale("VQSI-XKQM", extensionInput({ action: "room", removePayment: { cash: 0, gcash: 0, qrph: 0 } }));
+  const current = await readBooking();
+  assert.equal(current.amountPaid, 430); assert.equal(current.voidKeptCash, 430);
+  assert.equal(computeDailySalesReport([current]).rows[0].totalPaid, 430);
+  assert.equal(computeShiftCollectedTotals(await readPayments(), [], [current]).totalCollected, 430);
+  await assert.rejects(correctHistoricalSale("VQSI-XKQM", extensionInput({ action: "room", expectedUpdatedAt: current.updatedAt.toMillis(), expectedCorrectionCount: 1 })), /already voided/);
+});
+
+test("selected products only: keep room, extra hours, other products and amenities; restore selected stock once", async () => {
+  const items = [{ itemId: "water", name: "Water", unitPrice: 15, quantity: 2, subtotal: 30 }, { itemId: "soap", name: "Soap", unitPrice: 20, quantity: 1, subtotal: 20 }, { itemId: "amenity-towel", name: "Towel", unitPrice: 20, quantity: 1, subtotal: 20 }];
+  await seed("marimar-1", booking({ items, towelCount: 1, totalFbCharge: 70, totalAmount: 470, amountPaid: 470, splitCashAmount: 470 }), [payment("checkin-1", "checkin", 200, checkIn), payment("extend-1", "extend", 200, extendedAt), payment("order-1", "order", 70, extendedAt)]);
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), "inventory/water"), { quantity: 5, piecesPerSale: 3 });
+    await setDoc(doc(context.firestore(), "inventory/soap"), { quantity: 8 });
+  });
+  await correctHistoricalSale("VQSI-XKQM", extensionInput({ action: "products", productIndexes: [0], restoreStock: true, removePayment: { cash: 30, gcash: 0, qrph: 0 } }));
+  const current = await readBooking();
+  assert.equal(current.status, "checked_out"); assert.equal(current.hoursBooked, 6); assert.equal(current.totalRoomCharge, 400);
+  assert.equal(current.totalFbCharge, 40); assert.equal(current.totalAmount, 440); assert.equal(current.amountPaid, 440);
+  assert.deepEqual(current.items, items.slice(1)); assert.equal(current.towelCount, 1);
+  assert.equal((await getDoc(doc(backend.db, "inventory/water"))).data().quantity, 11);
+  assert.equal((await getDoc(doc(backend.db, "inventory/soap"))).data().quantity, 8);
+  assert.equal(computeShiftCollectedTotals(await readPayments(), [], [current]).totalCollected, 440);
+  const correction = (await readPayments()).find(event => event.type === "sale_correction");
+  assert.equal(correction.correctsTransactionId, "order-1");
+  await assert.rejects(correctHistoricalSale("VQSI-XKQM", extensionInput({ action: "products", productIndexes: [0], restoreStock: true })), /changed|correction/);
+  assert.equal((await getDoc(doc(backend.db, "inventory/water"))).data().quantity, 11);
+});
+
+test("products after a room-only void keep remaining payments and do not restock delivered goods", async () => {
+  const items = [{ itemId: "water", name: "Water", unitPrice: 15, quantity: 2, subtotal: 30 }, { itemId: "soap", name: "Soap", unitPrice: 20, quantity: 1, subtotal: 20 }];
+  await seed("marimar-1", booking({ items, totalFbCharge: 50, totalAmount: 450, amountPaid: 450, splitCashAmount: 450 }), [payment("checkin-1", "checkin", 200, checkIn), payment("extend-1", "extend", 200, extendedAt), payment("order-1", "order", 50, extendedAt)]);
+  await env.withSecurityRulesDisabled(context => setDoc(doc(context.firestore(), "inventory/water"), { quantity: 5 }));
+  await correctHistoricalSale("VQSI-XKQM", extensionInput({ action: "room", removePayment: { cash: 400, gcash: 0, qrph: 0 } }));
+  const first = await readBooking();
+  await correctHistoricalSale("VQSI-XKQM", extensionInput({ action: "products", productIndexes: [0], restoreStock: false, removePayment: { cash: 30, gcash: 0, qrph: 0 }, expectedUpdatedAt: first.updatedAt.toMillis(), expectedCorrectionCount: 1 }));
+  const current = await readBooking();
+  assert.equal(current.totalAmount, 20); assert.equal(current.voidKeptCash, 20);
+  assert.equal(computeDailySalesReport([current]).totals.totalPaid, 20);
+  assert.equal(computeShiftCollectedTotals(await readPayments(), [], [current]).totalCollected, 20);
+  assert.equal((await getDoc(doc(backend.db, "inventory/water"))).data().quantity, 5);
+});
+
+test("invalid product selections, excessive payment removals and unknown actions are rejected", () => {
+  const value = booking({ items: [{ itemId: "water", subtotal: 30 }, { itemId: "amenity-towel", subtotal: 20 }], totalFbCharge: 50, totalAmount: 450, amountPaid: 450, splitCashAmount: 450 });
+  const payments = [payment("checkin-1", "checkin", 450, checkIn)];
+  for (const indexes of [[], [0, 0], [-1], [9], [0.5], [1]]) {
+    assert.throws(() => planSaleCorrection(value, payments, extensionInput({ action: "products", productIndexes: indexes })), /Choose the store products/);
+  }
+  assert.throws(() => planSaleCorrection(value, payments, extensionInput({ action: "products", productIndexes: [0], removePayment: { cash: 31, gcash: 0, qrph: 0 } })), /cannot exceed/);
+  assert.throws(() => planSaleCorrection(value, payments, extensionInput({ action: "unknown" })), /Choose what/);
+});

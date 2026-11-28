@@ -226,7 +226,7 @@ export function DailySalesTable({
                         Correct sale
                       </button>
                     )}
-                    {row.voided && onMarkDuplicate && (
+                    {row.voided && onMarkDuplicate && !onCorrectSale && (
                       <button
                         type="button"
                         className="ml-2 rounded border px-1 text-[10px] text-muted-foreground hover:bg-muted print:hidden"
