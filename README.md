@@ -144,13 +144,15 @@ has ended. Cashiers and Supervisors cannot make these financial corrections.
 4. Check the new total and the prefilled reason, tick **I checked the new total
    above**, then select **Remove extension & update sales** while online.
 5. For partial changes, open **Other correction options → Edit hours or price
-   instead**. Use **Entire sale is a duplicate** only when the whole booking
+   instead**. Use **Void whole booking & sale** only when the whole booking
    was entered by mistake. Ambiguous payments require manual amounts; the app
    never guesses a mixed split or removes a base payment for an unpaid extension.
 6. To remove a whole sale, answer whether its products were given to the guest,
-   choose a reason, tick **Yes, remove this entire sale from the reports**, and
-   select **Remove this sale**. The screen shows how much will be removed from
-   sales and payment records. This does not issue a refund.
+   choose a reason, tick **Yes, void this room booking and remove its whole sale**,
+   and select **Void booking & sale**. This marks the past room booking voided
+   and removes its charges and payments from totals. The product answer only
+   controls stock returns. The current room guest and availability stay the
+   same. This does not issue a refund.
 
 The booking, payment corrections, optional stock restoration and permanent
 audit record commit together. Payment corrections use the original collection
